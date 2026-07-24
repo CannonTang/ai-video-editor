@@ -338,23 +338,49 @@ export async function generateImageVoiceoverText({ src, language = "en", signal 
   }
 }
 
-async function generateCaptionGroup(session, frames, duration, modelLanguage, translator) {
+async function withIsolatedPromptSession(session, signal, callback) {
+  const isolated = typeof session.clone === "function" ? await session.clone({ signal }) : session;
+  try {
+    return await callback(isolated);
+  } finally {
+    if (isolated !== session) isolated.destroy?.();
+  }
+}
+
+async function generateSingleFrameCaption(session, frame, outputLanguage, schema, signal) {
+  return withIsolatedPromptSession(session, signal, async (promptSession) => {
+    const response = await promptSession.prompt([{ role: "user", content: [
+      { type: "text", value: `Write one concise on-screen caption in ${outputLanguage} describing only what is visibly happening in this video frame at ${frame.time.toFixed(2)} seconds. Return a meaningful non-empty caption. Do not mention the timestamp.` },
+      { type: "image", value: frame.blob },
+    ] }], { responseConstraint: schema, signal });
+    return String(JSON.parse(response)?.text || "").trim();
+  });
+}
+
+async function generateCaptionGroup(session, frames, duration, modelLanguage, translator, signal) {
   const outputLanguage = getAutoEditLanguageName(modelLanguage);
   const content = [{ type: "text", value: `Describe every provided candidate frame with one concise on-screen caption. Output only in ${outputLanguage}. Return exactly ${frames.length} captions in the same order as the images. Use only visible evidence; do not invent names or facts. Frame timestamps: ${frames.map((frame) => frame.time.toFixed(2)).join(", ")} seconds.` }];
   frames.forEach((frame) => content.push({ type: "image", value: frame.blob }));
   const schema = { type: "object", properties: { captions: { type: "array", minItems: frames.length, maxItems: frames.length, items: { type: "object", properties: { text: { type: "string", minLength: 1 } }, required: ["text"], additionalProperties: false } } }, required: ["captions"], additionalProperties: false };
-  const response = await session.prompt([{ role: "user", content }], { responseConstraint: schema });
-  const returned = JSON.parse(response)?.captions;
-  const descriptions = Array.isArray(returned) ? returned.map((item) => String(item?.text || "").trim()) : [];
   const singleSchema = { type: "object", properties: { text: { type: "string", minLength: 1 } }, required: ["text"], additionalProperties: false };
+  let descriptions;
+  try {
+    const response = await withIsolatedPromptSession(session, signal, (promptSession) =>
+      promptSession.prompt([{ role: "user", content }], { responseConstraint: schema, signal })
+    );
+    const returned = JSON.parse(response)?.captions;
+    descriptions = Array.isArray(returned) ? returned.map((item) => String(item?.text || "").trim()) : [];
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    // Chrome's local multimodal model can reject a valid multi-image request
+    // with kErrorUnknown on some GPU/model combinations. Retry each image in
+    // an isolated session so one oversized/unstable batch does not fail a clip.
+    descriptions = [];
+  }
   for (let index = 0; index < frames.length; index += 1) {
     if (descriptions[index]) continue;
     const frame = frames[index];
-    const singleResponse = await session.prompt([{ role: "user", content: [
-      { type: "text", value: `Write one concise on-screen caption in ${outputLanguage} describing only what is visibly happening in this video frame at ${frame.time.toFixed(2)} seconds. Return a meaningful non-empty caption. Do not mention the timestamp.` },
-      { type: "image", value: frame.blob },
-    ] }], { responseConstraint: singleSchema });
-    descriptions[index] = String(JSON.parse(singleResponse)?.text || "").trim();
+    descriptions[index] = await generateSingleFrameCaption(session, frame, outputLanguage, singleSchema, signal);
   }
   const translatedDescriptions = await Promise.all(descriptions.map((text) => translateText(text, translator)));
   return frames.map((frame, index) => ({
@@ -377,7 +403,7 @@ function createSlidingWindows(frames, size = 6, overlap = 2) {
   return windows;
 }
 
-export async function generateFrameCaptions({ frames, duration, language, session: providedSession, translator: providedTranslator, onDownloadProgress, onPartial }) {
+export async function generateFrameCaptions({ frames, duration, language, session: providedSession, translator: providedTranslator, onDownloadProgress, onPartial, signal }) {
   const modelLanguage = getAutoEditPromptLanguage(language);
   const session = providedSession || await createFrameCaptionSession({ language, onDownloadProgress });
   const translator = providedTranslator === undefined ? await createAutoEditTranslator({ language, onDownloadProgress }) : providedTranslator;
@@ -401,7 +427,7 @@ export async function generateFrameCaptions({ frames, duration, language, sessio
       try {
         for (let windowIndex = 0; windowIndex < windows.length; windowIndex += 1) {
           const window = windows[windowIndex];
-          const generated = await generateCaptionGroup(session, window.frames, duration, modelLanguage, translator);
+          const generated = await generateCaptionGroup(session, window.frames, duration, modelLanguage, translator, signal);
           // Overlap gives the model context; each window commits only its new time region.
           const committed = generated.filter((caption) => (caption.start + caption.end) / 2 < window.commitEnd || windowIndex === windows.length - 1);
           groupCaptions.push(...committed);

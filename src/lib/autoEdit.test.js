@@ -114,6 +114,45 @@ describe("auto edit", () => {
     expect(onPartial.mock.calls.map(([value]) => value.status)).toEqual(["running", "running", "complete"]);
     expect(onPartial.mock.calls[1][0]).toMatchObject({ windowIndex: 1, totalWindows: 1 });
   });
+  it("retries frames individually when Chrome rejects a multi-image prompt", async () => {
+    const unknown = new DOMException("An unknown error occurred: kErrorUnknown", "OperationError");
+    const session = {
+      prompt: vi.fn()
+        .mockRejectedValueOnce(unknown)
+        .mockResolvedValueOnce('{"text":"The editor timeline is empty"}')
+        .mockResolvedValueOnce('{"text":"A video appears in the preview"}'),
+    };
+    const result = await generateFrameCaptions({
+      frames: [
+        { segmentId: "clip-a", segmentStart: 0, segmentEnd: 4, time: 0, blob: {} },
+        { segmentId: "clip-a", segmentStart: 0, segmentEnd: 4, time: 2, blob: {} },
+      ],
+      duration: 4,
+      language: "en",
+      session,
+    });
+    expect(result.map(({ text }) => text)).toEqual(["The editor timeline is empty", "A video appears in the preview"]);
+    expect(session.prompt).toHaveBeenCalledTimes(3);
+  });
+  it("isolates each model window from prior image context when cloning is supported", async () => {
+    const clones = [];
+    const session = {
+      clone: vi.fn(async () => {
+        const clone = {
+          prompt: vi.fn().mockResolvedValue('{"captions":[{"text":"A"},{"text":"B"},{"text":"C"},{"text":"D"},{"text":"E"},{"text":"F"}]}'),
+          destroy: vi.fn(),
+        };
+        clones.push(clone);
+        return clone;
+      }),
+    };
+    const frames = Array.from({ length: 9 }, (_, index) => ({
+      segmentId: "clip-a", segmentStart: 0, segmentEnd: 18, time: index * 2, blob: {},
+    }));
+    await generateFrameCaptions({ frames, duration: 18, language: "en", session });
+    expect(session.clone).toHaveBeenCalledTimes(2);
+    expect(clones.every((clone) => clone.destroy.mock.calls.length === 1)).toBe(true);
+  });
   it("returns one model result for every candidate frame", async () => {
     const session = { prompt: vi.fn().mockResolvedValue('{"captions":[{"text":"A"},{"text":"B"},{"text":"C"},{"text":"D"}]}') };
     const frames = Array.from({ length: 4 }, (_, index) => ({ segmentId: "clip-a", segmentStart: 0, segmentEnd: 8, time: index * 2, blob: {} }));

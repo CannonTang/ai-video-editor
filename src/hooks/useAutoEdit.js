@@ -115,7 +115,7 @@ export function useAutoEdit({ language, visualSegments, captionSegments, commitC
       session = await sessionPromise;
       translator = await translatorPromise;
       const captions = await generateFrameCaptions({
-        frames, duration: getVisualSegmentsTotal(visualSegments), language, session, translator,
+        frames, duration: getVisualSegmentsTotal(visualSegments), language, session, translator, signal: abortRef.current.signal,
         onPartial: (partial) => {
           const modelProgress = partial.allWindows ? partial.completedWindows / partial.allWindows : 0;
           setJob({ running: true, progress: Math.min(96, 60 + Math.round(modelProgress * 36)), phase: t("autoEditWritingCaptions") });
