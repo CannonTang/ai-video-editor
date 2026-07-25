@@ -7,6 +7,8 @@
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Aug%2025%20Launch-orange)](https://www.producthunt.com/p/timeline-studio-2)
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+> Timeline Studio is launching on Product Hunt Aug 25 (PDT).
+> Follow our page to share technical feedback on launch day!
 
 Timeline Studio is a local-first AI video editor that runs in the browser. It combines a CapCut-style multi-track timeline with browser-side AI voiceovers, automatic captions, vision tools, talking-avatar generation, and deterministic offline export.
 
