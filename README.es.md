@@ -13,6 +13,7 @@ Timeline Studio es un editor de vídeo con IA, local y ejecutado en el navegador
 ## Funciones principales
 
 - Locución multilingüe con Piper/VITS ONNX y Kokoro 82M.
+- Música de IA local con Stable Audio 3 Small Q4 ONNX mediante WebGPU, traducción de indicaciones libres, opciones de 30/60/90/120 segundos, bucles largos guiados por la forma de onda, caché persistente del modelo e incorporación automática a Mis recursos.
 - Subtítulos automáticos con Whisper small q8 ONNX.
 - Encuadre inteligente con YOLOS tiny y MODNet.
 - Separación de voz y música, y creación de avatares con JoyVASA y LivePortrait.
