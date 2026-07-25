@@ -26,7 +26,7 @@ import { getCaptionVoiceSegment } from "../lib/captionVoice.js";
 import { findCaptionAudioLinkTarget } from "../lib/captionEditingActions.js";
 import { normalizeVisualKeyframes } from "../lib/visualEffects.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
-import { HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 
 function AutoEditReviewDialog({ t, autoEdit }) {
   const { review, job } = autoEdit || {};
@@ -547,6 +547,7 @@ export function VoicePanel({
   automaticCaptionProgress,
   avatarPanelOpen,
   smartMode = "auto-edit",
+  aiMusic,
   autoEdit,
   uiLanguage,
   visionAnalysis,
@@ -598,6 +599,7 @@ export function VoicePanel({
   const isAvatarContext = isSmartContext && smartMode === "avatar" && avatarPanelOpen;
   const isSmartAutoContext = isSmartContext && smartMode === "auto-edit";
   const isSmartFrameContext = isSmartContext && smartMode === "smart-frame";
+  const isAiMusicContext = isSmartContext && smartMode === "ai-music";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = Boolean(selectedTrack === "audio" && selectedAudioSegment)
     || Boolean(audioClipInspectorOpen && ["source", "music"].includes(selectedTrack) && audioPropertySegment);
@@ -606,8 +608,8 @@ export function VoicePanel({
   const isOverlayContext = selectedTrack === "overlay" && Boolean(selectedVisualOverlay);
   const selectedCaptionAudioSegment = getCaptionVoiceSegment(audioSegments, selectedCaptionSegment);
   const localizedStatusText = statusText?.startsWith?.("tts") ? t(statusText) : statusText;
-  const title = isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice");
-  const panelStatusText = isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
+  const title = isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice");
+  const panelStatusText = isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
     ? captionSegments.length
       ? `${captionSegments.length} ${t("captionSegmentsUnit", "条字幕")}`
       : t("noCaptionSegments")
@@ -696,6 +698,7 @@ export function VoicePanel({
       <div className="voice-tab-body">
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
         {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}
+        {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}
         {isStickerContext ? <StickerContextPanel t={t} segment={selectedStickerSegment} updateStickerSegment={updateStickerSegment} deleteStickerSegment={deleteStickerSegment} /> : null}
         {isOverlayContext ? <div className="visual-overlay-inspector">
           <div className="sticker-properties-preview">{selectedVisualOverlay.type === "video" ? <video src={selectedVisualOverlay.src} muted playsInline /> : <img src={selectedVisualOverlay.src} alt="" />}</div>

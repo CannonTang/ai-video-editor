@@ -62,6 +62,7 @@ import { createEditorCommandActions } from "./lib/editorCommandActions.js";
 import { createTimelineViewModel } from "./lib/timelineViewModel.js";
 import { createTranslator, getStoredLanguage, translateOptionName } from "./i18n.js";
 import { decodeWaveform, downloadBlob } from "./lib/media.js";
+import { useAiMusicGeneration } from "./hooks/useAiMusicGeneration.js";
 import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentIds } from "./lib/timeline.js";
 import { normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
 import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
@@ -187,6 +188,15 @@ export function App() {
     voiceRecorderChunksRef, voiceRecorderRef, voiceRecorderStartedAtRef,
     voiceRecorderStreamRef, voiceRecorderTimerRef,
   } = useEditorRefs();
+  const activeLanguage = uiLanguage || "zh";
+  const aiMusic = useAiMusicGeneration({
+    activeLanguage,
+    imageUrlRefs,
+    setActiveTool,
+    setMediaTab,
+    setSelectedLibraryAssetId,
+    setUserAssets,
+  });
   const { redo, undo } = useEditorHistory({
     audioSegments, captionPlacement, captionPosition, captionSegments, captionSize,
     captionStyle, captionsEnabled, currentTime, fitMode, imageClipCount, imageDuration,
@@ -209,7 +219,6 @@ export function App() {
     timelineHorizon, trackLocks, trackVisibility, userAssets, visualSegments, visualType,
     visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
   });
-  const activeLanguage = uiLanguage || "zh";
   const t = useMemo(() => createTranslator(activeLanguage), [activeLanguage]);
   const handleCancelExport = () => {
     const controller = exportAbortControllerRef.current;
@@ -899,7 +908,7 @@ export function App() {
           sourceAudioBlob, sourceAudioDuration, sourceAudioLinked, sourceAudioName, sourceAudioVolume, status, t,
           selectedAudioToolTarget, separateSelectedAudioVocals, separateSourceVocals, vocalSeparationJob,
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
-          updateScript, userAssets, visionJob,
+          updateScript, userAssets, visionJob, aiMusic,
           selectedVisualSegment, visualLocalTime, updateSelectedVisualEffects,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack,
         }} />
@@ -1075,6 +1084,7 @@ export function App() {
           automaticCaptionProgress={status === "captioning" ? progress : 0}
           avatarPanelOpen={avatarPanelOpen}
           smartMode={smartMode}
+          aiMusic={aiMusic}
           autoEdit={autoEdit}
           uiLanguage={activeLanguage}
           visionAnalysis={previewVisionAnalysis}
