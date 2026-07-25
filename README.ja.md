@@ -13,6 +13,7 @@ Timeline Studio はブラウザで動作するローカルファーストの AI 
 ## 主な機能
 
 - Piper/VITS ONNX と Kokoro 82M による多言語音声。
+- Stable Audio 3 Small Q4 ONNX と WebGPU によるローカル AI 音楽生成。自由入力プロンプトの翻訳、30/60/90/120 秒、波形解析による長尺ループ、モデルの永続キャッシュ、マイ素材への自動追加に対応。
 - Whisper small q8 ONNX による字幕自動生成。
 - YOLOS tiny と MODNet によるスマートフレーミング。
 - ボーカル分離、JoyVASA と LivePortrait によるアバター生成。
