@@ -66,22 +66,32 @@ function shouldCacheRequest(request) {
   return isHuggingFaceModelRequest(url) || isRuntimeAssetRequest(url);
 }
 
-async function cacheFirst(request) {
+function withCacheStatus(response, status) {
+  const headers = new Headers(response.headers);
+  headers.set("X-Timeline-Model-Cache", status);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+async function cacheFirst(request, event) {
   const cache = await caches.open(MODEL_CACHE_NAME);
   const cached = await cache.match(request);
   if (cached) {
-    return cached;
+    return withCacheStatus(cached, "hit");
   }
 
   const response = await fetch(request);
   if (response.ok || response.type === "opaque") {
-    // Cache persistence is an optimization. A full browser quota must never
-    // block the live response consumed by an inference worker.
-    cache.put(request, response.clone()).catch((error) => {
+    // Keep the service worker alive until the large model shard is durably
+    // committed. The live response remains streaming and is not blocked.
+    event.waitUntil(cache.put(request, response.clone()).catch((error) => {
       if (error?.name !== "QuotaExceededError") console.warn("Model cache write failed.", error);
-    });
+    }));
   }
-  return response;
+  return withCacheStatus(response, "miss");
 }
 
 async function networkFirst(request) {
@@ -128,6 +138,7 @@ self.addEventListener("activate", (event) => {
   // Older Transformers.js builds created a second copy of Hugging Face model
   // assets here. The service worker is now the sole cache owner.
   event.waitUntil(caches.delete("transformers-cache").catch(() => false));
+  event.waitUntil(caches.delete("stable-audio-3-small-music-q4-v1").catch(() => false));
   event.waitUntil(removeLegacyPiperDuplicates().catch(() => {}));
 });
 
@@ -141,7 +152,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(cacheFirst(event.request));
+  event.respondWith(cacheFirst(event.request, event));
 });
 
 self.addEventListener("message", (event) => {

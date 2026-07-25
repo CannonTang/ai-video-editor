@@ -35,6 +35,7 @@ import {
   VOICES,
 } from "../config/editor.js";
 import { APP_LANGUAGES } from "../i18n.js";
+import { AI_MUSIC_PRESETS, buildEnglishMusicPrompt } from "../lib/aiMusicPrompt.js";
 import { getRemoteAssetBlob } from "../lib/remoteAssetCache.js";
 import { formatClock, formatTime, getSegmentStartTime } from "../lib/timeline.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
@@ -261,6 +262,76 @@ export function MediaPanel({
         document.body,
       ) : null}
     </>
+  );
+}
+
+const AI_MUSIC_COPY = {
+  zh: { title: "AI 音乐", hint: "本地音乐生成", description: "音乐描述", descriptionPlaceholder: "例如：雨夜咖啡店里安静忧郁的爵士钢琴", style: "风格", mood: "氛围", instrument: "主乐器", duration: "时长", bpm: "速度", generate: "生成音乐", cancel: "取消", first: "首次下载模型，之后从本地缓存加载。", modelSetup: "模型准备", modelReady: "模型已就绪", musicGeneration: "音乐生成", waitingToGenerate: "等待生成", download: "并行下载模型", cache: "从本地缓存加载模型", initializing: "初始化 WebGPU 模型", translating: "翻译音乐描述", conditioning: "理解音乐描述", generating: "正在生成", decoding: "正在合成音频", complete: "已添加到 My assets", english: "高级：模型提示词" },
+  en: { title: "AI music", hint: "Local music", description: "Describe your music", descriptionPlaceholder: "e.g. melancholic jazz piano in a rainy café", style: "Style", mood: "Mood", instrument: "Lead", duration: "Length", bpm: "Tempo", generate: "Generate music", cancel: "Cancel", first: "The model downloads once, then loads from local cache.", modelSetup: "Model setup", modelReady: "Model ready", musicGeneration: "Music generation", waitingToGenerate: "Waiting to generate", download: "Downloading model files in parallel", cache: "Loading models from local cache", initializing: "Initializing WebGPU models", translating: "Translating description", conditioning: "Understanding prompt", generating: "Generating", decoding: "Decoding audio", complete: "Added to My assets", english: "Advanced: model prompt" },
+};
+const AI_OPTION_LABELS = {
+  zh: { cinematic: "电影感", lofi: "Lo-fi", ambient: "氛围", electronic: "电子", orchestral: "管弦", uplifting: "振奋", calm: "平静", dreamy: "梦幻", dramatic: "戏剧性", dark: "暗黑", piano: "钢琴", guitar: "木吉他", synth: "合成器", strings: "弦乐", drums: "鼓组" },
+};
+
+export function AiMusicGenerator({ language, music, embedded = false }) {
+  const copy = AI_MUSIC_COPY[language] || AI_MUSIC_COPY.en;
+  const labels = AI_OPTION_LABELS[language] || {};
+  const [open, setOpen] = useState(embedded);
+  const [selection, setSelection] = useState({ description: "", style: "cinematic", mood: "dreamy", instrument: "piano", seconds: 30, bpm: 90 });
+  const running = music?.job?.state === "running";
+  const phaseLabel = copy[music?.job?.phase] || copy.generating;
+  const setupRunning = running && ["download", "cache", "initializing"].includes(music?.job?.phase);
+  const setupProgress = setupRunning ? Math.min(100, Math.round((music.job.progress / 0.64) * 100)) : (running || music?.job?.state === "complete" ? 100 : 0);
+  const generationStarted = running && !setupRunning;
+  const generationProgress = generationStarted ? Math.max(1, Math.min(100, Math.round(((music.job.progress - 0.64) / 0.36) * 100))) : (music?.job?.state === "complete" ? 100 : 0);
+  const activeStageProgress = setupRunning ? setupProgress : generationProgress;
+  const activeStageLabel = setupRunning ? copy.modelSetup : copy.musicGeneration;
+  const activeStageStatus = setupRunning ? phaseLabel : generationStarted ? phaseLabel : copy.waitingToGenerate;
+  const select = (group, value) => setSelection((current) => ({ ...current, [group]: value }));
+  const HeadTag = embedded ? "div" : "button";
+  return (
+    <section className={`ai-music-card ${open ? "is-open" : ""} ${embedded ? "is-embedded" : ""}`}>
+      {!embedded ? <HeadTag className="ai-music-card-head" type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
+        <span className="ai-music-spark">✦</span>
+        <span><strong>{copy.title}</strong><small>{copy.hint}</small></span>
+        <CaretDown size={17} />
+      </HeadTag> : null}
+      {open ? (
+        <div className="ai-music-card-body">
+          <label className="ai-music-description">{copy.description}<textarea rows="3" value={selection.description} disabled={running} placeholder={copy.descriptionPlaceholder} onChange={(event) => select("description", event.target.value)} /></label>
+          <div className="ai-music-select-grid">
+            {[["style", copy.style], ["mood", copy.mood], ["instrument", copy.instrument]].map(([group, title]) => (
+              <label key={group}>{title}<select value={selection[group]} disabled={running} onChange={(event) => select(group, event.target.value)}>
+                {AI_MUSIC_PRESETS[group].map(([id]) => <option value={id} key={id}>{labels[id] || id}</option>)}
+              </select></label>
+            ))}
+          </div>
+          <div className="ai-music-numbers">
+            <label>{copy.duration}<select value={selection.seconds} disabled={running} onChange={(event) => select("seconds", Number(event.target.value))}><option value="30">30s</option><option value="60">60s</option><option value="90">90s</option><option value="120">120s</option></select></label>
+            <label>{copy.bpm}<input type="number" min="60" max="180" value={selection.bpm} disabled={running} onChange={(event) => select("bpm", event.target.value)} /></label>
+          </div>
+          <details className="ai-music-prompt"><summary>{copy.english}</summary><p>{buildEnglishMusicPrompt(selection)}</p></details>
+          <small className="ai-music-model-note">{copy.first}</small>
+          {running ? (
+            <div className="ai-music-stage-progress">
+              <div className="ai-music-stage-labels">
+                <span className={setupProgress === 100 ? "is-complete" : "is-active"}><i>1</i>{copy.modelSetup}<small>{setupProgress === 100 ? copy.modelReady : setupRunning ? `${setupProgress}%` : ""}</small></span>
+                <span className={generationStarted ? "is-active" : ""}><i>2</i>{copy.musicGeneration}<small>{generationStarted ? `${generationProgress}%` : copy.waitingToGenerate}</small></span>
+              </div>
+              <div className="ai-music-progress">
+                <div><strong>{activeStageLabel}</strong><small>{activeStageStatus} · {activeStageProgress}%</small></div>
+                <span><i style={{ width: `${activeStageProgress}%` }} /></span>
+              </div>
+            </div>
+          ) : null}
+          {music?.job?.error ? <p className="ai-music-error">{music.job.error}</p> : null}
+          {music?.job?.state === "complete" ? <p className="ai-music-success">{copy.complete}</p> : null}
+          <div className="ai-music-actions">
+            {running ? <button type="button" className="secondary" onClick={music.cancel}>{copy.cancel}</button> : <button type="button" className="primary" onClick={() => music.generate(selection)}><MusicNote size={17} />{copy.generate}</button>}
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -515,6 +586,7 @@ export function ToolPanel(props) {
     openAvatarPanel,
     smartMode,
     setSmartMode,
+    openMobileInspector,
     musicBlob,
     musicName,
     musicDuration,
@@ -590,17 +662,20 @@ export function ToolPanel(props) {
   }
 
   if (activeTool === "smart") {
+    const aiCopy = AI_MUSIC_COPY[uiLanguage] || AI_MUSIC_COPY.en;
     return (
       <div className="tool-panel smart-hub-panel">
         <div className="smart-hub-grid" role="tablist" aria-label={t("smartTools")}>
           {[
             ["auto-edit", Scissors, t("smartAutoEdit"), t("smartAutoEditHint")],
+            ["ai-music", MusicNote, aiCopy.title, aiCopy.hint],
             ["smart-frame", FrameCorners, t("smartFrame"), t("smartFrameHint")],
             ["avatar", PersonSimpleRun, t("smartAvatar"), t("smartAvatarHint")],
           ].map(([id, Icon, title, hint]) => (
             <button className={smartMode === id ? "is-active" : ""} type="button" role="tab" aria-selected={smartMode === id} key={id} onClick={() => {
               setSmartMode(id);
               if (id === "avatar") openAvatarPanel();
+              if (id === "ai-music" && window.matchMedia?.("(max-width: 760px)").matches) openMobileInspector?.();
             }}>
               <Icon size={24} weight="duotone" /><strong>{title}</strong><span>{hint}</span>
             </button>

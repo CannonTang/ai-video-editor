@@ -124,6 +124,7 @@ export function EditorSidebar({ model: d }) {
             openAvatarPanel={d.openAvatarPanel}
             smartMode={d.smartMode}
             setSmartMode={d.setSmartMode}
+            openMobileInspector={() => d.setMobilePanel?.("inspector")}
             musicBlob={d.musicBlob}
             musicName={d.musicName}
             musicDuration={d.musicDuration}
