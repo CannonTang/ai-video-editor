@@ -13,6 +13,7 @@ Timeline Studio ist ein lokaler KI-Videoeditor für den Browser. Er verbindet ei
 ## Hauptfunktionen
 
 - Mehrsprachige Sprachausgabe mit Piper/VITS ONNX und Kokoro 82M.
+- Lokale KI-Musik mit Stable Audio 3 Small Q4 ONNX über WebGPU, übersetzten freien Prompts, 30/60/90/120-Sekunden-Optionen, wellenformbasierten langen Loops, persistentem Modellcache und automatischer Ablage in „Meine Assets“.
 - Automatische Untertitel mit Whisper small q8 ONNX.
 - Intelligenter Bildausschnitt mit YOLOS tiny und MODNet.
 - Gesangs-/Musiktrennung und Avatare mit JoyVASA und LivePortrait.

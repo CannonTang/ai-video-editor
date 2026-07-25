@@ -13,6 +13,7 @@ Timeline Studio là trình chỉnh sửa video AI ưu tiên xử lý cục bộ 
 ## Tính năng chính
 
 - Lồng tiếng đa ngôn ngữ với Piper/VITS ONNX và Kokoro 82M.
+- Tạo nhạc AI cục bộ bằng Stable Audio 3 Small Q4 ONNX qua WebGPU, hỗ trợ dịch lời nhắc tự do, các lựa chọn 30/60/90/120 giây, lặp nhạc dài theo phân tích dạng sóng, bộ nhớ đệm mô hình bền vững và tự động thêm vào Tài nguyên của tôi.
 - Phụ đề tự động bằng Whisper small q8 ONNX.
 - Căn khung thông minh với YOLOS tiny và MODNet.
 - Tách giọng hát/nhạc và tạo avatar bằng JoyVASA cùng LivePortrait.

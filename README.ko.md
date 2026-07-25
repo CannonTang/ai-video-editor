@@ -13,6 +13,7 @@ Timeline Studio는 브라우저에서 실행되는 로컬 우선 AI 동영상 �
 ## 주요 기능
 
 - Piper/VITS ONNX와 Kokoro 82M을 이용한 다국어 음성.
+- Stable Audio 3 Small Q4 ONNX와 WebGPU를 이용한 로컬 AI 음악 생성. 자유 형식 프롬프트 번역, 30/60/90/120초 옵션, 파형 기반 장시간 루프, 영구 모델 캐시, 내 에셋 자동 추가를 지원합니다.
 - Whisper small q8 ONNX 자동 자막.
 - YOLOS tiny와 MODNet 스마트 프레이밍.
 - 보컬 분리 및 JoyVASA/LivePortrait 아바타 생성.

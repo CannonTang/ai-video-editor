@@ -20,6 +20,7 @@ https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464
 ## AI capabilities
 
 - **Multilingual voiceover:** Chinese Piper/VITS ONNX voices, English Kokoro 82M, and browser Piper voices for German, Spanish, French, Italian, and Brazilian Portuguese.
+- **Local AI music:** Stable Audio 3 Small Q4 ONNX runs through WebGPU with translated free-form prompts, 30/60/90/120-second choices, waveform-aware long-track looping, persistent model caching, and automatic insertion into My Assets.
 - **Automatic captions:** Whisper small q8 ONNX with waveform-aware timing and conservative Chinese recognition cleanup.
 - **Smart framing:** YOLOS tiny subject detection and MODNet portrait matting for smart crop, caption avoidance, and background removal across images and complete videos.
 - **AI vocal separation:** isolate vocals and place the instrumental stem on the music track without leaving the browser workflow.
