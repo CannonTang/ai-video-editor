@@ -12,8 +12,10 @@
 > Timeline Studio is launching on Product Hunt Aug 25 (PDT).
 > Follow our page to share technical feedback on launch day!
 
-<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+<p align="center">
+  <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+  <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+</p>
 
 Timeline Studio is a local-first AI video editor that runs in the browser. It combines a CapCut-style multi-track timeline with WebGPU AI music and repair, multilingual voiceovers, automatic captions, talking-avatar generation, and deterministic offline export.
 
@@ -21,7 +23,24 @@ Timeline Studio is a local-first AI video editor that runs in the browser. It co
 
 ## Video demo
 
-https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">
+        <img src="docs/screenshots/demo-timeline-editing.jpg" alt="Auto Edit demo" width="480" />
+      </a>
+    </td>
+    <td align="center" width="50%">
+      <a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">
+        <img src="docs/screenshots/demo-ai-repair.jpg" alt="AI Repair demo" width="480" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Auto Edit</strong><br /><sub>Visual analysis, keyframes, captions, and export</sub><br /><a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">Play video</a></td>
+    <td align="center"><strong>AI Repair</strong><br /><sub>Timed watermark removal with before/after review</sub><br /><a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">Play video</a></td>
+  </tr>
+</table>
 
 ![Timeline Studio editor](docs/screenshots/editor-timeline.png)
 

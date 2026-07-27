@@ -7,12 +7,35 @@
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 
-<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+<p align="center">
+  <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+  <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+</p>
 
 Timeline Studio 是一个本地优先、直接运行在浏览器中的 AI 视频编辑器。它把接近剪映/CapCut 的多轨时间线，与 WebGPU AI 音乐和修复、多语言配音、自动字幕、数字人和确定性离线导出结合在一起。
 
 [打开在线编辑器](https://video-editor.ai-creator.top/) · [观看演示](https://www.youtube.com/watch?v=chdRPG2ndMs) · [Hugging Face Space](https://huggingface.co/spaces/haixin/timeline-studio)
+
+## 视频演示
+
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">
+        <img src="docs/screenshots/demo-timeline-editing.jpg" alt="自动剪辑演示" width="480" />
+      </a>
+    </td>
+    <td align="center" width="50%">
+      <a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">
+        <img src="docs/screenshots/demo-ai-repair.jpg" alt="AI 修复演示" width="480" />
+      </a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center"><strong>自动剪辑</strong><br /><sub>画面分析、关键帧、字幕与导出</sub><br /><a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">播放视频</a></td>
+    <td align="center"><strong>AI 修复</strong><br /><sub>分时段水印移除与前后对比</sub><br /><a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">播放视频</a></td>
+  </tr>
+</table>
 
 ![Timeline Studio 编辑器](docs/screenshots/editor-timeline.png)
 
