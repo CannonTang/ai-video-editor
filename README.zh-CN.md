@@ -18,24 +18,17 @@ Timeline Studio 是一个本地优先、直接运行在浏览器中的 AI 视频
 
 ## 视频演示
 
-<table align="center">
-  <tr>
-    <td align="center" width="50%">
-      <a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">
-        <img src="docs/screenshots/demo-timeline-editing.jpg" alt="自动剪辑演示" width="480" />
-      </a>
-    </td>
-    <td align="center" width="50%">
-      <a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">
-        <img src="docs/screenshots/demo-ai-repair.jpg" alt="AI 修复演示" width="480" />
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><strong>自动剪辑</strong><br /><sub>画面分析、关键帧、字幕与导出</sub><br /><a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">播放视频</a></td>
-    <td align="center"><strong>AI 修复</strong><br /><sub>分时段水印移除与前后对比</sub><br /><a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">播放视频</a></td>
-  </tr>
-</table>
+### 自动剪辑
+
+画面分析、关键帧、字幕与导出。
+
+https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464
+
+### AI 修复
+
+分时段水印移除与前后对比。
+
+https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
 ![Timeline Studio 编辑器](docs/screenshots/editor-timeline.png)
 

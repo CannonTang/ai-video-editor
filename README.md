@@ -23,24 +23,17 @@ Timeline Studio is a local-first AI video editor that runs in the browser. It co
 
 ## Video demo
 
-<table align="center">
-  <tr>
-    <td align="center" width="50%">
-      <a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">
-        <img src="docs/screenshots/demo-timeline-editing.jpg" alt="Auto Edit demo" width="480" />
-      </a>
-    </td>
-    <td align="center" width="50%">
-      <a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">
-        <img src="docs/screenshots/demo-ai-repair.jpg" alt="AI Repair demo" width="480" />
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Auto Edit</strong><br /><sub>Visual analysis, keyframes, captions, and export</sub><br /><a href="https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464">Play video</a></td>
-    <td align="center"><strong>AI Repair</strong><br /><sub>Timed watermark removal with before/after review</sub><br /><a href="https://github.com/MartinDelophy/ai-video-editor/releases/download/v0.7.1/ai-repair-demo.mp4">Play video</a></td>
-  </tr>
-</table>
+### Auto Edit
+
+Visual analysis, keyframes, captions, and export.
+
+https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464
+
+### AI Repair
+
+Timed watermark removal with before/after review.
+
+https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
 ![Timeline Studio editor](docs/screenshots/editor-timeline.png)
 
