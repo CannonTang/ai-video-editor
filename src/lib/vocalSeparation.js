@@ -1,3 +1,5 @@
+import { getModelSourcePreference } from "./modelSources.js";
+
 let worker;
 let nextRequestId = 0;
 const requests = new Map();
@@ -48,7 +50,14 @@ function runWorker(left, right, sampleRate, onProgress) {
   return new Promise((resolve, reject) => {
     requests.set(requestId, { resolve, reject, onProgress });
     activeWorker.postMessage(
-      { type: "separate", requestId, leftBuffer: left.buffer, rightBuffer: right.buffer, sampleRate },
+      {
+        type: "separate",
+        requestId,
+        leftBuffer: left.buffer,
+        rightBuffer: right.buffer,
+        sampleRate,
+        modelSourcePreference: getModelSourcePreference(),
+      },
       [left.buffer, right.buffer],
     );
   });

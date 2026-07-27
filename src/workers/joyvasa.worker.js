@@ -3,6 +3,7 @@ import ortWasmMjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?u
 import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 
 import { JOYVASA_WEB_MODEL } from "../config/joyVasa.js";
+import { fetchFirstAvailableModel } from "../lib/modelSources.js";
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
@@ -21,14 +22,27 @@ function modelUrl(file, baseUrl) {
   return new URL(file, new URL(baseUrl, self.location.origin)).href;
 }
 
+function modelBaseUrls(value) {
+  return (Array.isArray(value) ? value : [value]).filter(Boolean);
+}
+
+async function fetchModelFile(file, baseUrls) {
+  const urls = modelBaseUrls(baseUrls).map((baseUrl) => modelUrl(file, baseUrl));
+  try {
+    const { response } = await fetchFirstAvailableModel(urls);
+    return response;
+  } catch (error) {
+    throw new Error(`${file} 下载失败（${error?.message || String(error)}）`, { cause: error });
+  }
+}
+
 async function fetchArtifact(key, baseUrl, start, span) {
   const configuredFiles = JOYVASA_WEB_MODEL.files[key];
   const files = Array.isArray(configuredFiles) ? configuredFiles : [configuredFiles];
   const total = JOYVASA_WEB_MODEL.knownArtifacts[key].bytes;
   let loaded = 0;
   const parts = await Promise.all(files.map(async (file) => {
-    const response = await fetch(modelUrl(file, baseUrl));
-    if (!response.ok) throw new Error(`${file} 下载失败（HTTP ${response.status}）`);
+    const response = await fetchModelFile(file, baseUrl);
     const reader = response.body?.getReader();
     if (!reader) {
       const part = new Uint8Array(await response.arrayBuffer());
@@ -72,9 +86,10 @@ async function createSession(key, bytes) {
 }
 
 function getRuntime(modelBaseUrl) {
-  if (runtimePromises.has(modelBaseUrl)) return runtimePromises.get(modelBaseUrl);
+  const runtimeKey = JSON.stringify(modelBaseUrls(modelBaseUrl));
+  if (runtimePromises.has(runtimeKey)) return runtimePromises.get(runtimeKey);
   const promise = (async () => {
-    let artifacts = artifactPromises.get(modelBaseUrl);
+    let artifacts = artifactPromises.get(runtimeKey);
     if (!artifacts) {
       artifacts = Promise.all([
         fetchArtifact("audio", modelBaseUrl, 2, 47),
@@ -82,10 +97,10 @@ function getRuntime(modelBaseUrl) {
         fetchArtifact("conditioning", modelBaseUrl, 61, 1),
         fetchArtifact("schedule", modelBaseUrl, 62, 1),
       ]).catch((error) => {
-        artifactPromises.delete(modelBaseUrl);
+        artifactPromises.delete(runtimeKey);
         throw error;
       });
-      artifactPromises.set(modelBaseUrl, artifacts);
+      artifactPromises.set(runtimeKey, artifacts);
     }
     const [audioBytes, denoiserBytes, conditioningBytes, scheduleBytes] = await artifacts;
     progress(63, "avatarProgressInitHubert");
@@ -99,10 +114,10 @@ function getRuntime(modelBaseUrl) {
       schedule: new Float32Array(scheduleBytes),
     };
   })().catch((error) => {
-    runtimePromises.delete(modelBaseUrl);
+    runtimePromises.delete(runtimeKey);
     throw error;
   });
-  runtimePromises.set(modelBaseUrl, promise);
+  runtimePromises.set(runtimeKey, promise);
   return promise;
 }
 
@@ -231,12 +246,13 @@ async function prepare({ modelBaseUrl }) {
 }
 
 async function release({ modelBaseUrl }) {
-  const promise = runtimePromises.get(modelBaseUrl);
+  const runtimeKey = JSON.stringify(modelBaseUrls(modelBaseUrl));
+  const promise = runtimePromises.get(runtimeKey);
   if (promise) {
     const runtime = await promise;
     runtime.audioSession.release();
     runtime.denoiserSession.release();
-    runtimePromises.delete(modelBaseUrl);
+    runtimePromises.delete(runtimeKey);
   }
   self.postMessage({ type: "released" });
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { buildEnglishMusicPrompt, createAiMusicFileName, translateMusicDescriptionToEnglish } from "../lib/aiMusicPrompt.js";
 import { repeatPcm16WavAtBestBoundary } from "../lib/aiMusicLoop.js";
 import { decodeWaveform } from "../lib/media.js";
+import { getModelSourcePreference } from "../lib/modelSources.js";
 
 export function useAiMusicGeneration({ activeLanguage, imageUrlRefs, setActiveTool, setMediaTab, setSelectedLibraryAssetId, setUserAssets }) {
   const workerRef = useRef(null);
@@ -83,6 +84,7 @@ export function useAiMusicGeneration({ activeLanguage, imageUrlRefs, setActiveTo
       seconds: (Number(selection.seconds) || 30) / (Number(selection.seconds) > 60 ? 2 : 1),
       steps: 8,
       seed: Math.floor(Math.random() * 0x7fffffff),
+      modelSourcePreference: getModelSourcePreference(activeLanguage),
     });
   }, [activeLanguage, imageUrlRefs, setActiveTool, setMediaTab, setSelectedLibraryAssetId, setUserAssets]);
 

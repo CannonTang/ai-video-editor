@@ -4,6 +4,7 @@ import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url
 
 import { LIVE_PORTRAIT_WEB_MODEL, getLivePortraitModelUrl } from "../config/livePortrait.js";
 import { evaluateLivePortraitFrameQuality } from "../lib/livePortraitQuality.ts";
+import { fetchFirstAvailableModel } from "../lib/modelSources.js";
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
@@ -19,18 +20,31 @@ function postProgress(progress, phaseKey, phaseParams = {}) {
   self.postMessage({ type: "progress", progress: Math.max(0, Math.min(100, Math.round(progress))), phaseKey, phaseParams });
 }
 
-function resolveModelUrl(file, modelBaseUrl) {
-  return modelBaseUrl
-    ? new URL(file, new URL(modelBaseUrl, self.location.origin)).href
-    : getLivePortraitModelUrl(file);
+function modelBaseUrls(value) {
+  return (Array.isArray(value) ? value : [value]).filter(Boolean);
+}
+
+function resolveModelUrls(file, modelBaseUrl) {
+  const bases = modelBaseUrls(modelBaseUrl);
+  return bases.length
+    ? bases.map((baseUrl) => new URL(file, new URL(baseUrl, self.location.origin)).href)
+    : [getLivePortraitModelUrl(file)];
+}
+
+async function fetchModelFile(file, modelBaseUrl) {
+  try {
+    const { response } = await fetchFirstAvailableModel(resolveModelUrls(file, modelBaseUrl));
+    return response;
+  } catch (error) {
+    throw new Error(`${file} 下载失败（${error?.message || String(error)}）`, { cause: error });
+  }
 }
 
 async function fetchModel(key, file, modelBaseUrl, completedBytes, totalBytes) {
   const files = Array.isArray(file) ? file : [file];
   let loaded = 0;
   const parts = await Promise.all(files.map(async (partFile) => {
-    const response = await fetch(resolveModelUrl(partFile, modelBaseUrl));
-    if (!response.ok) throw new Error(`${partFile} 下载失败（HTTP ${response.status}）`);
+    const response = await fetchModelFile(partFile, modelBaseUrl);
     const bytes = new Uint8Array(await response.arrayBuffer());
     loaded += bytes.byteLength;
     postProgress(5 + ((completedBytes + loaded) / totalBytes) * 55, "avatarProgressDownloadModel", { model: key });
@@ -46,7 +60,7 @@ async function fetchModel(key, file, modelBaseUrl, completedBytes, totalBytes) {
 }
 
 async function loadSession(key, modelBaseUrl, downloadState, executionProvider = "wasm") {
-  const cacheKey = `${executionProvider}:${modelBaseUrl || "project"}:${key}`;
+  const cacheKey = `${executionProvider}:${JSON.stringify(modelBaseUrls(modelBaseUrl)) || "project"}:${key}`;
   if (sessionPromises.has(cacheKey)) return sessionPromises.get(cacheKey);
   const promise = createSession(key, modelBaseUrl, downloadState, executionProvider).catch((error) => {
     sessionPromises.delete(cacheKey);
@@ -77,9 +91,8 @@ async function createSession(key, modelBaseUrl, downloadState, executionProvider
 
 function getMotionTemplate(baseUrl) {
   if (!motionTemplatePromise) {
-    motionTemplatePromise = fetch(new URL("joyvasa-motion-template.json", new URL(baseUrl, self.location.origin)))
+    motionTemplatePromise = fetchModelFile("joyvasa-motion-template.json", baseUrl)
       .then((response) => {
-        if (!response.ok) throw new Error(`JoyVASA 运动模板下载失败（HTTP ${response.status}）`);
         return response.json();
       })
       .catch((error) => {

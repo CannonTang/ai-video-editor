@@ -2,6 +2,7 @@
 // Regenerate after adding user-visible t("…") keys.
 export const I18N_COMPLETION_COPY = {
   "zh": {
+    "complete": "完成",
     "avatarKicker": "头像实验室·浏览器ONNX",
     "cancel": "取消",
     "canvasRatio": "画布比例",
@@ -16,6 +17,7 @@ export const I18N_COMPLETION_COPY = {
     "visualTabAi": "人工智能"
   },
   "en": {
+    "complete": "Complete",
     "cancel": "Cancel",
     "canvasRatio": "Canvas ratio",
     "clipDuration": "Clip duration",
@@ -25,6 +27,9 @@ export const I18N_COMPLETION_COPY = {
     "visualBasic": "Basic"
   },
   "ja": {
+    "complete": "完了",
+    "visualTabsPrevious": "前のプロパティを表示",
+    "visualTabsNext": "その他のプロパティを表示",
     "actionGuide": "行動喚起",
     "addSegment": "セグメント",
     "addVisualBeforeExport": "最初にビジュアル メディアを追加します",
@@ -382,6 +387,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "ズームアウト"
   },
   "ko": {
+    "complete": "완료",
+    "visualTabsPrevious": "이전 속성 보기",
+    "visualTabsNext": "더 많은 속성 보기",
     "actionGuide": "행동 촉구",
     "addCaption": "캡션 추가",
     "addSegment": "세그먼트",
@@ -895,6 +903,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "축소"
   },
   "es": {
+    "complete": "Completado",
+    "visualTabsPrevious": "Mostrar propiedades anteriores",
+    "visualTabsNext": "Mostrar más propiedades",
     "actionGuide": "Llamado a la acción",
     "addSegment": "Segmento",
     "addVisualBeforeExport": "Agregue medios visuales primero",
@@ -1297,6 +1308,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "Alejar"
   },
   "fr": {
+    "complete": "Terminé",
+    "visualTabsPrevious": "Afficher les propriétés précédentes",
+    "visualTabsNext": "Afficher plus de propriétés",
     "actionGuide": "Appel à l'action",
     "addSegment": "Segment",
     "addVisualBeforeExport": "Ajoutez d'abord les médias visuels",
@@ -1708,6 +1722,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "Effectuer un zoom arrière"
   },
   "de": {
+    "complete": "Abgeschlossen",
+    "visualTabsPrevious": "Vorherige Eigenschaften anzeigen",
+    "visualTabsNext": "Weitere Eigenschaften anzeigen",
     "actionGuide": "Aufruf zum Handeln",
     "addSegment": "Segment",
     "addVisualBeforeExport": "Fügen Sie zuerst visuelle Medien hinzu",
@@ -2118,6 +2135,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "Verkleinern"
   },
   "pt": {
+    "complete": "Concluído",
+    "visualTabsPrevious": "Mostrar propriedades anteriores",
+    "visualTabsNext": "Mostrar mais propriedades",
     "actionGuide": "Chamada para ação",
     "addSegment": "Segmento",
     "addVisualBeforeExport": "Adicione mídia visual primeiro",
@@ -2518,6 +2538,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "Diminuir zoom"
   },
   "th": {
+    "complete": "เสร็จสมบูรณ์",
+    "visualTabsPrevious": "แสดงคุณสมบัติก่อนหน้า",
+    "visualTabsNext": "แสดงคุณสมบัติเพิ่มเติม",
     "actionGuide": "คำกระตุ้นการตัดสินใจ",
     "addSegment": "เซ็กเมนต์",
     "addVisualBeforeExport": "ใส่สื่อภาพไว้ก่อน",
@@ -2912,6 +2935,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "ซูมออก"
   },
   "vi": {
+    "complete": "Hoàn tất",
+    "visualTabsPrevious": "Hiển thị thuộc tính trước",
+    "visualTabsNext": "Hiển thị thêm thuộc tính",
     "actionGuide": "Kêu gọi hành động\nPhân đoạn",
     "addSegment": "",
     "addVisualBeforeExport": "Thêm phương tiện trực quan trước",
@@ -3309,6 +3335,9 @@ export const I18N_COMPLETION_COPY = {
     "zoomOut": "Thu nhỏ"
   },
   "ru": {
+    "complete": "Завершено",
+    "visualTabsPrevious": "Показать предыдущие свойства",
+    "visualTabsNext": "Показать больше свойств",
     "actionGuide": "Призыв к действию",
     "addCaption": "Добавить подпись",
     "addClip": "Добавить клип",

@@ -1,4 +1,5 @@
 import { I18N_COMPLETION_COPY } from "./i18nCompletion.js";
+import { REPAIR_LOCALIZED_COPY } from "./i18nRepair.js";
 
 const MEDIA_COMPATIBILITY_COPY = {
   zh: { mediaCompatibilityProcessing: "正在分析并兼容处理该媒体…", mediaCompatibilityReady: "兼容媒体已准备完成", mediaCompatibilityFailed: "兼容处理失败", mediaCompatibilityFailedHint: "无法读取该媒体，请尝试转换为 MP4/H.264/AAC" },
@@ -481,6 +482,67 @@ const RESOURCE_LINK_COPY = {
 const VISUAL_AI_TAB_COPY = Object.fromEntries(
   APP_LANGUAGES.map(({ id }) => [id, { visualTabAi: "AI" }]),
 );
+
+const REPAIR_COPY = {
+  zh: {
+    repairTab: "AI 修复", repairTitle: "AI 去水印 / 修复", repairIntro: "框选固定水印区域，在浏览器本地逐帧修复。素材不会上传。", repairRegion: "修复区域",
+    repairSelecting: "在画面中拖动框选", repairSelectRegion: "框选水印", repairPresetTopRight: "右上角预设", repairPresetBottomRight: "右下角预设",
+    repairFullClip: "整个片段", repairCustomRange: "自定义范围", repairFrames: "帧", repairUseResult: "使用修复结果", repairPreviewAgain: "修复",
+    repairPreviewFrame: "修复", repairCancel: "取消", repairProcessClip: "开始处理视频", repairApplyImage: "应用到图片", repairClearPreview: "清除当前帧预览",
+    repairSafeNote: "完成后会生成新素材并加入“我的资产”，原素材可随时恢复。", repairPreviewAlt: "AI 修复预览", repairPreviewReady: "当前帧修复预览已生成",
+    repairImageReady: "图片修复完成，结果已加入我的资产", repairClipReady: "视频修复完成，结果已加入我的资产并用于当前片段", repairCanceled: "已取消 AI 修复，原片保持不变",
+    repairFailed: "AI 修复失败", repairPhasePrepare: "正在准备画面", repairPhaseDownload: "正在下载 MI-GAN 模型", repairPhaseCompile: "正在初始化 WebGPU",
+    repairPhaseFrame: "正在修复画面", repairPhaseRefine: "正在细化贴边水印", repairPhaseLoadEncoder: "正在准备视频合成器", repairPhaseEncodeVideo: "正在合成修复视频", repairPhaseCreateAsset: "正在生成修复素材", repairPhaseReady: "修复完成", repairPhaseCanceling: "正在取消…", repairPhaseStopping: "正在停止处理…", repairStopping: "正在停止…", visualTabsPrevious: "查看前面的属性", visualTabsNext: "查看更多属性",
+    repairHubTitle: "AI 修复", repairHubIntro: "选择需要的修复能力，具体范围和效果在独立工作区中完成。", repairLocalBadge: "浏览器本地",
+    repairWatermarkCapability: "去水印 / 对象移除", repairWatermarkCapabilityHint: "框选一个或多个区域，支持视频分时段处理。", repairOpenEditor: "打开", repairEditAgain: "重新编辑",
+    repairHdCapability: "高清修复", repairHdCapabilityHint: "清晰度、降噪与压缩瑕疵修复。", repairComingSoon: "即将支持",
+    repairDialogTitle: "AI 去水印修复", repairDialogImageMode: "图片模式", repairDialogVideoMode: "视频逐帧模式", repairLocalOnly: "本地处理 · 素材不会上传",
+    repairMoveRegion: "移动区域", repairDrawRegion: "重新框选", repairResizeRegion: "调整修复区域", repairCompare: "拖动对比修复前后", repairBefore: "修复前", repairAfter: "修复后",
+    repairFrameTimeline: "视频帧与修复区间", repairRegions: "修复区域", repairAddRegion: "添加区域", repairAddPositionKeyframe: "记录当前位置",
+    repairRangeStart: "开始时间", repairRangeEnd: "结束时间",
+    repairTestFrame: "单帧测试", repairProcessRanges: "修复所选时段",
+    repairApplyVideo: "应用到视频", repairClipPreviewReady: "所选时段修复完成，可播放并拖动竖线对比",
+    repairVideoHint: "每个区域都可设置独立时间段。水印移动时，在不同时间点移动框并记录位置，处理中会自动插值。", repairImageHint: "拖动框可移动，右下角控制点可缩放。生成预览后拖动竖线检查修复前后效果。",
+    repairPixelChange: "区域像素变化", repairPixelChangeHint: "用于确认模型确实生成了新内容，不代表最终质量评分。",
+    hdRestoreDialogTitle: "AI 高清修复", hdRestoreImageMode: "图片 4× 修复", hdRestoreVideoMode: "视频逐帧 4× 修复", hdRestoreLocalOnly: "浏览器本地 · GPU 处理",
+    hdRestoreSelectMedia: "请先选择一个图片或视频片段", hdRestoreCapability: "修复能力", hdRestore4xTitle: "NanoVSR 4× 超分辨率", hdRestore4xHint: "恢复边缘与细节，减轻低分辨率视频中的模糊、噪点和压缩瑕疵。",
+    hdRestoreModel: "模型", hdRestoreBackend: "运行设备", hdRestoreScale: "放大倍率", hdRestoreFrameRate: "视频处理帧率", hdRestorePrivacy: "画面只在当前浏览器中处理，不会上传。",
+    hdRestoreReadyTitle: "素材已准备", hdRestoreReadyHint: "开始后将生成一份新素材，原片保持不变。", hdRestorePreviewAlt: "NanoVSR 高清修复预览", hdRestoreVideoTimeline: "前后对比播放",
+    hdRestoreOutputPending: "等待生成", hdRestoreFramesProgress: "已处理 {current} / {total} 帧", hdRestoreVideoHint: "视频按 12 fps 分组修复并保留原音轨。完成后可播放视频并拖动中间竖线检查每一帧。", hdRestoreImageHint: "图片会生成 4× 结果。完成后拖动中间竖线检查边缘和纹理。",
+    hdRestoreSafeNote: "先生成预览；确认应用后才会加入“我的资产”并替换当前片段。", hdRestoreStart: "开始高清修复", hdRestoreRunAgain: "重新生成", hdRestoreApply: "应用结果", hdRestoreCancel: "取消处理", hdRestoreUseResult: "使用高清修复结果",
+    hdRestorePreviewReady: "高清修复已完成，可以拖动竖线对比", hdRestoreApplied: "高清素材已加入我的资产并用于当前片段", hdRestoreCanceled: "已取消高清修复，原片保持不变", hdRestoreFailed: "高清修复失败",
+    hdRestorePhasePrepare: "正在准备画面", hdRestorePhaseDownload: "正在下载 NanoVSR 模型", hdRestorePhaseModelCached: "已读取本地模型缓存", hdRestorePhaseCompile: "正在初始化 WebGPU", hdRestorePhaseInference: "GPU 正在恢复画面细节", hdRestorePhaseRender: "正在生成高清画面", hdRestorePhaseFrame: "正在处理视频帧", hdRestorePhaseReady: "高清修复完成", hdRestorePhaseCanceling: "正在取消…",
+  },
+  en: {
+    repairTab: "AI Repair", repairTitle: "AI watermark repair", repairIntro: "Select a fixed watermark region and repair it frame by frame locally in your browser. Media is never uploaded.", repairRegion: "Repair region",
+    repairSelecting: "Drag on the preview", repairSelectRegion: "Select watermark", repairPresetTopRight: "Top-right preset", repairPresetBottomRight: "Bottom-right preset",
+    repairFullClip: "Entire clip", repairCustomRange: "Custom range", repairFrames: "frames", repairUseResult: "Use repaired result", repairPreviewAgain: "Repair",
+    repairPreviewFrame: "Repair", repairCancel: "Cancel", repairProcessClip: "Process video", repairApplyImage: "Apply to image", repairClearPreview: "Clear frame preview",
+    repairSafeNote: "A new asset is added to My assets when complete. You can restore the original at any time.", repairPreviewAlt: "AI repair preview", repairPreviewReady: "Frame repair preview is ready",
+    repairImageReady: "Image repaired and added to My assets", repairClipReady: "Video repaired, added to My assets, and applied to the clip", repairCanceled: "AI repair canceled; the original is unchanged",
+    repairFailed: "AI repair failed", repairPhasePrepare: "Preparing frame", repairPhaseDownload: "Downloading MI-GAN model", repairPhaseCompile: "Initializing WebGPU",
+    repairPhaseFrame: "Repairing frame", repairPhaseRefine: "Refining edge watermark", repairPhaseLoadEncoder: "Preparing the video composer", repairPhaseEncodeVideo: "Composing the repaired video", repairPhaseCreateAsset: "Creating the repaired media", repairPhaseReady: "Repair complete", repairPhaseCanceling: "Canceling…", repairPhaseStopping: "Stopping…", repairStopping: "Stopping…", visualTabsPrevious: "Show previous properties", visualTabsNext: "Show more properties",
+    repairHubTitle: "AI Repair", repairHubIntro: "Choose a repair capability, then define regions and validate the result in a dedicated workspace.", repairLocalBadge: "Browser local",
+    repairWatermarkCapability: "Watermark / object removal", repairWatermarkCapabilityHint: "Select one or more regions, with timed regions for video.", repairOpenEditor: "Open", repairEditAgain: "Edit again",
+    repairHdCapability: "HD restoration", repairHdCapabilityHint: "Clarity, denoise, and compression artifact repair.", repairComingSoon: "Coming soon",
+    repairDialogTitle: "AI watermark repair", repairDialogImageMode: "Image mode", repairDialogVideoMode: "Frame-by-frame video", repairLocalOnly: "Processed locally · Media is never uploaded",
+    repairMoveRegion: "Move region", repairDrawRegion: "Draw again", repairResizeRegion: "Resize repair region", repairCompare: "Drag to compare before and after", repairBefore: "Before", repairAfter: "After",
+    repairFrameTimeline: "Video frames and repair ranges", repairRegions: "Repair regions", repairAddRegion: "Add region", repairAddPositionKeyframe: "Record position",
+    repairRangeStart: "Start time", repairRangeEnd: "End time",
+    repairTestFrame: "Test one frame", repairProcessRanges: "Repair selected ranges",
+    repairApplyVideo: "Apply to video", repairClipPreviewReady: "Selected ranges repaired. Play or drag the divider to compare.",
+    repairVideoHint: "Each region has its own time range. For a moving watermark, reposition the box at different times and record positions; processing interpolates between them.", repairImageHint: "Drag the box to move it and use the lower-right handle to resize. After previewing, drag the divider to compare before and after.",
+    repairPixelChange: "Region pixel change", repairPixelChangeHint: "Confirms that the model generated new pixels; this is not a quality score.",
+    hdRestoreDialogTitle: "AI HD restoration", hdRestoreImageMode: "4× image restoration", hdRestoreVideoMode: "Frame-by-frame 4× video", hdRestoreLocalOnly: "Browser local · GPU processing",
+    hdRestoreSelectMedia: "Select an image or video clip first", hdRestoreCapability: "Restoration capability", hdRestore4xTitle: "NanoVSR 4× super resolution", hdRestore4xHint: "Restores edges and detail while reducing blur, noise, and compression artifacts in low-resolution footage.",
+    hdRestoreModel: "Model", hdRestoreBackend: "Backend", hdRestoreScale: "Upscale", hdRestoreFrameRate: "Processing frame rate", hdRestorePrivacy: "Frames stay in this browser and are never uploaded.",
+    hdRestoreReadyTitle: "Media ready", hdRestoreReadyHint: "A new asset will be generated while the original stays unchanged.", hdRestorePreviewAlt: "NanoVSR HD restoration preview", hdRestoreVideoTimeline: "Before-and-after playback",
+    hdRestoreOutputPending: "Pending", hdRestoreFramesProgress: "Processed {current} / {total} frames", hdRestoreVideoHint: "Video is restored in groups at 12 fps with the source audio preserved. Play it and drag the divider to inspect frames.", hdRestoreImageHint: "The image is restored at 4×. Drag the divider to inspect edges and textures.",
+    hdRestoreSafeNote: "Generate a preview first. Applying adds it to My assets and replaces the current clip.", hdRestoreStart: "Start HD restoration", hdRestoreRunAgain: "Generate again", hdRestoreApply: "Apply result", hdRestoreCancel: "Cancel processing", hdRestoreUseResult: "Use HD restoration",
+    hdRestorePreviewReady: "HD restoration is ready. Drag the divider to compare.", hdRestoreApplied: "HD asset added to My assets and applied to the clip", hdRestoreCanceled: "HD restoration canceled; the original is unchanged", hdRestoreFailed: "HD restoration failed",
+    hdRestorePhasePrepare: "Preparing frames", hdRestorePhaseDownload: "Downloading NanoVSR model", hdRestorePhaseModelCached: "Reading cached model", hdRestorePhaseCompile: "Initializing WebGPU", hdRestorePhaseInference: "Restoring detail on the GPU", hdRestorePhaseRender: "Rendering HD frames", hdRestorePhaseFrame: "Processing video frames", hdRestorePhaseReady: "HD restoration complete", hdRestorePhaseCanceling: "Canceling…",
+  },
+};
 
 const REMASTER_COPY = {
   zh: { remasterTitle: "AI 视频增强", remasterExperimental: "当前帧试用", remasterModelMeta: "MIT · 本地 ONNX · 去噪与压缩修复", remasterReadyBadge: "已生成", remasterNotRun: "未运行", remasterShowResult: "显示增强结果", remasterProcessing: "正在增强", remasterRerun: "重新增强当前帧", remasterEnhanceFrame: "增强当前帧", remasterClear: "清除", remasterVideoHint: "当前为质量验证版：仅增强播放头处的视频帧，不会冒充整段处理或写入导出。确认效果后再启用逐帧预计算。", remasterImageHint: "图片会按当前素材生成完整增强预览；当前试用结果暂不写入导出。", remasterPreviewAlt: "Remaster DRUNet 增强预览", remasterSelectClip: "请先选择一个画面片段", remasterPreparing: "准备当前画面", remasterReady: "Remaster 当前帧增强完成", remasterFailed: "视频增强失败" },
@@ -2173,6 +2235,7 @@ export function createTranslator(languageId) {
   const mobileClipActionCopy = MOBILE_CLIP_ACTION_COPY[languageId] ?? MOBILE_CLIP_ACTION_COPY.en;
   const mobileStickerCopy = MOBILE_STICKER_COPY[languageId] ?? MOBILE_STICKER_COPY.en;
   const completionCopy = globalThis.__GENERATING_I18N__ ? {} : I18N_COMPLETION_COPY[languageId] ?? I18N_COMPLETION_COPY.en ?? {};
+  const repairCopy = { ...REPAIR_COPY.en, ...(REPAIR_COPY[languageId] ?? {}), ...(REPAIR_LOCALIZED_COPY[languageId] ?? {}) };
   const projectChromeCopy = PROJECT_CHROME_COPY[languageId] ?? PROJECT_CHROME_COPY.en;
   const coreLabelCopy = CORE_LABEL_COPY[languageId] ?? CORE_LABEL_COPY.en;
   const specializedCopy = Object.assign({}, ...[
@@ -2180,7 +2243,7 @@ export function createTranslator(languageId) {
     VISUAL_EDITOR_COPY, TRANSITION_EDITOR_COPY, ASSET_PREVIEW_COPY, ASSET_DROP_COPY,
     AUTO_CAPTION_STATUS_COPY, VISUAL_PANEL_TITLE_COPY, VISUAL_MASK_SHAPE_COPY,
     VISUAL_KEYFRAME_ACTION_COPY, VISUAL_TAB_COPY, SOURCE_AUDIO_SYNC_COPY,
-    CAPTION_WORKSPACE_COPY, RESOURCE_LINK_COPY, VISUAL_AI_TAB_COPY, REMASTER_COPY,
+    CAPTION_WORKSPACE_COPY, RESOURCE_LINK_COPY, VISUAL_AI_TAB_COPY, REPAIR_COPY, REMASTER_COPY,
     REMASTER_CLIP_COPY, REMASTER_GPU_COPY, REMASTER_PHASE_COPY, CONTEXT_PANEL_COPY,
     TIMELINE_AUDIO_MENU_COPY, TTS_BACKEND_COPY, CAPTION_AUDIO_LINK_COPY,
     VISUAL_ANIMATION_COPY, STICKER_EDITOR_COPY, MOBILE_STICKER_COPY,
@@ -2189,7 +2252,7 @@ export function createTranslator(languageId) {
     AUTO_EDIT_RESULT_COPY, IMAGE_AI_CAPTION_COPY, PICTURE_IN_PICTURE_COPY,
     SRT_IMPORT_COPY,
   ].map((source) => source[languageId] ?? {}));
-  return (key, fallbackText) => coreLabelCopy[key] ?? specializedCopy[key] ?? exportOptionsCopy[key] ?? EXPORT_OPTIONS_COPY.en[key] ?? exportExtraStatusCopy[key] ?? EXPORT_EXTRA_STATUS_COPY.en[key] ?? projectChromeCopy[key] ?? PROJECT_CHROME_COPY.en[key] ?? captionAudioLinkCopy[key] ?? CAPTION_AUDIO_LINK_COPY.en[key] ?? ttsBackendCopy[key] ?? TTS_BACKEND_COPY.en[key] ?? mobileStickerCopy[key] ?? MOBILE_STICKER_COPY.en[key] ?? mobileClipActionCopy[key] ?? MOBILE_CLIP_ACTION_COPY.en[key] ?? mobileDrawerCopy[key] ?? MOBILE_DRAWER_COPY.en[key] ?? srtImportCopy[key] ?? exportCopy[key] ?? EXPORT_RENDER_COPY.en[key] ?? assetPreviewCopy[key] ?? ASSET_PREVIEW_COPY.en[key] ?? assetDropCopy[key] ?? ASSET_DROP_COPY.en[key] ?? autoCaptionStatusCopy[key] ?? AUTO_CAPTION_STATUS_COPY.en[key] ?? completionCopy[key] ?? copy[key] ?? fallback[key] ?? UI_COPY.zh[key] ?? fallbackText ?? key;
+  return (key, fallbackText) => coreLabelCopy[key] ?? repairCopy[key] ?? specializedCopy[key] ?? exportOptionsCopy[key] ?? EXPORT_OPTIONS_COPY.en[key] ?? exportExtraStatusCopy[key] ?? EXPORT_EXTRA_STATUS_COPY.en[key] ?? projectChromeCopy[key] ?? PROJECT_CHROME_COPY.en[key] ?? captionAudioLinkCopy[key] ?? CAPTION_AUDIO_LINK_COPY.en[key] ?? ttsBackendCopy[key] ?? TTS_BACKEND_COPY.en[key] ?? mobileStickerCopy[key] ?? MOBILE_STICKER_COPY.en[key] ?? mobileClipActionCopy[key] ?? MOBILE_CLIP_ACTION_COPY.en[key] ?? mobileDrawerCopy[key] ?? MOBILE_DRAWER_COPY.en[key] ?? srtImportCopy[key] ?? exportCopy[key] ?? EXPORT_RENDER_COPY.en[key] ?? assetPreviewCopy[key] ?? ASSET_PREVIEW_COPY.en[key] ?? assetDropCopy[key] ?? ASSET_DROP_COPY.en[key] ?? autoCaptionStatusCopy[key] ?? AUTO_CAPTION_STATUS_COPY.en[key] ?? completionCopy[key] ?? copy[key] ?? fallback[key] ?? UI_COPY.zh[key] ?? fallbackText ?? key;
 }
 
 export function translateOptionName(languageId, name) {

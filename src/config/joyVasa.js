@@ -1,3 +1,5 @@
+import { mirroredModelBaseUrls } from "../lib/modelSources.js";
+
 const JOYVASA_REVISION = "b8f13fe9c23679c56f21b1baafb92ed00dc087c3";
 const TIMELINE_STUDIO_MODEL_REVISION = "a201b681c8f96672b5c3f624e32d4dc932f150af";
 
@@ -34,3 +36,12 @@ export const JOYVASA_WEB_MODEL = Object.freeze({
 
 export const JOYVASA_PROJECT_MODEL_BASE_URL =
   `https://huggingface.co/haixin/timeline-studio-onnx-models/resolve/${TIMELINE_STUDIO_MODEL_REVISION}/joyvasa/`;
+
+export function getJoyVasaProjectModelBaseUrls(language = "") {
+  return mirroredModelBaseUrls({
+    repository: "timeline-studio-onnx-models",
+    revision: TIMELINE_STUDIO_MODEL_REVISION,
+    path: "joyvasa",
+    preference: language,
+  });
+}

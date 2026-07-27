@@ -140,6 +140,8 @@ export function EditorSidebar({ model: d }) {
             selectedVisualSegment={d.selectedVisualSegment}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
+            miganRepair={d.miganRepair}
+            hdRestoration={d.hdRestoration}
           />
         )}
       </aside>

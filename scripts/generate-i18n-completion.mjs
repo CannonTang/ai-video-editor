@@ -6,6 +6,7 @@ const RAW_KEY_ENGLISH = {
   canvasRatio: "Canvas ratio",
   clipDuration: "Clip duration",
   clipStart: "Clip start",
+  complete: "Complete",
   layer: "Layer",
   lock: "Lock",
   visualBasic: "Basic",

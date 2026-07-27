@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
-import { JOYVASA_PROJECT_MODEL_BASE_URL } from "../config/joyVasa.js";
-import { LIVE_PORTRAIT_WEBGPU_PROJECT_MODEL_BASE_URL } from "../config/livePortrait.js";
+import { getJoyVasaProjectModelBaseUrls } from "../config/joyVasa.js";
+import { getLivePortraitProjectModelBaseUrls } from "../config/livePortrait.js";
 import { decodeAvatarAudio16k, encodeAvatarFrames, formatAvatarProgress, runAvatarWorkerTask } from "../lib/editorRuntime.js";
 
 const createMotionWorker = () => new Worker(new URL("../workers/joyvasa.worker.js", import.meta.url), { type: "module" });
@@ -19,6 +19,8 @@ export function useAvatarGeneration(d) {
     if (!d.audioBlob) return void d.notify(d.t("avatarNeedsAudio"));
     d.setAvatarJob({ running: true, progress: 1, phase: d.t("avatarPreparing") });
     try {
+      const joyVasaModelBaseUrls = getJoyVasaProjectModelBaseUrls(d.uiLanguage);
+      const livePortraitModelBaseUrls = getLivePortraitProjectModelBaseUrls(d.uiLanguage);
       const portrait = d.previewVisualSegment?.blob instanceof Blob ? d.previewVisualSegment.blob : await fetch(d.previewVisualSrc).then((response) => {
         if (!response.ok) throw new Error(`读取肖像失败（HTTP ${response.status}）`); return response.blob();
       });
@@ -34,16 +36,16 @@ export function useAvatarGeneration(d) {
         const samples = await decodeAvatarAudio16k(d.audioBlob);
         if (!d.avatarMotionWorkerRef.current) d.avatarMotionWorkerRef.current = createMotionWorker();
         const result = await runAvatarWorkerTask(d.avatarMotionWorkerRef.current,
-          { type: "generate", audioSamples: samples.buffer, modelBaseUrl: JOYVASA_PROJECT_MODEL_BASE_URL }, [samples.buffer], "motion",
+          { type: "generate", audioSamples: samples.buffer, modelBaseUrl: joyVasaModelBaseUrls }, [samples.buffer], "motion",
           (progress) => d.setAvatarJob({ running: true, progress: progress.progress, phase: formatAvatarProgress(d.t, progress) }));
         d.avatarMotionCacheRef.current = { audioBlob: d.audioBlob, motion: result.motion.slice(0) }; motionBuffer = result.motion;
-        await runAvatarWorkerTask(d.avatarMotionWorkerRef.current, { type: "release", modelBaseUrl: JOYVASA_PROJECT_MODEL_BASE_URL }, [], "released");
+        await runAvatarWorkerTask(d.avatarMotionWorkerRef.current, { type: "release", modelBaseUrl: joyVasaModelBaseUrls }, [], "released");
       }
       if (!d.avatarRenderWorkerRef.current) d.avatarRenderWorkerRef.current = createRenderWorker();
       const result = await runAvatarWorkerTask(d.avatarRenderWorkerRef.current, {
         type: "generateVideo", portraitBlob: portrait, motionBuffer,
         modelBaseUrl: import.meta.env.VITE_LIVE_PORTRAIT_MODEL_BASE_URL || "",
-        joyVasaModelBaseUrl: JOYVASA_PROJECT_MODEL_BASE_URL, webGpuModelBaseUrl: LIVE_PORTRAIT_WEBGPU_PROJECT_MODEL_BASE_URL,
+        joyVasaModelBaseUrl: joyVasaModelBaseUrls, webGpuModelBaseUrl: livePortraitModelBaseUrls,
         quality, renderFps: Math.max(1, Number(import.meta.env.VITE_AVATAR_RENDER_FPS || 8)),
         neuralFps: Math.max(1, Number(import.meta.env.VITE_AVATAR_NEURAL_FPS || 2)), duration,
         portraitKey: d.previewVisualSegment?.id || d.previewVisualSrc,

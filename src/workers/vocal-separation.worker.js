@@ -1,4 +1,10 @@
-const MODEL_URL = "https://huggingface.co/haixin/timeline-studio-vocal-remover/resolve/main/model.json";
+import { orderModelUrlsForNetwork } from "../lib/modelSources.js";
+
+const MODEL_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
+const HUGGING_FACE_MODEL_URL =
+  `https://huggingface.co/haixin/timeline-studio-vocal-remover/resolve/${MODEL_REVISION}/model.json`;
+const MODEL_SCOPE_MODEL_URL =
+  `https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/resolve/${MODEL_REVISION}/model.json`;
 const CHUNK_SIZE = 31744;
 const PADDING = 3072;
 const FFT_SIZE = 6144;
@@ -25,7 +31,13 @@ async function getRuntime() {
   return runtimePromise;
 }
 
-async function getModel(runtime) {
+function modelUrls(preference) {
+  return preference === "modelscope"
+    ? [MODEL_SCOPE_MODEL_URL, HUGGING_FACE_MODEL_URL]
+    : [HUGGING_FACE_MODEL_URL, MODEL_SCOPE_MODEL_URL];
+}
+
+async function getModel(runtime, modelSourcePreference) {
   modelPromise ??= (async () => {
     const requestedBackend = self.navigator.gpu && runtime.findBackend("webgpu") ? "webgpu" : "webgl";
     let ready;
@@ -34,7 +46,16 @@ async function getModel(runtime) {
     if (!ready) throw new Error("VOCAL_BACKEND_UNAVAILABLE");
     activeBackend = runtime.getBackend();
     await runtime.ready();
-    return runtime.loadGraphModel(MODEL_URL);
+    const failures = [];
+    const candidates = await orderModelUrlsForNetwork(modelUrls(modelSourcePreference));
+    for (const url of candidates) {
+      try {
+        return await runtime.loadGraphModel(url);
+      } catch (error) {
+        failures.push(`${new URL(url).hostname}: ${error?.message || String(error)}`);
+      }
+    }
+    throw new Error(`VOCAL_MODEL_FAILED: ${failures.join("; ")}`);
   })();
   return modelPromise;
 }
@@ -108,10 +129,10 @@ function wavBuffer(channels, sampleRate) {
   return buffer;
 }
 
-async function separate(requestId, left, right, sampleRate) {
+async function separate(requestId, left, right, sampleRate, modelSourcePreference) {
   const runtime = await getRuntime();
   postProgress(requestId, 4, { key: "vocalSeparationLoadingModel" });
-  const model = await getModel(runtime);
+  const model = await getModel(runtime, modelSourcePreference);
   postProgress(requestId, 7, { key: activeBackend === "webgpu" ? "vocalSeparationUsingWebGpu" : "vocalSeparationUsingWebGl" });
   const accompaniment = [[], []];
   const vocals = [[], []];
@@ -154,6 +175,7 @@ self.addEventListener("message", async ({ data }) => {
       new Float32Array(data.leftBuffer),
       new Float32Array(data.rightBuffer),
       data.sampleRate,
+      data.modelSourcePreference,
     );
   } catch (error) {
     self.postMessage({ type: "error", requestId: data.requestId, error: error?.message || "VOCAL_MODEL_FAILED" });

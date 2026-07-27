@@ -27,6 +27,18 @@ const HUGGING_FACE_HOSTS = new Set([
   "cdn-lfs-us-1.hf.co",
   "cdn-lfs-eu-1.hf.co",
 ]);
+const MODEL_SCOPE_HOSTS = new Set([
+  "modelscope.cn",
+  "www.modelscope.cn",
+  "modelscope.oss-cn-beijing.aliyuncs.com",
+]);
+const MIRRORED_REPOSITORIES = new Set([
+  "stable-audio-3-small-music-onnx",
+  "timeline-studio-onnx-models",
+  "timeline-studio-vocal-remover",
+]);
+const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
+const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
 function hasCacheableExtension(pathname) {
   return CACHEABLE_EXTENSIONS.some((extension) => pathname.endsWith(extension));
 }
@@ -40,6 +52,39 @@ function isHuggingFaceModelRequest(url) {
   // would keep a second full model copy for every non-English language.
   if (url.pathname.includes("/rhasspy/piper-voices/resolve/")) return false;
   return url.hostname !== "huggingface.co" || url.pathname.includes("/resolve/");
+}
+
+function isModelScopeModelRequest(url) {
+  return MODEL_SCOPE_HOSTS.has(url.hostname)
+    && (url.hostname !== "www.modelscope.cn" || url.pathname.includes("/resolve/"));
+}
+
+function canonicalModelIdentity(url) {
+  let match;
+  if (HUGGING_FACE_HOSTS.has(url.hostname)) {
+    match = url.pathname.match(/^\/([^/]+)\/([^/]+)\/resolve\/([^/]+)\/(.+)$/);
+  } else if (MODEL_SCOPE_HOSTS.has(url.hostname)) {
+    match = url.pathname.match(/^\/models\/([^/]+)\/([^/]+)\/resolve\/([^/]+)\/(.+)$/);
+  }
+  if (!match) return "";
+
+  let [, owner, repository, revision, path] = match;
+  if (owner === "martindelophy" && MIRRORED_REPOSITORIES.has(repository)) owner = "haixin";
+  if (owner === "lsb" && repository === "stable-audio-3-small-music-onnx") {
+    owner = "haixin";
+    revision = STABLE_AUDIO_REVISION;
+  }
+  if (owner === "haixin" && repository === "timeline-studio-vocal-remover" && revision === "main") {
+    revision = VOCAL_REMOVER_REVISION;
+  }
+  return `${owner}/${repository}/${revision}/${path}`;
+}
+
+function canonicalModelCacheRequest(request) {
+  const identity = canonicalModelIdentity(new URL(request.url));
+  return identity
+    ? new Request(`${self.location.origin}/__model-cache__/${identity}`)
+    : request;
 }
 
 async function removeLegacyPiperDuplicates() {
@@ -63,7 +108,7 @@ function shouldCacheRequest(request) {
   }
 
   const url = new URL(request.url);
-  return isHuggingFaceModelRequest(url) || isRuntimeAssetRequest(url);
+  return isHuggingFaceModelRequest(url) || isModelScopeModelRequest(url) || isRuntimeAssetRequest(url);
 }
 
 function withCacheStatus(response, status) {
@@ -78,8 +123,17 @@ function withCacheStatus(response, status) {
 
 async function cacheFirst(request, event) {
   const cache = await caches.open(MODEL_CACHE_NAME);
-  const cached = await cache.match(request);
+  const cacheRequest = canonicalModelCacheRequest(request);
+  let cached = await cache.match(cacheRequest) || await cache.match(request);
+  if (!cached && cacheRequest.url !== request.url) {
+    const keys = await cache.keys();
+    const equivalent = keys.find((key) => canonicalModelCacheRequest(key).url === cacheRequest.url);
+    if (equivalent) cached = await cache.match(equivalent);
+  }
   if (cached) {
+    if (cacheRequest.url !== request.url) {
+      event.waitUntil(cache.put(cacheRequest, cached.clone()).catch(() => {}));
+    }
     return withCacheStatus(cached, "hit");
   }
 
@@ -87,7 +141,7 @@ async function cacheFirst(request, event) {
   if (response.ok || response.type === "opaque") {
     // Keep the service worker alive until the large model shard is durably
     // committed. The live response remains streaming and is not blocked.
-    event.waitUntil(cache.put(request, response.clone()).catch((error) => {
+    event.waitUntil(cache.put(cacheRequest, response.clone()).catch((error) => {
       if (error?.name !== "QuotaExceededError") console.warn("Model cache write failed.", error);
     }));
   }

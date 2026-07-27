@@ -8,6 +8,8 @@ import { Topbar } from "./components/Topbar.jsx";
 import { AssetDragPreview, ExportProgressOverlay } from "./components/EditorOverlays.jsx";
 import { EditorSidebar } from "./components/EditorSidebar.jsx";
 import { FirstVisualGuide } from "./components/FirstVisualGuide.jsx";
+import { MiganRepairDialog } from "./components/MiganRepairDialog.jsx";
+import { NanoVsrRestorationDialog } from "./components/NanoVsrRestorationDialog.jsx";
 import {
   canShowFirstVisualGuide,
   FIRST_VISUAL_GUIDE_MOBILE_QUERY,
@@ -63,6 +65,8 @@ import { createTimelineViewModel } from "./lib/timelineViewModel.js";
 import { createTranslator, getStoredLanguage, translateOptionName } from "./i18n.js";
 import { decodeWaveform, downloadBlob } from "./lib/media.js";
 import { useAiMusicGeneration } from "./hooks/useAiMusicGeneration.js";
+import { useMiganRepair } from "./hooks/useMiganRepair.js";
+import { useNanoVsrRestoration } from "./hooks/useNanoVsrRestoration.js";
 import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentIds } from "./lib/timeline.js";
 import { normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
 import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
@@ -333,7 +337,7 @@ export function App() {
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
       if (typeof change.enhancementEnabled === "boolean" && item.enhancement) {
-        if (item.enhancement.mode === "remaster-drunet-full") {
+        if (["remaster-drunet-full", "nanovsr-644k"].includes(item.enhancement.mode)) {
           const source = change.enhancementEnabled ? item.enhancement.processed : item.enhancement.original;
           if (!source?.src) return item;
           return {
@@ -349,6 +353,21 @@ export function App() {
           };
         }
         if (item.enhancement.previewUrl) return { ...item, enhancement: { ...item.enhancement, enabled: change.enhancementEnabled } };
+      }
+      if (typeof change.repairEnabled === "boolean" && item.repair) {
+        const source = change.repairEnabled ? item.repair.processed : item.repair.original;
+        if (!source?.src) return item;
+        return {
+          ...item,
+          src: source.src,
+          blob: source.blob,
+          width: source.width,
+          height: source.height,
+          sourceStart: source.sourceStart,
+          sourceDuration: source.sourceDuration,
+          trackFrames: source.trackFrames ?? [],
+          repair: { ...item.repair, enabled: change.repairEnabled },
+        };
       }
       return item;
       });
@@ -370,6 +389,22 @@ export function App() {
       return nextItems;
     });
   };
+  const miganRepair = useMiganRepair({
+    selectedSegment: selectedVisualSegment,
+    imageUrlRefs,
+    setVisualSegments,
+    setUserAssets,
+    notify,
+    t,
+  });
+  const hdRestoration = useNanoVsrRestoration({
+    selectedSegment: selectedVisualSegment,
+    imageUrlRefs,
+    setVisualSegments,
+    setUserAssets,
+    notify,
+    t,
+  });
   const exportElapsedSeconds = useExportElapsed(exporting, exportStartRef);
   const {
     effectiveCaptionPlacement, previewSmartCropRect, previewVisionAnalysis,
@@ -909,7 +944,7 @@ export function App() {
           selectedAudioToolTarget, separateSelectedAudioVocals, separateSourceVocals, vocalSeparationJob,
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
-          selectedVisualSegment, visualLocalTime, updateSelectedVisualEffects,
+          selectedVisualSegment, visualLocalTime, updateSelectedVisualEffects, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack,
         }} />
 
@@ -1117,6 +1152,8 @@ export function App() {
           visualLocalTime={visualLocalTime}
           visualTimelineStart={selectedVisualRange?.start ?? 0}
           updateSelectedVisualEffects={updateSelectedVisualEffects}
+          miganRepair={miganRepair}
+          hdRestoration={hdRestoration}
           onPreviewAnimation={setVisualAnimationPreview}
           selectedFilterId={selectedFilterId}
           setSelectedFilterId={setSelectedFilterId}
@@ -1268,6 +1305,18 @@ export function App() {
       {mobilePanel ? <button className="mobile-sheet-backdrop" type="button" aria-label={t("close", "关闭")} onClick={() => changeMobilePanel("")} /> : null}
 
       <AssetDragPreview preview={assetDragPreview} t={t} />
+      <MiganRepairDialog
+        repair={miganRepair}
+        segment={selectedVisualSegment}
+        t={t}
+        onApplied={() => changeMobilePanel("")}
+      />
+      <NanoVsrRestorationDialog
+        restoration={hdRestoration}
+        segment={hdRestoration.sourceSegment || selectedVisualSegment}
+        t={t}
+        onApplied={() => changeMobilePanel("")}
+      />
       <ExportProgressOverlay
         exporting={exporting}
         percent={exportPercent}

@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 
 import {
   BoundingBox,
   CaretDown,
+  CaretLeft,
+  CaretRight,
   Check,
   CloudArrowUp,
   ClosedCaptioning,
@@ -13,6 +15,7 @@ import {
   FrameCorners,
   MicrophoneStage,
   MusicNote,
+  MagicWand,
   Pause,
   PlayCircle,
   PersonSimpleRun,
@@ -51,7 +54,23 @@ export function LanguageIntro({ t, closing, onChoose }) {
           <span />
           <span />
         </div>
-        <p>{t("languageKicker")}</p>
+        <div className="language-intro-heading">
+          <p>{t("languageKicker")}</p>
+          <a
+            className="language-intro-badge"
+            href="https://toolindex.net/tools/timeline-studio?ref=badge"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Timeline Studio — Top 10 Video on Tool Index (opens in a new tab)"
+          >
+            <img
+              src="https://toolindex.net/badge/timeline-studio/score.svg"
+              alt="Timeline Studio - Top 10 Video on Tool Index"
+              width="200"
+              height="60"
+            />
+          </a>
+        </div>
         <h1>
           <span className="language-title-en">Choose interface language</span>
           <span className="language-title-local">{t("languageTitle")}</span>
@@ -602,6 +621,8 @@ export function ToolPanel(props) {
     selectedVisualSegment,
     visualLocalTime,
     updateSelectedVisualEffects,
+    miganRepair,
+    hdRestoration,
   } = props;
 
   if (activeTool === "caption") {
@@ -848,6 +869,8 @@ export function ToolPanel(props) {
         selectedFilterId={selectedFilterId}
         trOption={trOption}
         onSelectFilter={(id) => { setSelectedFilterId(id); notify(t("effectApplied")); }}
+        miganRepair={miganRepair}
+        hdRestoration={hdRestoration}
       />
     );
   }
@@ -888,8 +911,10 @@ export function ToolPanel(props) {
   );
 }
 
-export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, onPreviewAnimation, selectedFilterId, trOption, onSelectFilter, contextMode = false, sourceAudioLinked = false }) {
+export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, onPreviewAnimation, selectedFilterId, trOption, onSelectFilter, contextMode = false, sourceAudioLinked = false, miganRepair = null, hdRestoration = null }) {
   const [activeTab, setActiveTab] = useState("transform");
+  const [tabEdges, setTabEdges] = useState({ atStart: true, atEnd: false });
+  const tabsRef = useRef(null);
   const [animationSection, setAnimationSection] = useState("in");
   const [hoveredAnimation, setHoveredAnimation] = useState(null);
   const keyframes = normalizeVisualKeyframes(segment?.keyframes ?? []);
@@ -913,7 +938,40 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
     ["speed", t("visualTabSpeed")],
     ["effects", t("visualTabEffects")],
     ["animation", t("visualTabAnimation")],
+    ["repair", t("repairTab")],
   ];
+  const updateTabEdges = useCallback(() => {
+    const node = tabsRef.current;
+    if (!node) return;
+    setTabEdges({
+      atStart: node.scrollLeft <= 6,
+      atEnd: node.scrollLeft + node.clientWidth >= node.scrollWidth - 2,
+    });
+  }, []);
+  const scrollVisualTabs = (direction) => {
+    const node = tabsRef.current;
+    if (!node) return;
+    node.scrollBy({
+      left: direction * Math.max(148, node.clientWidth * 0.68),
+      behavior: "smooth",
+    });
+  };
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const node = tabsRef.current;
+      const activeButton = node?.querySelector('[aria-selected="true"]');
+      if (node && activeButton) {
+        const start = activeButton.offsetLeft;
+        const end = start + activeButton.offsetWidth;
+        if (start < node.scrollLeft + 4) node.scrollTo({ left: Math.max(0, start - 4), behavior: "smooth" });
+        else if (end > node.scrollLeft + node.clientWidth - 28) {
+          node.scrollTo({ left: end - node.clientWidth + 28, behavior: "smooth" });
+        }
+      }
+      requestAnimationFrame(updateTabEdges);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab, segment?.id, updateTabEdges]);
   useEffect(() => {
     if (!hoveredAnimation || !segment || !onPreviewAnimation) return undefined;
     let frame = 0;
@@ -948,7 +1006,37 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
     <div className={`tool-panel visual-effects-panel ${contextMode ? "is-context-mode" : ""}`}>
       {!contextMode ? <h2>{t("imageTrack")}</h2> : null}
       {!segment ? <div className="empty-state">{t("visualSelectClip")}</div> : <>
-        <div className="visual-context-tabs" role="tablist" aria-label={t("imageTrack")}>{tabs.map(([id, label]) => <button type="button" role="tab" aria-selected={activeTab === id} className={activeTab === id ? "is-active" : ""} key={id} onClick={() => setActiveTab(id)}>{label}</button>)}</div>
+        <div className={`visual-context-tabs-shell ${tabEdges.atStart ? "" : "has-left-shadow"} ${tabEdges.atEnd ? "" : "has-right-shadow"}`}>
+          {!tabEdges.atStart ? (
+            <button
+              className="visual-context-tabs-arrow is-left"
+              type="button"
+              aria-label={t("visualTabsPrevious")}
+              title={t("visualTabsPrevious")}
+              onClick={() => scrollVisualTabs(-1)}
+            >
+              <CaretLeft size={16} weight="bold" />
+            </button>
+          ) : null}
+          <div
+            ref={tabsRef}
+            className="visual-context-tabs"
+            role="tablist"
+            aria-label={t("imageTrack")}
+            onScroll={updateTabEdges}
+          >{tabs.map(([id, label]) => <button type="button" role="tab" aria-selected={activeTab === id} className={activeTab === id ? "is-active" : ""} key={id} onClick={() => setActiveTab(id)}>{label}</button>)}</div>
+          {!tabEdges.atEnd ? (
+            <button
+              className="visual-context-tabs-arrow is-right"
+              type="button"
+              aria-label={t("visualTabsNext")}
+              title={t("visualTabsNext")}
+              onClick={() => scrollVisualTabs(1)}
+            >
+              <CaretRight size={16} weight="bold" />
+            </button>
+          ) : null}
+        </div>
         {activeTab === "transform" ?
         <section className="visual-editor-card">
           <div className="visual-editor-heading"><span><Diamond size={16} weight="fill" />{t("visualKeyframes")}</span><em>{localTime.toFixed(2)}s · {keyframes.length} {t("visualFrames")}</em></div>
@@ -1001,6 +1089,27 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
             ><span className={`visual-animation-swatch is-${option.id}`} aria-hidden="true"><i /></span><strong>{t(option.labelKey)}</strong></button>)}
           </div>
           {activeAnimation.id !== "none" ? <div className="slider-field compact-slider visual-animation-duration"><div><label>{t("visualAnimationDuration")}</label><strong>{activeAnimation.duration.toFixed(1)}s</strong></div><input aria-label={t("visualAnimationDuration")} type="range" min="0.1" max={Math.min(3, Math.max(0.1, Number(segment.duration) || 0.1))} step="0.1" value={activeAnimation.duration} onChange={(event) => onChange?.({ animation: { ...clipAnimation, [animationSection]: { ...activeAnimation, duration: Number(event.target.value) } } })} /></div> : null}
+        </section> : null}
+        {activeTab === "repair" ? <section className="visual-editor-card repair-card repair-hub">
+          <div className="visual-editor-heading">
+            <span><MagicWand size={17} weight="duotone" />{t("repairHubTitle")}</span>
+            <em>{t("repairLocalBadge")}</em>
+          </div>
+          <p className="repair-intro">{t("repairHubIntro")}</p>
+          <div className="repair-capability-list">
+            <article className="repair-capability is-available">
+              <span><MagicWand size={18} weight="duotone" /></span>
+              <div><strong>{t("repairWatermarkCapability")}</strong><small>{t("repairWatermarkCapabilityHint")}</small></div>
+              <button className="panel-primary" type="button" onClick={miganRepair?.openDialog}>{segment?.repair ? t("repairEditAgain") : t("repairOpenEditor")}</button>
+            </article>
+            <article className="repair-capability is-available">
+              <span><Scan size={18} weight="duotone" /></span>
+              <div><strong>{t("repairHdCapability")}</strong><small>{t("repairHdCapabilityHint")}</small></div>
+              <button className="panel-primary" type="button" onClick={hdRestoration?.openDialog}>{segment?.enhancement?.mode === "nanovsr-644k" ? t("repairEditAgain") : t("repairOpenEditor")}</button>
+            </article>
+          </div>
+          {segment?.repair ? <label className="switch-row repair-result-toggle"><input type="checkbox" checked={segment.repair.enabled !== false} onChange={(event) => onChange?.({ repairEnabled: event.target.checked })} />{t("repairUseResult")}</label> : null}
+          {segment?.enhancement?.mode === "nanovsr-644k" ? <label className="switch-row repair-result-toggle"><input type="checkbox" checked={segment.enhancement.enabled !== false} onChange={(event) => onChange?.({ enhancementEnabled: event.target.checked })} />{t("hdRestoreUseResult")}</label> : null}
         </section> : null}
       </>}
     </div>

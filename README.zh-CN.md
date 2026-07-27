@@ -7,7 +7,10 @@
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 
-Timeline Studio 是一个本地优先、直接运行在浏览器中的 AI 视频编辑器。它把接近剪映/CapCut 的多轨时间线，与浏览器 AI 配音、自动字幕、智能画面、数字人和确定性离线导出结合在一起。
+<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+
+Timeline Studio 是一个本地优先、直接运行在浏览器中的 AI 视频编辑器。它把接近剪映/CapCut 的多轨时间线，与 WebGPU AI 音乐和修复、多语言配音、自动字幕、数字人和确定性离线导出结合在一起。
 
 [打开在线编辑器](https://video-editor.ai-creator.top/) · [观看演示](https://www.youtube.com/watch?v=chdRPG2ndMs) · [Hugging Face Space](https://huggingface.co/spaces/haixin/timeline-studio)
 
@@ -19,9 +22,18 @@ Timeline Studio 是一个本地优先、直接运行在浏览器中的 AI 视频
 - **本地 AI 音乐：** Stable Audio 3 Small Q4 ONNX 通过 WebGPU 在浏览器运行，支持自由提示词自动翻译、30/60/90/120 秒选项、长音乐波形感知循环、模型持久缓存，并在完成后自动加入“我的素材”。
 - **自动字幕：** Whisper small q8 ONNX，结合音频能量修正时间戳，并对中文识别结果做克制的高置信纠错。
 - **智能画面：** YOLOS tiny 主体检测与 MODNet 人像抠图，用于图片和完整视频的智能裁切、字幕避让与背景移除。
+- **AI 修复：** 浏览器本地 MI-GAN 支持多区域、可分时段的水印/物体移除；NanoVSR 644K 通过 WebGPU 为图片和视频提供 4× 高清修复，并支持同步前后对比。
 - **AI 人声分离：** 在浏览器工作流中提取人声，并把伴奏放入音乐轨。
 - **数字人：** JoyVASA 音频驱动 + LivePortrait 神经渲染，支持 WebGPU、256px 快速预览与 512px 高质量路径。
 - **本地优先推理：** 大模型按需加载、锁定版本并由 Service Worker 缓存；受支持的流程不需要把项目素材上传到编辑后端。
+
+## 稳定的双线路模型交付
+
+浏览器 AI 模型同时镜像在 Hugging Face 和 ModelScope。Timeline Studio 会在首次请求时进行轻量连通性竞速，记住当前运行环境中更快且可用的线路；网络发生变化或下载失败时会自动切换另一条线路。两家平台共用同一缓存标识，因此切换线路不会重复下载相同版本。
+
+- Stable Audio：[Hugging Face](https://huggingface.co/haixin/stable-audio-3-small-music-onnx) · [ModelScope](https://www.modelscope.cn/models/martindelophy/stable-audio-3-small-music-onnx/files?version=main)
+- Timeline Studio ONNX 模型：[Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=main)
+- 人声分离模型：[Hugging Face](https://huggingface.co/haixin/timeline-studio-vocal-remover) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/files?version=main)
 
 ## 剪辑与导出
 
@@ -64,7 +76,7 @@ gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent clau
 gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent codex --scope user
 ```
 
-如需安装已经验证过的固定版本，而不是跟随最新 Release，请在命令末尾添加 `--pin v0.6.1`。安装前可以先预览 Skill：
+如需安装已经验证过的固定版本，而不是跟随最新 Release，请在命令末尾添加 `--pin v0.7.1`。安装前可以先预览 Skill：
 
 ```bash
 gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio

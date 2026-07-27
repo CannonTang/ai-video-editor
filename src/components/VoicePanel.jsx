@@ -580,6 +580,8 @@ export function VoicePanel({
   visualLocalTime,
   visualTimelineStart = 0,
   updateSelectedVisualEffects,
+  miganRepair,
+  hdRestoration,
   onPreviewAnimation,
   selectedFilterId,
   setSelectedFilterId,
@@ -723,6 +725,8 @@ export function VoicePanel({
             trOption={trOption}
             onSelectFilter={(id) => { setSelectedFilterId(id); notify(t("effectApplied")); }}
             sourceAudioLinked={sourceAudioLinked}
+            miganRepair={miganRepair}
+            hdRestoration={hdRestoration}
           />
         ) : null}
         {isVisualContext && !selectedVisualSegment ? (

@@ -3,9 +3,9 @@ import * as ort from "onnxruntime-web/webgpu";
 import ortWasmMjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
 import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import { buildPingPongSchedule, pingPongStep } from "../lib/aiMusicSampling.js";
+import { fetchFirstAvailableModel, mirroredModelFileUrls } from "../lib/modelSources.js";
 
 const MODEL_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
-const BASE = `https://huggingface.co/haixin/stable-audio-3-small-music-onnx/resolve/${MODEL_REVISION}`;
 const LEGACY_BASE = "https://huggingface.co/lsb/stable-audio-3-small-music-onnx/resolve/main";
 const SAMPLE_RATE = 44100;
 const MODEL_CACHE_NAME = "timeline-studio-model-cache-v4";
@@ -29,10 +29,19 @@ const GRAPH_SPECS = [
   ["decoder_q4", "decoder_q4.onnx"],
 ];
 
-async function fetchModelFile(path) {
-  const url = `${BASE}/${path}`;
+async function fetchModelFile(path, modelSourcePreference) {
+  const urls = mirroredModelFileUrls({
+    repository: "stable-audio-3-small-music-onnx",
+    revision: MODEL_REVISION,
+    path,
+    preference: modelSourcePreference,
+  });
   const cache = await caches.open(MODEL_CACHE_NAME);
-  const cached = await cache.match(url) || await cache.match(`${LEGACY_BASE}/${path}`);
+  let cached = null;
+  for (const url of [...urls, `${LEGACY_BASE}/${path}`]) {
+    cached = await cache.match(url);
+    if (cached) break;
+  }
   if (cached) {
     return { response: cached, fromCache: true };
   }
@@ -40,16 +49,16 @@ async function fetchModelFile(path) {
   // The service worker is the single cache writer. Writing the same large
   // response here as well can temporarily require twice the storage and cause
   // QuotaExceededError on otherwise capable devices.
-  const response = await fetch(url);
+  const { response } = await fetchFirstAvailableModel(urls);
   return {
     response,
-    fromCache: false,
+    fromCache: response.headers.get("X-Timeline-Model-Cache") === "hit",
   };
 }
 
-async function downloadAllResources() {
+async function downloadAllResources(modelSourcePreference) {
   const manifestResults = await Promise.all(GRAPH_SPECS.map(async ([name]) => {
-    const resource = await fetchModelFile(`onnx/${name}_chunks.json`);
+    const resource = await fetchModelFile(`onnx/${name}_chunks.json`, modelSourcePreference);
     const { response } = resource;
     if (!response.ok) throw new Error(`Model manifest download failed (${response.status}): ${name}`);
     return { manifest: await response.json(), resource };
@@ -67,7 +76,7 @@ async function downloadAllResources() {
   // Start every request before consuming any response body. This lets Chrome
   // multiplex the model shards while keeping WebGPU session creation separate.
   const responses = await Promise.all(paths.map(async (path) => {
-    const { response, fromCache } = await fetchModelFile(path);
+    const { response, fromCache } = await fetchModelFile(path, modelSourcePreference);
     if (!response.ok) throw new Error(`Model download failed (${response.status}): ${path}`);
     return { path, response, fromCache };
   }));
@@ -179,9 +188,9 @@ function wavFromAudio(audio, seconds) {
 
 let runtimePromise = null;
 
-async function initializeRuntime() {
+async function initializeRuntime(modelSourcePreference) {
   progress("download", 0.02);
-  const resources = await downloadAllResources();
+  const resources = await downloadAllResources(modelSourcePreference);
   const tokenizer = createTokenizer(resources.artifacts);
   // WebGPU permits only one EP session to be initialized at a time. Keeping
   // these sequential also avoids holding every graph's temporary upload
@@ -197,8 +206,8 @@ async function initializeRuntime() {
   return { tokenizer, textSession, numberSession, ditSession, decoderSession };
 }
 
-async function generate({ prompt, seconds, steps, seed }) {
-  runtimePromise ??= initializeRuntime().catch((error) => {
+async function generate({ prompt, seconds, steps, seed, modelSourcePreference }) {
+  runtimePromise ??= initializeRuntime(modelSourcePreference).catch((error) => {
     runtimePromise = null;
     throw error;
   });

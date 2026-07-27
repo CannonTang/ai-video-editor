@@ -1418,13 +1418,23 @@ function getAbortableFfmpeg(signal) {
   });
 }
 
-export async function encodePngFrameSequence({ totalFrames, frameRate, produceFrame, signal, onProgress }) {
+export async function encodePngFrameSequence({
+  totalFrames,
+  frameRate,
+  produceFrame,
+  signal,
+  onProgress,
+  audioSourceBlob = null,
+  audioStart = 0,
+  audioDuration = 0,
+}) {
   return runFfmpegTask(async () => {
     if (signal?.aborted) throw createAbortError("整段增强已取消");
     let ffmpeg = null;
     const id = makeId("remaster");
     const prefix = `${id}-frame`;
     const outputName = `${id}.mp4`;
+    const audioInputName = `${id}-audio-source`;
     const frameNames = [];
     const frameBlobs = [];
     let terminated = false;
@@ -1450,12 +1460,20 @@ export async function encodePngFrameSequence({ totalFrames, frameRate, produceFr
         frameNames.push(name);
         await ffmpeg.writeFile(name, new Uint8Array(await frameBlobs[index].arrayBuffer()));
       }
+      if (audioSourceBlob instanceof Blob) {
+        await ffmpeg.writeFile(audioInputName, new Uint8Array(await audioSourceBlob.arrayBuffer()));
+      }
       if (signal?.aborted) throw createAbortError("整段增强已取消");
       onProgress?.({ progress: 92, phaseKey: "remasterPhaseEncodeVideo" });
+      const audioArgs = audioSourceBlob instanceof Blob
+        ? ["-ss", String(Math.max(0, audioStart)), ...(audioDuration > 0 ? ["-t", String(audioDuration)] : []), "-i", audioInputName]
+        : [];
       await ffmpeg.exec([
         "-framerate", String(frameRate),
         "-i", `${prefix}-%06d.png`,
-        "-an", "-c:v", "libx264", "-preset", "veryfast",
+        ...audioArgs,
+        ...(audioSourceBlob instanceof Blob ? ["-map", "0:v:0", "-map", "1:a?", "-c:a", "aac", "-b:a", "192k", "-shortest"] : ["-an"]),
+        "-c:v", "libx264", "-preset", "veryfast",
         "-crf", "18", "-pix_fmt", "yuv420p", "-movflags", "faststart",
         outputName,
       ]);
@@ -1467,6 +1485,7 @@ export async function encodePngFrameSequence({ totalFrames, frameRate, produceFr
       signal?.removeEventListener("abort", abort);
       if (!terminated && ffmpeg) {
         await Promise.all(frameNames.map((name) => ffmpeg.deleteFile(name).catch(() => {})));
+        if (audioSourceBlob instanceof Blob) await ffmpeg.deleteFile(audioInputName).catch(() => {});
         await ffmpeg.deleteFile(outputName).catch(() => {});
       }
     }

@@ -1,3 +1,5 @@
+import { mirroredModelBaseUrls } from "../lib/modelSources.js";
+
 const LIVE_PORTRAIT_REVISION = "e6c5d2407593a39f29c92ffd5ea3eaf5e59d52a1";
 const TIMELINE_STUDIO_MODEL_REVISION = "a201b681c8f96672b5c3f624e32d4dc932f150af";
 
@@ -97,6 +99,15 @@ export const LIVE_PORTRAIT_WEB_MODEL = Object.freeze({
 
 export const LIVE_PORTRAIT_WEBGPU_PROJECT_MODEL_BASE_URL =
   `https://huggingface.co/haixin/timeline-studio-onnx-models/resolve/${TIMELINE_STUDIO_MODEL_REVISION}/liveportrait-webgpu/`;
+
+export function getLivePortraitProjectModelBaseUrls(language = "") {
+  return mirroredModelBaseUrls({
+    repository: "timeline-studio-onnx-models",
+    revision: TIMELINE_STUDIO_MODEL_REVISION,
+    path: "liveportrait-webgpu",
+    preference: language,
+  });
+}
 
 export function getLivePortraitModelUrl(file) {
   return `https://huggingface.co/${LIVE_PORTRAIT_WEB_MODEL.id}/resolve/${LIVE_PORTRAIT_WEB_MODEL.revision}/${file}`;
