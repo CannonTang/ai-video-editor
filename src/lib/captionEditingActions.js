@@ -235,12 +235,17 @@ export function createCaptionEditingActions(d) {
       d.notify("字幕轨已锁定，无法修改片段");
       return;
     }
-    d.setCaptionSegments(nextSegments);
-    d.setScript(getCaptionScript(nextSegments));
+    let inheritedFontId = d.captionStyle?.fontId || "default";
+    const normalizedSegments = nextSegments.map((segment) => {
+      inheritedFontId = segment.fontId || inheritedFontId;
+      return segment.fontId ? segment : { ...segment, fontId: inheritedFontId };
+    });
+    d.setCaptionSegments(normalizedSegments);
+    d.setScript(getCaptionScript(normalizedSegments));
     d.setSelectedTrack("caption");
     d.setSelectedSegmentId(
-      nextSegments.length
-        ? nextSegments[Math.min(nextSelectedIndex, nextSegments.length - 1)]?.id ?? ""
+      normalizedSegments.length
+        ? normalizedSegments[Math.min(nextSelectedIndex, normalizedSegments.length - 1)]?.id ?? ""
         : "",
     );
     d.notify(message);

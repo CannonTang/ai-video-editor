@@ -31,6 +31,10 @@ export function createAudioTrackActions(d) {
       fadeOut: 0,
       reversed: false,
       name: options.name || d.selectedVoice?.name || d.t("voiceTrack"),
+      sourceKind: options.sourceKind || (options.voiceId ? "ai-voice" : "upload"),
+      voiceId: options.voiceId || "",
+      voiceName: options.voiceName || "",
+      assetId: options.assetId || "",
     };
     if (options.replaceSegmentId) {
       const replaced = d.audioSegments.find((item) => item.id === options.replaceSegmentId);
@@ -174,11 +178,18 @@ export function createAudioTrackActions(d) {
   async function commitAudio(blob, nextStatusText, options = {}) {
     const decoded = await decodeWaveform(blob);
     const captionSegment = options.captionSegment;
+    const identity = {
+      sourceKind: "ai-voice",
+      voiceId: d.selectedVoiceId,
+      voiceName: d.selectedVoice.name,
+      name: d.selectedVoice.name,
+    };
     const audioSegment = replaceAudio(blob, decoded.duration, decoded.peaks, nextStatusText, captionSegment ? {
       start: captionSegment.start || 0,
       script: options.script || captionSegment.text,
       replaceSegmentId: captionSegment.audioSegmentId || "",
-    } : options);
+      ...identity,
+    } : { ...options, ...identity });
 
     if (captionSegment) {
       d.setCaptionSegments((segments) => segments.map((segment) => segment.id === captionSegment.id ? {

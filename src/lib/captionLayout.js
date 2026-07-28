@@ -1,3 +1,9 @@
+import {
+  DEFAULT_CAPTION_FONT_ID,
+  resolveCaptionFontFamily,
+  resolveCaptionFontWeight,
+} from "./captionFonts.js";
+
 const CAPTION_FONT_WEIGHT = 700;
 const CAPTION_LINE_HEIGHT = 1.35;
 const CAPTION_PADDING_X = 22;
@@ -55,13 +61,17 @@ export function resolveCaptionMetrics({
     minWidth,
     Math.min(frame.width * CAPTION_MAX_WIDTH_RATIO, CAPTION_MAX_WIDTH * scale),
   );
+  const fontId = captionStyle.fontId || DEFAULT_CAPTION_FONT_ID;
+  const fontFamily = resolveCaptionFontFamily(fontId);
+  const fontWeight = resolveCaptionFontWeight(fontId);
 
   return {
     scale,
     fontSize,
-    fontWeight: CAPTION_FONT_WEIGHT,
-    fontFamily: CAPTION_FONT_FAMILY,
-    font: `${CAPTION_FONT_WEIGHT} ${fontSize}px ${CAPTION_FONT_FAMILY}`,
+    fontId,
+    fontWeight,
+    fontFamily,
+    font: `${fontWeight} ${fontSize}px ${fontFamily}`,
     lineHeight: fontSize * CAPTION_LINE_HEIGHT,
     paddingX,
     paddingY,

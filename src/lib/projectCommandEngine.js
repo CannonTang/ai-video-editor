@@ -313,11 +313,16 @@ function addCaption(project, operation) {
   if (end < start) throw Object.assign(new Error("caption end must not be before start"), { code: "INVALID_RANGE" });
   let audioSegmentId = "";
   if (operation.audioClipId) audioSegmentId = findById(project.audioSegments, operation.audioClipId, "Audio clip").id;
+  const previousCaption = [...captions]
+    .sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0))
+    .filter((caption) => (Number(caption.start) || 0) <= start)
+    .at(-1);
   project.captionSegments = [...captions, {
     id,
     text: operation.text,
     start,
     end,
+    fontId: operation.fontId || previousCaption?.fontId || project.captionStyle?.fontId || "default",
     ...(audioSegmentId ? { audioSegmentId } : {}),
   }].sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0));
   project.script = project.captionSegments.map((item) => item.text).join("\n");

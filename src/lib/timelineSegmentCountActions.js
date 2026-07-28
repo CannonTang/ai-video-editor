@@ -15,7 +15,12 @@ export function createTimelineSegmentCountActions(d) {
     if (d.trackLocks.caption) return void d.notify(d.t?.("captionTrackLocked") ?? "字幕轨已锁定，无法新增字幕片段");
     const insertionTime = Number.isFinite(requestedStart) ? requestedStart : d.currentTime;
     const start = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - 0.45, insertionTime));
+    const previousSegment = [...d.captionSegments]
+      .sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0))
+      .filter((item) => (Number(item.start) || 0) <= start)
+      .at(-1);
     const segment = { id: makeId("caption"), text: d.t?.("newCaptionDefault") ?? "新的字幕片段", weight: 1, hidden: false,
+      fontId: previousSegment?.fontId || d.captionStyle?.fontId || "default",
       start, end: Math.min(MAX_TIMELINE_DURATION_SECONDS, start + 1.8) };
     const next = [...d.captionSegments, segment].sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0));
     d.commitCaptionSegments(next, Number.isFinite(requestedStart) ? "已在点击位置新增字幕片段" : "已在播放头位置新增字幕片段", next.findIndex((item) => item.id === segment.id));

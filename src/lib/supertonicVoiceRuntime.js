@@ -1,19 +1,36 @@
 import { loadTextToSpeech, loadVoiceStyle, writeWavFile } from "./supertonicWebRuntime.js";
+import { hubModelFileUrls, orderModelUrlsForNetwork } from "./modelSources.js";
 
-const MODEL_BASE = "https://huggingface.co/Supertone/supertonic-3/resolve/main/onnx";
-const STYLE_URL = "https://huggingface.co/Supertone/supertonic-3/resolve/main/voice_styles/F1.json";
 let runtimePromise;
 
 async function loadRuntime(onProgress) {
   if (!runtimePromise) {
     runtimePromise = (async () => {
-      const [{ textToSpeech }, style] = await Promise.all([
-        loadTextToSpeech(MODEL_BASE, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }, (modelName, current, total) => {
-          onProgress?.({ progress: (current / total) * 100, file: modelName });
-        }),
-        loadVoiceStyle([STYLE_URL], false),
-      ]);
-      return { textToSpeech, style };
+      const modelBases = await orderModelUrlsForNetwork(hubModelFileUrls({
+        repository: "Supertone/supertonic-3",
+        path: "onnx",
+      }));
+      const styleUrls = hubModelFileUrls({
+        repository: "Supertone/supertonic-3",
+        path: "voice_styles/F1.json",
+      });
+      const failures = [];
+      for (const modelBase of modelBases) {
+        const useModelScope = modelBase.includes("modelscope.cn");
+        const styleUrl = styleUrls.find((url) => url.includes("modelscope.cn") === useModelScope) || styleUrls[0];
+        try {
+          const [{ textToSpeech }, style] = await Promise.all([
+            loadTextToSpeech(modelBase, { executionProviders: ["wasm"], graphOptimizationLevel: "all" }, (modelName, current, total) => {
+              onProgress?.({ progress: (current / total) * 100, file: modelName });
+            }),
+            loadVoiceStyle([styleUrl], false),
+          ]);
+          return { textToSpeech, style };
+        } catch (error) {
+          failures.push(`${new URL(modelBase).hostname}: ${error?.message || String(error)}`);
+        }
+      }
+      throw new Error(`MODEL_MIRRORS_UNAVAILABLE: ${failures.join("; ")}`);
     })().catch((error) => { runtimePromise = undefined; throw error; });
   }
   return runtimePromise;

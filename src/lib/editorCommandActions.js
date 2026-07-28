@@ -46,7 +46,12 @@ export function createEditorCommandActions(d) {
   }
 
   function useHistoryItem(item) {
-    d.replaceAudio(item.blob, item.duration, item.peaks, `${item.voiceName} 已恢复`);
+    d.replaceAudio(item.blob, item.duration, item.peaks, `${item.voiceName} 已恢复`, {
+      sourceKind: "ai-voice",
+      voiceId: item.voiceId,
+      voiceName: item.voiceName,
+      name: item.voiceName,
+    });
     d.setScript(item.script);
     const nextSegments = createCaptionSegments(item.script);
     d.setCaptionSegments(nextSegments);

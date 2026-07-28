@@ -29,7 +29,6 @@ import {
 } from "@phosphor-icons/react";
 
 import {
-  EFFECT_OPTIONS,
   FILTER_OPTIONS,
   SAMPLE_IMAGE,
   STICKERS,
@@ -39,10 +38,21 @@ import {
 } from "../config/editor.js";
 import { APP_LANGUAGES } from "../i18n.js";
 import { AI_MUSIC_PRESETS, buildEnglishMusicPrompt } from "../lib/aiMusicPrompt.js";
+import {
+  ensureCaptionFontLoaded,
+  getCaptionFont,
+  getCaptionFontsForLanguage,
+} from "../lib/captionFonts.js";
+import {
+  detectGeminiNanoVectorSupport,
+  generateVectorWithGeminiNano,
+} from "../lib/geminiNanoVector.js";
 import { getRemoteAssetBlob } from "../lib/remoteAssetCache.js";
 import { formatClock, formatTime, getSegmentStartTime } from "../lib/timeline.js";
+import { VECTOR_CATEGORIES } from "../lib/vectorAssets.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
 import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL_CLIP_ANIMATION_OPTIONS } from "../lib/visualClipAnimations.js";
+import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
 import { Popover } from "./ui.jsx";
 
 export function LanguageIntro({ t, closing, onChoose }) {
@@ -120,11 +130,19 @@ export function MediaPanel({
   applyAssetToTrack,
   closeMobilePanel,
   mobilePanelOpen,
+  language = "en",
+  onGeneratedVector,
+  onOpenAiMusic,
 }) {
   const assets = mediaTab === "library" ? builtInAssets : userAssets;
+  const [vectorCategory, setVectorCategory] = useState("all");
+  const visibleAssets = libraryType === "vector" && vectorCategory !== "all"
+    ? assets.filter((asset) => asset.category === vectorCategory)
+    : assets;
   const selectedAsset = [...userAssets, ...builtInAssets].find((asset) => asset.id === selectedLibraryAssetId) ?? null;
   const assetIntentTimerRef = useRef(null);
   const [previewAsset, setPreviewAsset] = useState(null);
+  const [aiVectorOpen, setAiVectorOpen] = useState(false);
 
   useEffect(() => {
     if (!previewAsset) return undefined;
@@ -145,8 +163,9 @@ export function MediaPanel({
     await applyAssetToTrack?.(selectedAsset, track);
     closeMobilePanel?.();
   };
-  const renderAssetList = (items, { deletable = false } = {}) => (
+  const renderAssetList = (items, { deletable = false, prepend = null } = {}) => (
     <div className={`asset-list ${mediaTab === "upload" ? "upload-assets" : ""}`}>
+      {prepend}
       {libraryStatus === "loading" && mediaTab === "library" ? (
         <LibraryLoadingGrid label={t("libraryLoading")} />
       ) : items.length ? (
@@ -226,34 +245,43 @@ export function MediaPanel({
             <strong>{t("uploadDropTitle")}</strong>
             <span>{t("uploadSupport")}</span>
           </button>
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mka,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/ogg,audio/flac,.ac3"
-            multiple
-            onChange={(event) => {
-              handleFiles(event.target.files);
-              event.target.value = "";
-            }}
-          />
-
           {renderAssetList(userAssets, { deletable: true })}
         </>
       ) : mediaTab === "library" ? (
         <>
-          <div className="library-type-tabs" role="tablist" aria-label={t("libraryMediaType")}>
-            {["image", "video", "audio"].map((type) => (
-              <button type="button" role="tab" aria-selected={libraryType === type} className={libraryType === type ? "is-active" : ""} key={type} onClick={() => selectLibraryType(type)}>
-                {t(`library${type[0].toUpperCase()}${type.slice(1)}`)}
-              </button>
-            ))}
-          </div>
+          <LibraryTypeTabs t={t} activeType={libraryType} onSelect={selectLibraryType} />
           <form className="library-search" onSubmit={(event) => event.preventDefault()}>
-            <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder={t(libraryType === "audio" ? "librarySearchMusicPlaceholder" : "librarySearchPlaceholder")} aria-label={t(libraryType === "audio" ? "librarySearchMusicPlaceholder" : "librarySearchPlaceholder")} />
+            <input value={libraryQuery} onChange={(event) => setLibraryQuery(event.target.value)} placeholder={t(libraryType === "vector" ? "librarySearchVectorPlaceholder" : libraryType === "audio" ? "librarySearchMusicPlaceholder" : "librarySearchPlaceholder")} aria-label={t(libraryType === "vector" ? "librarySearchVectorPlaceholder" : libraryType === "audio" ? "librarySearchMusicPlaceholder" : "librarySearchPlaceholder")} />
           </form>
+          {libraryType === "vector" ? (
+            <div className="vector-category-row" role="group" aria-label={t("vectorCategories", "矢量素材分类")}>
+              {VECTOR_CATEGORIES.map((category) => (
+                <button
+                  type="button"
+                  className={vectorCategory === category.id ? "is-active" : ""}
+                  aria-pressed={vectorCategory === category.id}
+                  key={category.id}
+                  onClick={() => setVectorCategory(category.id)}
+                >
+                  {t(category.labelKey, category.fallback)}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="library-provider">{t("libraryProvidedBy")} <strong>{libraryProvider}</strong></div>
-          {renderAssetList(assets)}
+          {renderAssetList(visibleAssets, {
+            prepend: libraryType === "audio" ? (
+              <AiMusicLibraryCard
+                language={language}
+                onClick={onOpenAiMusic}
+              />
+            ) : libraryType === "vector" && vectorCategory === "all" ? (
+              <AiVectorDesignCard
+                language={language}
+                onClick={() => setAiVectorOpen(true)}
+              />
+            ) : null,
+          })}
         </>
       ) : (
         renderAssetList(assets, { deletable: mediaTab === "mine" })
@@ -280,7 +308,368 @@ export function MediaPanel({
         <AssetPreviewDialog asset={previewAsset} t={t} onClose={() => setPreviewAsset(null)} />,
         document.body,
       ) : null}
+
+      {aiVectorOpen ? createPortal(
+        <AiVectorDesignDialog
+          language={language}
+          onClose={() => setAiVectorOpen(false)}
+          onGenerated={(asset) => {
+            onGeneratedVector?.(asset);
+            setAiVectorOpen(false);
+          }}
+        />,
+        document.body,
+      ) : null}
     </>
+  );
+}
+
+const AI_VECTOR_COPY = {
+  zh: {
+    cardTitle: "AI 设计",
+    cardHint: "Gemini Nano · 浏览器本地生成",
+    cardMeta: "描述需求，生成可编辑 SVG",
+    kicker: "本地 AI 矢量设计",
+    title: "用 Gemini Nano 设计矢量图",
+    intro: "描述你需要的图形。提示词与生成过程都留在浏览器中。",
+    prompt: "设计需求",
+    placeholder: "例如：青绿色科技感纸飞机图标，线条简洁，透明背景",
+    checking: "正在检测浏览器与模型…",
+    detecting: "正在识别设计需求的输入语言",
+    translating: "正在将设计需求翻译成英文",
+    translationDownloading: "正在下载本地翻译语言包",
+    translationUnsupported: "当前浏览器无法将此界面语言翻译成英文",
+    ready: "模型已就绪，可以本地生成",
+    downloadable: "支持本地生成，首次使用会准备英文翻译包和 Gemini Nano 模型",
+    downloading: "正在下载并准备模型",
+    generating: "Gemini Nano 正在设计 SVG",
+    validating: "正在解析并安全校验矢量图",
+    unsupported: "当前浏览器不支持内置 Gemini Nano",
+    unsupportedHint: "请使用支持 Prompt API 的桌面版 Chrome 或 Edge，并确认设备满足本地模型要求。",
+    localNote: "首次模型下载需要网络，之后可从浏览器本地使用。",
+    generate: "生成矢量图",
+    downloadGenerate: "下载模型并生成",
+    cancel: "取消",
+    close: "关闭",
+    failed: "这次没有生成可用的 SVG，请修改描述后重试。",
+  },
+  en: {
+    cardTitle: "AI design", cardHint: "Gemini Nano · On-device", cardMeta: "Describe it, get editable SVG",
+    kicker: "Local AI vector design", title: "Design a vector with Gemini Nano", intro: "Describe the graphic you need. Your prompt and generation stay in the browser.",
+    prompt: "Design request", placeholder: "e.g. A clean teal paper-plane icon with a transparent background",
+    checking: "Checking browser and model…", detecting: "Detecting the design request language", ready: "Model ready for local generation", downloadable: "Local generation is supported; English translation and Gemini Nano resources are prepared on first use",
+    translating: "Translating the design request into English", translationDownloading: "Downloading the local translation language pack", translationUnsupported: "This browser cannot translate the selected interface language into English",
+    downloading: "Downloading and preparing the model", generating: "Gemini Nano is designing the SVG", validating: "Parsing and safely validating the vector",
+    unsupported: "Built-in Gemini Nano is not supported in this browser", unsupportedHint: "Use a Prompt API-capable desktop Chrome or Edge browser on a supported device.",
+    localNote: "The first model download needs a network connection. Later runs use the browser-local model.", generate: "Generate vector",
+    downloadGenerate: "Download model & generate", cancel: "Cancel", close: "Close", failed: "No usable SVG was generated. Adjust the description and try again.",
+  },
+  ja: {
+    cardTitle: "AIデザイン", cardHint: "Gemini Nano・端末内", cardMeta: "説明から編集可能なSVGを生成", kicker: "ローカルAIベクターデザイン",
+    title: "Gemini Nanoでベクターをデザイン", intro: "必要なグラフィックを説明してください。処理はブラウザ内で完結します。", prompt: "デザイン要件",
+    placeholder: "例：透明背景のシンプルな青緑色の紙飛行機アイコン", checking: "ブラウザとモデルを確認中…", detecting: "入力言語を識別中", ready: "ローカル生成の準備ができました",
+    translating: "デザイン要件を英語に翻訳中", translationDownloading: "翻訳言語パックをダウンロード中", translationUnsupported: "この言語から英語への翻訳は利用できません",
+    downloadable: "ローカル生成に対応。初回に英語翻訳パックとモデルを準備します", downloading: "モデルをダウンロードして準備中", generating: "SVGをデザイン中",
+    validating: "ベクターを解析・安全確認中", unsupported: "このブラウザは内蔵Gemini Nanoに対応していません", unsupportedHint: "Prompt API対応のデスクトップ版ChromeまたはEdgeを使用してください。",
+    localNote: "初回ダウンロードにはネット接続が必要です。", generate: "ベクターを生成", downloadGenerate: "モデルを取得して生成", cancel: "キャンセル", close: "閉じる", failed: "有効なSVGを生成できませんでした。要件を調整してください。",
+  },
+  ko: {
+    cardTitle: "AI 디자인", cardHint: "Gemini Nano · 기기 내", cardMeta: "설명으로 편집 가능한 SVG 생성", kicker: "로컬 AI 벡터 디자인",
+    title: "Gemini Nano로 벡터 디자인", intro: "필요한 그래픽을 설명하세요. 생성은 브라우저 안에서 처리됩니다.", prompt: "디자인 요청",
+    placeholder: "예: 투명 배경의 깔끔한 청록색 종이비행기 아이콘", checking: "브라우저와 모델 확인 중…", detecting: "입력 언어 감지 중", ready: "로컬 생성 준비 완료",
+    translating: "디자인 요청을 영어로 번역 중", translationDownloading: "번역 언어 팩 다운로드 중", translationUnsupported: "이 언어를 영어로 번역할 수 없습니다",
+    downloadable: "로컬 생성을 지원합니다. 처음 사용 시 영어 번역 팩과 모델을 준비합니다", downloading: "모델 다운로드 및 준비 중", generating: "SVG 디자인 중", validating: "벡터 구문 분석 및 안전 검사 중",
+    unsupported: "이 브라우저는 내장 Gemini Nano를 지원하지 않습니다", unsupportedHint: "Prompt API를 지원하는 데스크톱 Chrome 또는 Edge를 사용하세요.",
+    localNote: "첫 모델 다운로드에는 네트워크가 필요합니다.", generate: "벡터 생성", downloadGenerate: "모델 다운로드 후 생성", cancel: "취소", close: "닫기", failed: "사용 가능한 SVG를 생성하지 못했습니다. 설명을 수정해 보세요.",
+  },
+  es: {
+    cardTitle: "Diseño IA", cardHint: "Gemini Nano · En el dispositivo", cardMeta: "Describe y crea un SVG editable", kicker: "Diseño vectorial con IA local",
+    title: "Diseña un vector con Gemini Nano", intro: "Describe el gráfico. La solicitud y la generación permanecen en el navegador.", prompt: "Solicitud de diseño",
+    placeholder: "Ej.: icono limpio de avión de papel turquesa con fondo transparente", checking: "Comprobando navegador y modelo…", detecting: "Detectando el idioma de la solicitud", ready: "Modelo listo para generar localmente",
+    translating: "Traduciendo la solicitud al inglés", translationDownloading: "Descargando el paquete de traducción local", translationUnsupported: "No se puede traducir este idioma al inglés en el navegador",
+    downloadable: "Compatible; la traducción al inglés y el modelo se preparan en el primer uso", downloading: "Descargando y preparando el modelo", generating: "Diseñando el SVG", validating: "Analizando y validando el vector",
+    unsupported: "Este navegador no admite Gemini Nano integrado", unsupportedHint: "Usa Chrome o Edge de escritorio compatible con Prompt API.", localNote: "La primera descarga requiere conexión.",
+    generate: "Generar vector", downloadGenerate: "Descargar modelo y generar", cancel: "Cancelar", close: "Cerrar", failed: "No se generó un SVG válido. Ajusta la descripción.",
+  },
+  fr: {
+    cardTitle: "Design IA", cardHint: "Gemini Nano · Sur l’appareil", cardMeta: "Décrivez, obtenez un SVG modifiable", kicker: "Design vectoriel IA local",
+    title: "Créer un vecteur avec Gemini Nano", intro: "Décrivez le visuel. La requête et la génération restent dans le navigateur.", prompt: "Demande de design",
+    placeholder: "Ex. : icône d’avion en papier turquoise, fond transparent", checking: "Vérification du navigateur et du modèle…", detecting: "Détection de la langue de la demande", ready: "Modèle prêt pour la génération locale",
+    translating: "Traduction de la demande en anglais", translationDownloading: "Téléchargement du pack de traduction local", translationUnsupported: "La traduction de cette langue vers l’anglais n’est pas disponible",
+    downloadable: "Compatible ; la traduction anglaise et le modèle seront préparés au premier usage", downloading: "Téléchargement et préparation du modèle", generating: "Création du SVG", validating: "Analyse et validation du vecteur",
+    unsupported: "Gemini Nano intégré n’est pas pris en charge", unsupportedHint: "Utilisez Chrome ou Edge sur ordinateur avec la Prompt API.", localNote: "Le premier téléchargement nécessite une connexion.",
+    generate: "Générer le vecteur", downloadGenerate: "Télécharger et générer", cancel: "Annuler", close: "Fermer", failed: "Aucun SVG valide n’a été généré. Modifiez la description.",
+  },
+  de: {
+    cardTitle: "KI-Design", cardHint: "Gemini Nano · Lokal", cardMeta: "Beschreiben und editierbares SVG erhalten", kicker: "Lokales KI-Vektordesign",
+    title: "Vektor mit Gemini Nano gestalten", intro: "Beschreibe die gewünschte Grafik. Eingabe und Generierung bleiben im Browser.", prompt: "Designwunsch",
+    placeholder: "z. B. klares türkisfarbenes Papierflieger-Icon, transparenter Hintergrund", checking: "Browser und Modell werden geprüft…", detecting: "Eingabesprache wird erkannt", ready: "Modell ist lokal einsatzbereit",
+    translating: "Designwunsch wird ins Englische übersetzt", translationDownloading: "Lokales Übersetzungspaket wird geladen", translationUnsupported: "Diese Sprache kann im Browser nicht ins Englische übersetzt werden",
+    downloadable: "Unterstützt; Englisch-Übersetzung und Modell werden bei der ersten Nutzung vorbereitet", downloading: "Modell wird geladen und vorbereitet", generating: "SVG wird gestaltet", validating: "Vektor wird geprüft",
+    unsupported: "Integriertes Gemini Nano wird nicht unterstützt", unsupportedHint: "Nutze einen Prompt-API-fähigen Desktop-Browser Chrome oder Edge.", localNote: "Der erste Download benötigt eine Verbindung.",
+    generate: "Vektor generieren", downloadGenerate: "Modell laden & generieren", cancel: "Abbrechen", close: "Schließen", failed: "Kein gültiges SVG erzeugt. Bitte Beschreibung anpassen.",
+  },
+  pt: {
+    cardTitle: "Design com IA", cardHint: "Gemini Nano · No dispositivo", cardMeta: "Descreva e obtenha SVG editável", kicker: "Design vetorial com IA local",
+    title: "Crie um vetor com Gemini Nano", intro: "Descreva o gráfico. O pedido e a geração ficam no navegador.", prompt: "Pedido de design",
+    placeholder: "Ex.: ícone limpo de avião de papel verde-água, fundo transparente", checking: "Verificando navegador e modelo…", detecting: "Detectando o idioma do pedido", ready: "Modelo pronto para geração local",
+    translating: "Traduzindo o pedido para inglês", translationDownloading: "Baixando o pacote de tradução local", translationUnsupported: "O navegador não pode traduzir este idioma para inglês",
+    downloadable: "Compatível; a tradução para inglês e o modelo serão preparados no primeiro uso", downloading: "Baixando e preparando o modelo", generating: "Criando o SVG", validating: "Analisando e validando o vetor",
+    unsupported: "Gemini Nano integrado não é compatível", unsupportedHint: "Use Chrome ou Edge para desktop com Prompt API.", localNote: "O primeiro download precisa de conexão.",
+    generate: "Gerar vetor", downloadGenerate: "Baixar modelo e gerar", cancel: "Cancelar", close: "Fechar", failed: "Nenhum SVG válido foi gerado. Ajuste a descrição.",
+  },
+  th: {
+    cardTitle: "ออกแบบด้วย AI", cardHint: "Gemini Nano · บนอุปกรณ์", cardMeta: "อธิบายเพื่อสร้าง SVG ที่แก้ไขได้", kicker: "ออกแบบเวกเตอร์ด้วย AI ในเครื่อง",
+    title: "ออกแบบเวกเตอร์ด้วย Gemini Nano", intro: "อธิบายกราฟิกที่ต้องการ ข้อมูลและการสร้างจะอยู่ในเบราว์เซอร์", prompt: "ความต้องการ",
+    placeholder: "เช่น ไอคอนเครื่องบินกระดาษสีเขียวอมฟ้า พื้นหลังโปร่งใส", checking: "กำลังตรวจสอบเบราว์เซอร์และโมเดล…", detecting: "กำลังตรวจจับภาษาที่ป้อน", ready: "โมเดลพร้อมสร้างในเครื่อง",
+    translating: "กำลังแปลความต้องการเป็นภาษาอังกฤษ", translationDownloading: "กำลังดาวน์โหลดชุดภาษาแปลในเครื่อง", translationUnsupported: "เบราว์เซอร์แปลภาษานี้เป็นอังกฤษไม่ได้",
+    downloadable: "รองรับ โดยจะเตรียมชุดแปลอังกฤษและโมเดลเมื่อใช้ครั้งแรก", downloading: "กำลังดาวน์โหลดและเตรียมโมเดล", generating: "กำลังออกแบบ SVG", validating: "กำลังตรวจสอบเวกเตอร์",
+    unsupported: "เบราว์เซอร์นี้ไม่รองรับ Gemini Nano ในตัว", unsupportedHint: "ใช้ Chrome หรือ Edge บนเดสก์ท็อปที่รองรับ Prompt API", localNote: "การดาวน์โหลดครั้งแรกต้องใช้อินเทอร์เน็ต",
+    generate: "สร้างเวกเตอร์", downloadGenerate: "ดาวน์โหลดและสร้าง", cancel: "ยกเลิก", close: "ปิด", failed: "สร้าง SVG ที่ใช้ได้ไม่สำเร็จ โปรดแก้คำอธิบาย",
+  },
+  vi: {
+    cardTitle: "Thiết kế AI", cardHint: "Gemini Nano · Trên thiết bị", cardMeta: "Mô tả để tạo SVG có thể chỉnh sửa", kicker: "Thiết kế vector AI cục bộ",
+    title: "Thiết kế vector bằng Gemini Nano", intro: "Mô tả hình bạn cần. Yêu cầu và quá trình tạo nằm trong trình duyệt.", prompt: "Yêu cầu thiết kế",
+    placeholder: "VD: biểu tượng máy bay giấy xanh ngọc, nền trong suốt", checking: "Đang kiểm tra trình duyệt và mô hình…", detecting: "Đang nhận diện ngôn ngữ nhập", ready: "Mô hình sẵn sàng tạo cục bộ",
+    translating: "Đang dịch yêu cầu sang tiếng Anh", translationDownloading: "Đang tải gói dịch cục bộ", translationUnsupported: "Trình duyệt không thể dịch ngôn ngữ này sang tiếng Anh",
+    downloadable: "Được hỗ trợ; gói dịch tiếng Anh và mô hình sẽ được chuẩn bị ở lần dùng đầu", downloading: "Đang tải và chuẩn bị mô hình", generating: "Đang thiết kế SVG", validating: "Đang phân tích và xác thực vector",
+    unsupported: "Trình duyệt không hỗ trợ Gemini Nano tích hợp", unsupportedHint: "Dùng Chrome hoặc Edge máy tính có Prompt API.", localNote: "Lần tải đầu cần kết nối mạng.",
+    generate: "Tạo vector", downloadGenerate: "Tải mô hình và tạo", cancel: "Hủy", close: "Đóng", failed: "Không tạo được SVG hợp lệ. Hãy điều chỉnh mô tả.",
+  },
+  ru: {
+    cardTitle: "ИИ-дизайн", cardHint: "Gemini Nano · На устройстве", cardMeta: "Описание → редактируемый SVG", kicker: "Локальный ИИ-дизайн вектора",
+    title: "Создать вектор с Gemini Nano", intro: "Опишите нужную графику. Запрос и генерация остаются в браузере.", prompt: "Задача",
+    placeholder: "Например: лаконичная бирюзовая иконка бумажного самолёта, прозрачный фон", checking: "Проверяем браузер и модель…", detecting: "Определяем язык запроса", ready: "Модель готова к локальной генерации",
+    translating: "Переводим задачу на английский", translationDownloading: "Загружаем локальный языковой пакет", translationUnsupported: "Браузер не может перевести этот язык на английский",
+    downloadable: "Поддерживается; при первом запуске будут подготовлены перевод на английский и модель", downloading: "Загрузка и подготовка модели", generating: "Создание SVG", validating: "Разбор и безопасная проверка вектора",
+    unsupported: "Встроенный Gemini Nano не поддерживается", unsupportedHint: "Используйте настольный Chrome или Edge с Prompt API.", localNote: "Для первой загрузки нужна сеть.",
+    generate: "Создать вектор", downloadGenerate: "Загрузить и создать", cancel: "Отмена", close: "Закрыть", failed: "Не удалось получить корректный SVG. Измените описание.",
+  },
+};
+
+function AiVectorDesignCard({ language, onClick }) {
+  const copy = AI_VECTOR_COPY[language] || AI_VECTOR_COPY.en;
+  return (
+    <button className="ai-vector-card" type="button" onClick={onClick}>
+      <span className="ai-vector-card-art" aria-hidden="true">
+        <MagicWand size={34} weight="duotone" />
+        <i>AI</i>
+      </span>
+      <span><strong>{copy.cardTitle}</strong><small>{copy.cardHint}</small></span>
+    </button>
+  );
+}
+
+function AiVectorDesignDialog({ language, onClose, onGenerated }) {
+  const copy = AI_VECTOR_COPY[language] || AI_VECTOR_COPY.en;
+  const [request, setRequest] = useState("");
+  const [availability, setAvailability] = useState("checking");
+  const [phase, setPhase] = useState("checking");
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState("");
+  const [translationUnavailable, setTranslationUnavailable] = useState(false);
+  const [translationAvailability, setTranslationAvailability] = useState("available");
+  const abortRef = useRef(null);
+  const running = ["detectingLanguage", "translationDownloading", "translating", "downloading", "model", "generating", "validating"].includes(phase);
+
+  useEffect(() => {
+    let active = true;
+    void detectGeminiNanoVectorSupport(globalThis, language).then((result) => {
+      if (!active) return;
+      setAvailability(result.availability);
+      setTranslationAvailability(result.translationAvailability || "available");
+      setTranslationUnavailable(result.detectorAvailability === "unavailable" || result.translationAvailability === "unavailable");
+      setPhase(result.supported ? "idle" : "unsupported");
+    });
+    return () => {
+      active = false;
+      abortRef.current?.abort();
+    };
+  }, [language]);
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !running) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, running]);
+
+  const startGeneration = async () => {
+    if (!request.trim() || running || availability === "unavailable") return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setError("");
+    setProgress(0);
+    setPhase(availability === "available" ? "model" : "downloading");
+    try {
+      const asset = await generateVectorWithGeminiNano({
+        request,
+        sourceLanguage: language,
+        signal: controller.signal,
+        onLanguageDetectionDownloadProgress: (value) => {
+          setPhase("detectingLanguage");
+          setProgress(Math.round(value * 100));
+        },
+        onTranslationDownloadProgress: (value) => {
+          setPhase("translationDownloading");
+          setProgress(Math.round(value * 100));
+        },
+        onDownloadProgress: (value) => {
+          setPhase("downloading");
+          setProgress(Math.round(value * 100));
+        },
+        onPhaseChange: setPhase,
+      });
+      onGenerated(asset);
+    } catch (generationError) {
+      if (generationError?.name === "AbortError") {
+        setPhase("idle");
+        return;
+      }
+      const errorCode = String(generationError?.message || "");
+      setError(/TRANSLAT|LANGUAGE_DETECTOR/.test(errorCode) ? copy.translationUnsupported : copy.failed);
+      setPhase("error");
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const requiresDownload = availability !== "available" || translationAvailability !== "available";
+  const statusText = phase === "checking" ? copy.checking
+    : phase === "unsupported" ? (translationUnavailable ? copy.translationUnsupported : copy.unsupported)
+      : phase === "detectingLanguage" ? copy.detecting
+      : phase === "translationDownloading" ? copy.translationDownloading
+        : phase === "translating" ? copy.translating
+      : phase === "downloading" || phase === "model" ? copy.downloading
+        : phase === "generating" ? copy.generating
+          : phase === "validating" ? copy.validating
+            : !requiresDownload ? copy.ready
+              : copy.downloadable;
+
+  return (
+    <div className="ai-vector-backdrop" role="presentation" onPointerDown={(event) => {
+      if (event.target === event.currentTarget && !running) onClose();
+    }}>
+      <section className="ai-vector-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-vector-title">
+        <header>
+          <span className="ai-vector-dialog-icon"><MagicWand size={23} weight="duotone" /></span>
+          <div><small>{copy.kicker}</small><h2 id="ai-vector-title">{copy.title}</h2></div>
+          <button type="button" onClick={onClose} disabled={running} aria-label={copy.close}><X size={18} /></button>
+        </header>
+        <div className="ai-vector-dialog-body">
+          <p>{copy.intro}</p>
+          <label>{copy.prompt}<textarea autoFocus rows="5" value={request} disabled={running || phase === "unsupported"} placeholder={copy.placeholder} onChange={(event) => setRequest(event.target.value)} /></label>
+          <div className={`ai-vector-runtime is-${phase}`}>
+            <span>{phase === "idle" && availability === "available" ? <Check size={16} weight="bold" /> : <MagicWand size={16} />}</span>
+            <div><strong>{statusText}</strong><small>{phase === "unsupported" && !translationUnavailable ? copy.unsupportedHint : copy.localNote}</small></div>
+          </div>
+          {running ? (
+            <div className="ai-vector-progress" aria-label={statusText}>
+              <span style={{ width: phase === "detectingLanguage" ? `${Math.max(4, progress || 8)}%` : phase === "translationDownloading" ? `${Math.max(4, progress)}%` : phase === "translating" ? "18%" : phase === "downloading" ? `${Math.max(4, progress)}%` : phase === "model" ? "32%" : phase === "generating" ? "72%" : "92%" }} />
+            </div>
+          ) : null}
+          {error ? <p className="ai-vector-error" role="alert">{error}</p> : null}
+        </div>
+        <footer>
+          <button type="button" className="is-secondary" onClick={() => {
+            if (running) abortRef.current?.abort();
+            else onClose();
+          }}>{copy.cancel}</button>
+          <button type="button" className="is-primary" disabled={!request.trim() || phase === "checking" || phase === "unsupported" || running} onClick={() => void startGeneration()}>
+            <MagicWand size={16} weight="fill" />
+            {requiresDownload ? copy.downloadGenerate : copy.generate}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function LibraryTypeTabs({ t, activeType, onSelect }) {
+  const viewportRef = useRef(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  const updateEdges = useCallback(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    setEdges({
+      left: viewport.scrollLeft > 2,
+      right: viewport.scrollLeft < maxScroll - 2,
+    });
+  }, []);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    updateEdges();
+    const observer = new ResizeObserver(updateEdges);
+    observer.observe(viewport);
+    viewport.addEventListener("scroll", updateEdges, { passive: true });
+    return () => {
+      observer.disconnect();
+      viewport.removeEventListener("scroll", updateEdges);
+    };
+  }, [updateEdges]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    const active = viewport?.querySelector('[aria-selected="true"]');
+    if (viewport && active) {
+      const viewportRect = viewport.getBoundingClientRect();
+      const activeRect = active.getBoundingClientRect();
+      const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      if (activeRect.left < viewportRect.left + 4) {
+        viewport.scrollTo({ left: Math.max(0, viewport.scrollLeft + activeRect.left - viewportRect.left - 4), behavior: "smooth" });
+      } else if (activeRect.right > viewportRect.right - 4) {
+        viewport.scrollTo({ left: Math.min(maxScroll, viewport.scrollLeft + activeRect.right - viewportRect.right + 4), behavior: "smooth" });
+      }
+    }
+    const timer = setTimeout(updateEdges, 220);
+    return () => clearTimeout(timer);
+  }, [activeType, updateEdges]);
+
+  const scroll = (direction) => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const target = Math.max(0, Math.min(maxScroll, viewport.scrollLeft + direction * Math.max(120, viewport.clientWidth * 0.72)));
+    viewport.scrollTo({ left: target, behavior: "smooth" });
+  };
+
+  const showForwardArrow = edges.right;
+  const showBackArrow = !showForwardArrow && edges.left;
+
+  return (
+    <div className={`library-type-tabs-shell ${edges.left ? "has-left-shadow" : ""} ${edges.right ? "has-right-shadow" : ""}`}>
+      {showBackArrow ? (
+        <button
+          className="library-type-arrow is-left"
+          type="button"
+          aria-label={t("scrollTabsLeft")}
+          onClick={() => scroll(-1)}
+        >
+          <CaretLeft size={16} weight="bold" />
+        </button>
+      ) : null}
+      <div className="library-type-tabs" role="tablist" aria-label={t("libraryMediaType")} ref={viewportRef}>
+        {["image", "video", "audio", "vector"].map((type) => (
+          <button type="button" role="tab" aria-selected={activeType === type} className={activeType === type ? "is-active" : ""} key={type} onClick={() => onSelect(type)}>
+            {t(`library${type[0].toUpperCase()}${type.slice(1)}`)}
+          </button>
+        ))}
+      </div>
+      {showForwardArrow ? (
+        <button
+          className="library-type-arrow is-right"
+          type="button"
+          aria-label={t("scrollTabsRight")}
+          onClick={() => scroll(1)}
+        >
+          <CaretRight size={16} weight="bold" />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -288,6 +677,19 @@ const AI_MUSIC_COPY = {
   zh: { title: "AI 音乐", hint: "本地音乐生成", description: "音乐描述", descriptionPlaceholder: "例如：雨夜咖啡店里安静忧郁的爵士钢琴", style: "风格", mood: "氛围", instrument: "主乐器", duration: "时长", bpm: "速度", generate: "生成音乐", cancel: "取消", first: "首次下载模型，之后从本地缓存加载。", modelSetup: "模型准备", modelReady: "模型已就绪", musicGeneration: "音乐生成", waitingToGenerate: "等待生成", download: "并行下载模型", cache: "从本地缓存加载模型", initializing: "初始化 WebGPU 模型", translating: "翻译音乐描述", conditioning: "理解音乐描述", generating: "正在生成", decoding: "正在合成音频", complete: "已添加到 My assets", english: "高级：模型提示词" },
   en: { title: "AI music", hint: "Local music", description: "Describe your music", descriptionPlaceholder: "e.g. melancholic jazz piano in a rainy café", style: "Style", mood: "Mood", instrument: "Lead", duration: "Length", bpm: "Tempo", generate: "Generate music", cancel: "Cancel", first: "The model downloads once, then loads from local cache.", modelSetup: "Model setup", modelReady: "Model ready", musicGeneration: "Music generation", waitingToGenerate: "Waiting to generate", download: "Downloading model files in parallel", cache: "Loading models from local cache", initializing: "Initializing WebGPU models", translating: "Translating description", conditioning: "Understanding prompt", generating: "Generating", decoding: "Decoding audio", complete: "Added to My assets", english: "Advanced: model prompt" },
 };
+
+function AiMusicLibraryCard({ language, onClick }) {
+  const copy = AI_MUSIC_COPY[language] || AI_MUSIC_COPY.en;
+  return (
+    <button className="ai-vector-card ai-music-library-card" type="button" onClick={onClick}>
+      <span className="ai-vector-card-art" aria-hidden="true">
+        <MusicNote size={35} weight="duotone" />
+        <i>AI</i>
+      </span>
+      <span><strong>{copy.title}</strong><small>{copy.hint}</small></span>
+    </button>
+  );
+}
 const AI_OPTION_LABELS = {
   zh: { cinematic: "电影感", lofi: "Lo-fi", ambient: "氛围", electronic: "电子", orchestral: "管弦", uplifting: "振奋", calm: "平静", dreamy: "梦幻", dramatic: "戏剧性", dark: "暗黑", piano: "钢琴", guitar: "木吉他", synth: "合成器", strings: "弦乐", drums: "鼓组" },
 };
@@ -356,6 +758,8 @@ export function AiMusicGenerator({ language, music, embedded = false }) {
 
 function AssetPreviewDialog({ asset, t, onClose }) {
   const mediaSrc = asset.type === "image" ? (asset.originalSrc || asset.src) : (asset.previewSrc || asset.src);
+  const assetDisplayName = asset.nameKey ? t(asset.nameKey, asset.name) : asset.name;
+  const assetMeta = asset.metaKey ? t(asset.metaKey, asset.meta) : asset.meta;
   const [audioPreviewStatus, setAudioPreviewStatus] = useState(asset.type === "audio" ? "loading" : "ready");
   const [audioPreviewProgress, setAudioPreviewProgress] = useState(0);
   const [audioPreviewSrc, setAudioPreviewSrc] = useState(asset.type === "audio" && !/^https?:/i.test(mediaSrc) ? mediaSrc : "");
@@ -421,19 +825,19 @@ function AssetPreviewDialog({ asset, t, onClose }) {
         <header>
           <div>
             <span>{t("assetPreview", "素材预览")}</span>
-            <strong id="asset-preview-title">{asset.name}</strong>
+            <strong id="asset-preview-title">{assetDisplayName}</strong>
           </div>
           <button type="button" onClick={onClose} aria-label={t("closeAssetPreview", "关闭预览")}>
             <X size={20} />
           </button>
         </header>
-        <div className={`asset-preview-media type-${asset.type}`}>
+        <div className={`asset-preview-media type-${asset.type} ${asset.kind === "vector" ? "is-vector" : ""}`}>
           {asset.type === "video" ? (
-            <video key={mediaSrc} src={mediaSrc} poster={asset.thumbnail} controls autoPlay playsInline />
+            <video key={mediaSrc} src={mediaSrc} poster={asset.thumbnail} crossOrigin="anonymous" controls autoPlay playsInline />
           ) : asset.type === "audio" ? (
             <div className="asset-preview-audio">
               <MusicNote size={58} weight="duotone" />
-              <strong>{asset.name}</strong>
+              <strong>{assetDisplayName}</strong>
               {audioPreviewStatus === "loading" ? (
                 <div className="asset-preview-audio-loading" role="status" aria-live="polite">
                   <i style={{ "--audio-preview-progress": `${Math.round(audioPreviewProgress * 100)}%` }}>
@@ -458,10 +862,10 @@ function AssetPreviewDialog({ asset, t, onClose }) {
               /> : null}
             </div>
           ) : (
-            <img src={mediaSrc} alt={asset.name} />
+            <img src={mediaSrc} alt={assetDisplayName} crossOrigin="anonymous" />
           )}
         </div>
-        {asset.meta ? <footer>{asset.meta}</footer> : null}
+        {assetMeta ? <footer>{assetMeta}</footer> : null}
       </section>
     </div>
   );
@@ -499,24 +903,26 @@ function AssetRow({ asset, selected, t, downloadState }) {
     setMediaLoaded(true);
   };
   return (
-    <div className={`asset-card ${selected ? "is-selected" : ""}`}>
+    <div className={`asset-card ${asset.kind === "vector" ? "is-vector" : ""} ${selected ? "is-selected" : ""}`}>
       <div className="asset-thumb">
         {!mediaLoaded ? <div className="asset-media-loading" aria-hidden="true"><i /></div> : null}
         {asset.type === "video" ? (
-          asset.thumbnail ? <img src={previewSrc} alt="" draggable={false} onLoad={() => setMediaLoaded(true)} onError={handlePreviewError} /> : <video src={asset.src} muted playsInline preload="metadata" draggable={false} onLoadedData={() => setMediaLoaded(true)} onError={() => setMediaLoaded(true)} />
+          asset.thumbnail ? <img src={previewSrc} alt="" crossOrigin="anonymous" draggable={false} onLoad={() => setMediaLoaded(true)} onError={handlePreviewError} /> : <video src={asset.src} crossOrigin="anonymous" muted playsInline preload="metadata" draggable={false} onLoadedData={() => setMediaLoaded(true)} onError={() => setMediaLoaded(true)} />
         ) : asset.type === "audio" ? (
           <div className="asset-audio-thumb">
             <MusicNote size={28} weight="duotone" />
           </div>
         ) : (
-          <img src={previewSrc} alt="" draggable={false} onLoad={() => setMediaLoaded(true)} onError={handlePreviewError} />
+          <img src={previewSrc} alt="" crossOrigin="anonymous" draggable={false} onLoad={() => setMediaLoaded(true)} onError={handlePreviewError} />
         )}
         <span>
           {asset.type === "audio"
             ? t(asset.kind === "music" ? "libraryAudio" : "assetAudio")
             : asset.type === "video"
               ? t("assetVideo")
-              : t("assetImage")}
+              : asset.kind === "vector"
+                ? t("libraryVector", "矢量")
+                : t("assetImage")}
         </span>
         {downloadState?.status === "loading" ? (
           <div className="asset-download-progress" aria-label={t("libraryPreparingAsset")}>
@@ -529,8 +935,8 @@ function AssetRow({ asset, selected, t, downloadState }) {
         </span>
       </div>
       <div>
-        <strong>{asset.name}</strong>
-        <span>{asset.meta}</span>
+        <strong>{asset.nameKey ? t(asset.nameKey, asset.name) : asset.name}</strong>
+        <span>{asset.metaKey ? t(asset.metaKey, asset.meta) : asset.meta}</span>
       </div>
     </div>
   );
@@ -562,6 +968,7 @@ export function ToolPanel(props) {
     setCaptionSize,
     captionStyle,
     setCaptionStyle,
+    setCaptionSegments,
     captionsEnabled,
     setCaptionsEnabled,
     selectedFilterId,
@@ -618,12 +1025,63 @@ export function ToolPanel(props) {
     notify,
     t,
     trOption,
-    selectedVisualSegment,
-    visualLocalTime,
-    updateSelectedVisualEffects,
     miganRepair,
     hdRestoration,
   } = props;
+  const [captionFontStatus, setCaptionFontStatus] = useState("");
+  const captionFontOptions = useMemo(
+    () => getCaptionFontsForLanguage(uiLanguage),
+    [uiLanguage],
+  );
+  const activeCaptionFontId = selectedCaptionSegment?.fontId || captionStyle?.fontId || "default";
+  const visibleCaptionFontOptions = useMemo(() => {
+    if (captionFontOptions.some((item) => item.id === activeCaptionFontId)) return captionFontOptions;
+    return [captionFontOptions[0], getCaptionFont(activeCaptionFontId), ...captionFontOptions.slice(1)]
+      .filter((item, index, items) => item && items.findIndex((candidate) => candidate.id === item.id) === index);
+  }, [activeCaptionFontId, captionFontOptions]);
+  useEffect(() => {
+    let canceled = false;
+    if (activeCaptionFontId === "default") {
+      setCaptionFontStatus("");
+      return undefined;
+    }
+    setCaptionFontStatus("loading");
+    ensureCaptionFontLoaded(
+      activeCaptionFontId,
+      selectedCaptionSegment?.text || "",
+    ).then(() => {
+      if (!canceled) setCaptionFontStatus("ready");
+    }).catch(() => {
+      if (!canceled) setCaptionFontStatus("failed");
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [activeCaptionFontId, selectedCaptionSegment?.text]);
+  const selectedCaptionFont = getCaptionFont(activeCaptionFontId);
+  const selectCaptionFont = async (fontId) => {
+    if (selectedCaptionSegment?.id) {
+      setCaptionSegments((items) => items.map((segment) => (
+        segment.id === selectedCaptionSegment.id ? { ...segment, fontId } : segment
+      )));
+    } else {
+      setCaptionStyle((style) => ({ ...style, fontId }));
+    }
+    if (fontId === "default") {
+      setCaptionFontStatus("ready");
+      return;
+    }
+    setCaptionFontStatus("loading");
+    try {
+      await ensureCaptionFontLoaded(
+        fontId,
+        selectedCaptionSegment?.text || "",
+      );
+      setCaptionFontStatus("ready");
+    } catch {
+      setCaptionFontStatus("failed");
+    }
+  };
 
   if (activeTool === "caption") {
     return (
@@ -645,6 +1103,47 @@ export function ToolPanel(props) {
               {position === "top" ? t("top") : position === "middle" ? t("middle") : t("bottom")}
             </button>
           ))}
+        </div>
+        <div className={`caption-font-field ${captionFontStatus === "loading" ? "is-loading" : ""}`} aria-busy={captionFontStatus === "loading"}>
+          <div className="caption-style-heading">
+            <strong>{t("captionFont")}</strong>
+            <span>{t("captionFontHint")}</span>
+          </div>
+          <div className="caption-font-select-wrap">
+            <select
+              aria-label={t("captionFont")}
+              aria-describedby="caption-font-load-status"
+              value={activeCaptionFontId}
+              onChange={(event) => selectCaptionFont(event.target.value)}
+            >
+              {visibleCaptionFontOptions.map((item) => (
+                <option value={item.id} key={item.id}>
+                  {item.id === "default" ? t("captionFontDefault") : item.label}
+                </option>
+              ))}
+            </select>
+            <span className="caption-font-select-indicator" aria-hidden="true">
+              {captionFontStatus === "loading"
+                ? <i className="caption-font-select-loading" />
+                : <CaretDown size={15} weight="bold" />}
+            </span>
+          </div>
+          <div
+            className="caption-font-preview"
+            style={{
+              fontFamily: selectedCaptionFont.family
+                ? `"${selectedCaptionFont.family}", ${selectedCaptionFont.fallback}`
+                : selectedCaptionFont.fallback,
+              fontWeight: selectedCaptionFont.weight,
+            }}
+          >
+            {selectedCaptionFont.sample}
+          </div>
+          {captionFontStatus ? (
+            <small id="caption-font-load-status" className={`caption-font-status is-${captionFontStatus}`} aria-live="polite">
+              {t(`captionFont${captionFontStatus[0].toUpperCase()}${captionFontStatus.slice(1)}`)}
+            </small>
+          ) : null}
         </div>
         <div className="slider-field compact-slider">
           <div>
@@ -859,22 +1358,6 @@ export function ToolPanel(props) {
     );
   }
 
-  if (activeTool === "effects") {
-    return (
-      <VisualEffectsPanel
-        t={t}
-        segment={selectedVisualSegment}
-        localTime={visualLocalTime}
-        onChange={updateSelectedVisualEffects}
-        selectedFilterId={selectedFilterId}
-        trOption={trOption}
-        onSelectFilter={(id) => { setSelectedFilterId(id); notify(t("effectApplied")); }}
-        miganRepair={miganRepair}
-        hdRestoration={hdRestoration}
-      />
-    );
-  }
-
   if (activeTool === "stickers") {
     return (
       <StickerPanel
@@ -911,7 +1394,28 @@ export function ToolPanel(props) {
   );
 }
 
-export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, onPreviewAnimation, selectedFilterId, trOption, onSelectFilter, contextMode = false, sourceAudioLinked = false, miganRepair = null, hdRestoration = null }) {
+export function VisualEffectsPanel({
+  t,
+  segment,
+  localTime,
+  onChange,
+  onSeek,
+  onPreviewAnimation,
+  selectedFilterId,
+  trOption,
+  onSelectFilter,
+  contextMode = false,
+  sourceAudioLinked = false,
+  miganRepair = null,
+  hdRestoration = null,
+  mode = "main",
+  vectorEditor = null,
+  onApplyPreset = null,
+  onDelete = null,
+  onCanvasEditModeChange,
+  requestedTab = "",
+  singleSection = "",
+}) {
   const [activeTab, setActiveTab] = useState("transform");
   const [tabEdges, setTabEdges] = useState({ atStart: true, atEnd: false });
   const tabsRef = useRef(null);
@@ -923,6 +1427,8 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
   const hasMask = mask.type && mask.type !== "none";
   const isCircleMask = mask.type === "circle";
   const isVideo = segment?.type === "video";
+  const isVector = segment?.kind === "vector" || Boolean(segment?.vectorBody);
+  const isOverlay = mode === "overlay";
   const playbackRate = Math.max(0.25, Math.min(4, Number(segment?.playbackRate) || 1));
   const clipAnimation = normalizeVisualClipAnimation(segment?.animation);
   const activeAnimation = clipAnimation[animationSection];
@@ -932,14 +1438,22 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
       ? { propertyKeyframe: { time: localTime, key, value } }
       : { baseTransform: { [key]: value } },
   );
-  const tabs = [
-    ["transform", t("visualTabTransform")],
-    ["mask", t("visualTabMask")],
-    ["speed", t("visualTabSpeed")],
-    ["effects", t("visualTabEffects")],
-    ["animation", t("visualTabAnimation")],
-    ["repair", t("repairTab")],
-  ];
+  const tabLabels = {
+    transform: t("visualTabTransform"),
+    mask: t("visualTabMask"),
+    filters: t("visualTabEffects"),
+    animation: t("visualTabAnimation"),
+    speed: t("visualTabSpeed"),
+    vector: t("vectorProperties"),
+    timing: t("overlayTiming", "Timing & layer"),
+    repair: t("repairTab"),
+  };
+  const tabs = getVisualPropertyTabIds({
+    isVector,
+    isVideo,
+    isOverlay,
+    hasVectorEditor: Boolean(vectorEditor),
+  }).map((id) => [id, tabLabels[id]]);
   const updateTabEdges = useCallback(() => {
     const node = tabsRef.current;
     if (!node) return;
@@ -956,6 +1470,17 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
       behavior: "smooth",
     });
   };
+  useEffect(() => {
+    if (!tabs.some(([id]) => id === activeTab)) setActiveTab(tabs[0]?.[0] || "transform");
+  }, [activeTab, isOverlay, isVector, isVideo, vectorEditor]);
+  useEffect(() => {
+    const nextTab = tabs.some(([id]) => id === requestedTab) ? requestedTab : "transform";
+    setActiveTab(nextTab);
+    onCanvasEditModeChange?.(nextTab === "mask" ? "mask" : "transform");
+  }, [mode, onCanvasEditModeChange, requestedTab, segment?.id]);
+  useEffect(() => {
+    onCanvasEditModeChange?.(activeTab === "mask" ? "mask" : "transform");
+  }, [activeTab, onCanvasEditModeChange]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const node = tabsRef.current;
@@ -1003,10 +1528,10 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
     };
   }, [hoveredAnimation, onPreviewAnimation, segment?.id, segment?.duration]);
   return (
-    <div className={`tool-panel visual-effects-panel ${contextMode ? "is-context-mode" : ""}`}>
+    <div className={`tool-panel visual-effects-panel ${contextMode ? "is-context-mode" : ""} ${singleSection ? "is-single-section" : ""}`}>
       {!contextMode ? <h2>{t("imageTrack")}</h2> : null}
       {!segment ? <div className="empty-state">{t("visualSelectClip")}</div> : <>
-        <div className={`visual-context-tabs-shell ${tabEdges.atStart ? "" : "has-left-shadow"} ${tabEdges.atEnd ? "" : "has-right-shadow"}`}>
+        {!singleSection ? <div className={`visual-context-tabs-shell ${tabEdges.atStart ? "" : "has-left-shadow"} ${tabEdges.atEnd ? "" : "has-right-shadow"}`}>
           {!tabEdges.atStart ? (
             <button
               className="visual-context-tabs-arrow is-left"
@@ -1036,7 +1561,7 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
               <CaretRight size={16} weight="bold" />
             </button>
           ) : null}
-        </div>
+        </div> : null}
         {activeTab === "transform" ?
         <section className="visual-editor-card">
           <div className="visual-editor-heading"><span><Diamond size={16} weight="fill" />{t("visualKeyframes")}</span><em>{localTime.toFixed(2)}s · {keyframes.length} {t("visualFrames")}</em></div>
@@ -1051,7 +1576,7 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
         </section> : null}
         {activeTab === "mask" ?
         <section className="visual-editor-card">
-          <div className="visual-editor-heading"><strong>{t("visualMask")}</strong><em>{t("visualClipScoped")}</em></div>
+          {!singleSection ? <div className="visual-editor-heading"><strong>{t("visualMask")}</strong><em>{t("visualClipScoped")}</em></div> : null}
           <div className="mask-choice-grid">{[['none',t('visualMaskNone')],['rectangle',t('visualMaskRectangle')],['rounded',t('visualMaskRounded')],['circle',t('visualMaskCircle')]].map(([id,label]) => <button type="button" key={id} className={mask.type === id ? 'is-active' : ''} onClick={() => onChange?.({ mask: { ...mask, type: id, ...(id === 'circle' && !Number.isFinite(mask.size) ? { size: 72 } : {}), ...(id === 'rounded' && !Number.isFinite(mask.cornerRadius) ? { cornerRadius: 12 } : {}) } })}>{label}</button>)}</div>
           {hasMask ? <>
             <div className="slider-field compact-slider"><div><label>{t("visualFeather")}</label><span>{mask.feather || 0}%</span></div><input type="range" min="0" max="40" value={mask.feather || 0} onChange={(event) => onChange?.({ mask: { ...mask, feather: Number(event.target.value) } })} /></div>
@@ -1062,7 +1587,7 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
           </> : <p className="mask-empty-hint">{t("visualMaskNoneHint")}</p>}
         </section> : null}
         {activeTab === "speed" ? <section className="visual-editor-card visual-speed-card">
-          <div className="visual-editor-heading"><strong>{t("visualSpeed")}</strong><em>{t("visualClipScoped")}</em></div>
+          {!singleSection ? <div className="visual-editor-heading"><strong>{t("visualSpeed")}</strong><em>{t("visualClipScoped")}</em></div> : null}
           {isVideo ? <>
             <div className="visual-speed-presets" aria-label={t("visualSpeed")}>{[0.25, 0.5, 1, 1.5, 2, 3, 4].map((rate) => <button type="button" className={Math.abs(playbackRate - rate) < 0.001 ? "is-active" : ""} key={rate} onClick={() => onChange?.({ playbackRate: rate })}>{rate}×</button>)}</div>
             <div className="slider-field compact-slider"><div><label>{t("visualSpeed")}</label><strong>{playbackRate.toFixed(playbackRate % 1 ? 2 : 0)}×</strong></div><input aria-label={t("visualSpeed")} type="range" min="0.25" max="4" step="0.05" value={playbackRate} onChange={(event) => onChange?.({ playbackRate: Number(event.target.value) })} /></div>
@@ -1070,9 +1595,9 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
             <p className="visual-speed-hint">{sourceAudioLinked ? t("sourceAudioSynced") : t("visualSpeedVisualOnlyHint")}</p>
           </> : <div className="empty-state visual-speed-empty">{t("visualSpeedImageHint")}</div>}
         </section> : null}
-        {activeTab === "effects" ? <VisualChoicePanel title={t("visualEffects")} kind="effect" options={EFFECT_OPTIONS} selectedId={selectedFilterId} trOption={trOption} onSelect={onSelectFilter} /> : null}
+        {activeTab === "filters" ? <VisualChoicePanel title={t("visualEffects")} hideTitle={Boolean(singleSection)} previewImage={segment?.src} kind="filter" options={FILTER_OPTIONS} selectedId={selectedFilterId} trOption={trOption} onSelect={onSelectFilter} /> : null}
         {activeTab === "animation" ? <section className="visual-editor-card visual-animation-card">
-          <div className="visual-editor-heading"><strong>{t("visualAnimation")}</strong><em>{t("visualAnimationHoverHint")}</em></div>
+          {!singleSection ? <div className="visual-editor-heading"><strong>{t("visualAnimation")}</strong><em>{t("visualAnimationHoverHint")}</em></div> : null}
           <div className="visual-animation-sections" role="tablist" aria-label={t("visualAnimation")}>
             {[['in', t('visualAnimationIn')], ['out', t('visualAnimationOut')]].map(([id, label]) => <button type="button" role="tab" aria-selected={animationSection === id} className={animationSection === id ? 'is-active' : ''} key={id} onClick={() => setAnimationSection(id)}>{label}</button>)}
           </div>
@@ -1090,12 +1615,27 @@ export function VisualEffectsPanel({ t, segment, localTime, onChange, onSeek, on
           </div>
           {activeAnimation.id !== "none" ? <div className="slider-field compact-slider visual-animation-duration"><div><label>{t("visualAnimationDuration")}</label><strong>{activeAnimation.duration.toFixed(1)}s</strong></div><input aria-label={t("visualAnimationDuration")} type="range" min="0.1" max={Math.min(3, Math.max(0.1, Number(segment.duration) || 0.1))} step="0.1" value={activeAnimation.duration} onChange={(event) => onChange?.({ animation: { ...clipAnimation, [animationSection]: { ...activeAnimation, duration: Number(event.target.value) } } })} /></div> : null}
         </section> : null}
+        {activeTab === "vector" ? <section className="visual-editor-card visual-vector-card">{vectorEditor}</section> : null}
+        {activeTab === "timing" ? <section className="visual-editor-card visual-overlay-timing-card">
+          {!singleSection ? <div className="visual-editor-heading"><strong>{t("overlayTiming", "Timing & layer")}</strong><em>{t("visualClipScoped")}</em></div> : null}
+          <section className="visual-overlay-presets"><strong>{t("layoutPresets")}</strong><div>
+            {[["top-left", "↖"], ["top-right", "↗"], ["bottom-left", "↙"], ["bottom-right", "↘"], ["center", "●"], ["full", "□"]].map(([id, label]) => <button type="button" key={id} title={id} aria-label={`${t("layoutPresets")} ${id}`} onClick={() => onApplyPreset?.(id)}>{label}</button>)}
+          </div></section>
+          <label><span>{t("clipStart", "Start time")}</span><input type="number" min="0" step="0.1" value={segment.start} onChange={(event) => onChange?.({ timing: { start: Math.max(0, Number(event.target.value) || 0) } })} /></label>
+          <label><span>{t("clipDuration", "Duration")}</span><input type="number" min="0.1" step="0.1" value={segment.duration} onChange={(event) => onChange?.({ timing: { duration: Math.max(0.1, Number(event.target.value) || 0.1) } })} /></label>
+          <label><span>{t("layer", "Layer")}</span><input type="number" min="1" step="1" value={segment.layer || 1} onChange={(event) => onChange?.({ timing: { layer: Math.max(1, Math.round(Number(event.target.value) || 1)) } })} /></label>
+          {isVideo ? <label className="switch-row"><input type="checkbox" checked={segment.muted === true} onChange={(event) => onChange?.({ timing: { muted: event.target.checked } })} />{t("overlayMute", "Mute video audio")}</label> : null}
+          <button className="panel-secondary visual-overlay-delete" type="button" onClick={onDelete}><Trash size={14} />{t("delete")}</button>
+        </section> : null}
         {activeTab === "repair" ? <section className="visual-editor-card repair-card repair-hub">
-          <div className="visual-editor-heading">
+          {!singleSection ? <div className="visual-editor-heading">
             <span><MagicWand size={17} weight="duotone" />{t("repairHubTitle")}</span>
             <em>{t("repairLocalBadge")}</em>
+          </div> : null}
+          <div className={`repair-hub-summary ${singleSection ? "is-focused" : ""}`}>
+            <p className="repair-intro">{t("repairHubIntro")}</p>
+            {singleSection ? <em>{t("repairLocalBadge")}</em> : null}
           </div>
-          <p className="repair-intro">{t("repairHubIntro")}</p>
           <div className="repair-capability-list">
             <article className="repair-capability is-available">
               <span><MagicWand size={18} weight="duotone" /></span>
@@ -1336,10 +1876,10 @@ export function SmartVisionPanel({
   );
 }
 
-function VisualChoicePanel({ title, kind, options, selectedId, trOption = (name) => name, onSelect }) {
+function VisualChoicePanel({ title, hideTitle = false, previewImage = SAMPLE_IMAGE, kind, options, selectedId, trOption = (name) => name, onSelect }) {
   return (
     <div className="tool-panel">
-      <h2>{title}</h2>
+      {!hideTitle ? <h2>{title}</h2> : null}
       <div className="visual-choice-grid">
         {options.map((option) => (
           <button
@@ -1350,7 +1890,7 @@ function VisualChoicePanel({ title, kind, options, selectedId, trOption = (name)
             key={option.id}
             draggable={option.id !== "none"}
             style={{
-              "--choice-image": `url(${SAMPLE_IMAGE})`,
+              "--choice-image": `url(${previewImage || SAMPLE_IMAGE})`,
               "--choice-filter": option.css ?? "none",
             }}
             onClick={() => onSelect(option.id)}

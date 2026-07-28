@@ -29,6 +29,7 @@ import {
   SpeakerHigh,
   SpeakerSlash,
   SlidersHorizontal,
+  TextT,
   Trash,
   Waveform,
 } from "@phosphor-icons/react";
@@ -265,7 +266,7 @@ export function Timeline({
     audio: Boolean(selectedAudioSegmentId),
     music: Boolean(selectedMusicSegmentId),
   });
-  const openSelectedClipInspector = () => {
+  const openSelectedClipInspector = (section = "") => {
     if (!selectedMobileClipTrack) return;
     const panel = getMobileClipPanel(selectedMobileClipTrack);
     if (panel === "tools") {
@@ -275,7 +276,7 @@ export function Timeline({
       return;
     }
     setSelectedTrack(selectedMobileClipTrack);
-    openMobileInspector?.(selectedMobileClipTrack);
+    openMobileInspector?.(selectedMobileClipTrack, section);
   };
   const selectedMobileAudioSegment = selectedMobileClipTrack === "audio"
     ? audioSegments.find((segment) => segment.id === selectedAudioSegmentId) ?? null
@@ -286,6 +287,9 @@ export function Timeline({
         : null;
   const selectedMobileVisualSegment = selectedMobileClipTrack === "image"
     ? displayedVisualSegments.find((segment) => segment.id === selectedVisualSegmentId) ?? null
+    : null;
+  const selectedMobileOverlaySegment = selectedMobileClipTrack === "overlay"
+    ? visualOverlaySegments.find((segment) => segment.id === selectedVisualOverlayId) ?? null
     : null;
   const selectedMobileCaptionSegment = selectedMobileClipTrack === "caption"
     ? displayedCaptionSegments.find((segment) => segment.id === selectedSegmentId) ?? null
@@ -301,6 +305,10 @@ export function Timeline({
   const mobileClipActionIds = getMobileClipActionIds(selectedMobileClipTrack, {
     canExtractSourceAudio: canExtractSelectedMobileSourceAudio,
     hasLinkedCaption: selectedMobileHasLinkedCaption,
+    isVideo: (selectedMobileVisualSegment || selectedMobileOverlaySegment)?.type === "video",
+    isVector: (selectedMobileVisualSegment || selectedMobileOverlaySegment)?.kind === "vector"
+      || Boolean((selectedMobileVisualSegment || selectedMobileOverlaySegment)?.vectorBody)
+      || String((selectedMobileVisualSegment || selectedMobileOverlaySegment)?.assetId || "").startsWith("vector-"),
   });
   const toggleSelectedMobileCaptionAudioLink = () => {
     if (selectedMobileClipTrack === "caption" && selectedMobileCaptionSegment) {
@@ -417,6 +425,16 @@ export function Timeline({
     () => visualOverlaySegments.length ? packTimedSegmentsIntoLanes(visualOverlaySegments) : showEmptyOverlayDropLane ? [[]] : [],
     [showEmptyOverlayDropLane, visualOverlaySegments],
   );
+  const isOverlayLaneVisible = (lane = []) => !lane.length || lane.some((segment) => segment.hidden !== true);
+  const toggleOverlayLaneVisibility = (laneIndex) => {
+    const lane = overlayLanes[laneIndex] || [];
+    const segmentIds = new Set(lane.map((segment) => segment.id));
+    if (!segmentIds.size || !setVisualOverlaySegments) return;
+    const hideLane = isOverlayLaneVisible(lane);
+    setVisualOverlaySegments((items) => items.map((item) => segmentIds.has(item.id)
+      ? { ...item, hidden: hideLane }
+      : item));
+  };
   const showSourceTrack = Boolean(sourceAudioBlob || sourceAudioExtractionPendingId);
   const showMusicTrack = Boolean(musicBlob) || draggedAssetType === "audio";
   const captionLanes = useMemo(
@@ -436,16 +454,26 @@ export function Timeline({
   const timelineLabelRows = contentRows.join(" ");
   const timelineTrackLabels = [
     ["image", t("imageTrack")],
-    ...overlayLanes.map((_, index) => ["overlay", `${t("overlayTrack", "Overlay")} ${index + 1}`, `overlay-${index}`]),
+    ...overlayLanes.map((_, index) => ["overlay", `${t("overlayTrack", "Overlay")} ${index + 1}`, `overlay-${index}`, `overlay-${index}`]),
     ...(showStickerTrack ? stickerLanes.map((_, index) => ["sticker", `${t("stickerTrack")} ${index + 1}`, `sticker-${index}`]) : []),
     ...captionLanes.map((_, index) => ["caption", `${t("caption")} ${index + 1}`, `caption-${index}`, `caption-${index}`]),
     ...(showSourceTrack ? [["source", t("sourceTrack")]] : []),
     ...audioLanes.map((_, index) => ["audio", `${t("voiceTrack")} ${index + 1}`, `audio-${index}`]),
     ...(showMusicTrack ? [["music", t("musicTrack")]] : []),
   ];
-  // Visibility is track-scoped even when overlapping clips are packed into
-  // multiple visual rows. Preview, playback and export all read the track key.
   const isRowVisible = (track) => trackVisibility[track] ?? true;
+  const getTimelineRowVisibility = (track, visibilityKey = track) => {
+    if (track !== "overlay") return isRowVisible(visibilityKey);
+    const laneIndex = Number(String(visibilityKey).replace(/^overlay-/, ""));
+    return Number.isInteger(laneIndex) ? isOverlayLaneVisible(overlayLanes[laneIndex]) : isRowVisible("overlay");
+  };
+  const toggleTimelineRowVisibility = (track, visibilityKey = track) => {
+    if (track === "overlay") {
+      const laneIndex = Number(String(visibilityKey).replace(/^overlay-/, ""));
+      if (Number.isInteger(laneIndex)) return toggleOverlayLaneVisibility(laneIndex);
+    }
+    toggleTrackVisibility(visibilityKey);
+  };
   const [rulerViewport, setRulerViewport] = useState({
     scrollLeft: 0,
     viewportWidth: 0,
@@ -1225,11 +1253,11 @@ export function Timeline({
         {assetDragPreview?.src ? (
           <div className="asset-drop-slot-thumb">
             {assetDragPreview.type === "video" ? (
-              <video src={assetDragPreview.src} muted playsInline preload="metadata" draggable={false} />
+              <video src={assetDragPreview.src} crossOrigin="anonymous" muted playsInline preload="metadata" draggable={false} />
             ) : assetDragPreview.type === "audio" ? (
               <span>{t("assetAudio")}</span>
             ) : (
-              <img src={assetDragPreview.src} alt="" draggable={false} />
+              <img src={assetDragPreview.src} alt="" crossOrigin="anonymous" draggable={false} />
             )}
           </div>
         ) : null}
@@ -1337,7 +1365,7 @@ export function Timeline({
     const laneEnd = lane.reduce((end, segment) => Math.max(end, segment.start + segment.duration), 0);
     return (
     <div
-      className={`visual-overlay-track ${selectedTrack === "overlay" ? "is-selected" : ""} ${!isRowVisible("overlay") ? "is-track-disabled" : ""} ${assetDropTargetTrack === "overlay" ? "is-drop-target" : ""}`}
+      className={`visual-overlay-track ${selectedTrack === "overlay" ? "is-selected" : ""} ${!isOverlayLaneVisible(lane) ? "is-track-disabled" : ""} ${assetDropTargetTrack === "overlay" ? "is-drop-target" : ""}`}
       key={`overlay-lane-${laneIndex}`}
       onClick={() => setSelectedTrack("overlay")}
       data-asset-drop-track="overlay"
@@ -1441,18 +1469,28 @@ export function Timeline({
           window.addEventListener("pointerup", end, { once: true });
           window.addEventListener("pointercancel", cancel, { once: true });
         };
-        return <div className={`visual-overlay-clip ${segment.type === "video" ? "is-video" : "is-image"} ${active ? "is-current" : ""} ${segment.id === selectedVisualOverlayId ? "is-selected-segment" : ""}`} role="button" tabIndex={0} key={segment.id} style={{ "--overlay-left": `${left}%`, "--overlay-width": `${width}%` }} onPointerDown={(event) => startOverlayEdit(event, "move")} onContextMenu={(event) => showTrackContextMenu(event, "overlay", segment.id)} onClick={(event) => {
+        return <div className={`visual-overlay-clip ${segment.type === "video" ? "is-video" : "is-image"} ${active ? "is-current" : ""} ${segment.id === selectedVisualOverlayId ? "is-selected-segment" : ""}`} role="button" tabIndex={0} key={segment.id} data-timeline-segment-track="overlay" data-timeline-segment-id={segment.id} style={{ "--overlay-left": `${left}%`, "--overlay-width": `${width}%` }} onPointerDown={(event) => startOverlayEdit(event, "move")} onContextMenu={(event) => showTrackContextMenu(event, "overlay", segment.id)} onClick={(event) => {
           event.stopPropagation();
           clearClipSelections("overlay");
           setSelectedVisualOverlayId?.(segment.id);
           setSelectedTrack("overlay");
+          ensureMobileTimedClipVisible(segment.id);
+          revealMobileClipActions("overlay");
+        }} onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          clearClipSelections("overlay");
+          setSelectedVisualOverlayId?.(segment.id);
+          setSelectedTrack("overlay");
+          ensureMobileTimedClipVisible(segment.id);
+          revealMobileClipActions("overlay");
         }}>
           <div className="visual-overlay-thumbnails">
             {segment.type === "video"
               ? overlayFrames.length
-                ? overlayFrames.map((frame, frameIndex) => <img src={frame} alt="" draggable={false} key={`${segment.id}-overlay-frame-${frameIndex}`} />)
-                : <video src={segment.src} muted playsInline preload="metadata" />
-              : Array.from({ length: overlayImageCount }, (_, thumbnailIndex) => <img src={segment.src} alt="" draggable={false} key={`${segment.id}-overlay-image-${thumbnailIndex}`} />)}
+                ? overlayFrames.map((frame, frameIndex) => <img src={frame} alt="" crossOrigin="anonymous" draggable={false} key={`${segment.id}-overlay-frame-${frameIndex}`} />)
+                : <video src={segment.src} crossOrigin="anonymous" muted playsInline preload="metadata" />
+              : Array.from({ length: overlayImageCount }, (_, thumbnailIndex) => <img src={segment.src} alt="" crossOrigin="anonymous" draggable={false} key={`${segment.id}-overlay-image-${thumbnailIndex}`} />)}
           </div>
           {segment.type === "video" ? <button className="clip-mute-toggle" type="button" aria-label={t(segment.muted ? "unmuteClip" : "muteClip", segment.muted ? "取消静音" : "静音")} title={t(segment.muted ? "unmuteClip" : "muteClip", segment.muted ? "取消静音" : "静音")} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); if (trackLocks.overlay) return void notify("画中画轨已锁定，无法切换静音"); setVisualOverlaySegments((items) => items.map((item) => item.id === segment.id ? { ...item, muted: !item.muted } : item)); }}>{segment.muted ? <SpeakerSlash size={13} /> : <SpeakerHigh size={13} />}</button> : null}
           <span>{segment.name || t("overlayTrack", "Overlay")}</span>
@@ -1598,7 +1636,7 @@ export function Timeline({
           {timelineTrackLabels.map(([track, label, rowId = track, visibilityKey = track]) => (
             <div
               className={`${selectedTrack === track ? "is-selected" : ""} ${
-                !isRowVisible(visibilityKey) ? "is-track-disabled" : ""
+                !getTimelineRowVisibility(track, visibilityKey) ? "is-track-disabled" : ""
               } ${trackLocks[track] ? "is-track-locked" : ""}`}
               key={rowId}
               onContextMenu={(event) => showTrackContextMenu(event, track, "", visibilityKey)}
@@ -1608,10 +1646,10 @@ export function Timeline({
                 aria-label={`${label} ${t("visible")}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  toggleTrackVisibility(visibilityKey);
+                  toggleTimelineRowVisibility(track, visibilityKey);
                 }}
               >
-                {isRowVisible(visibilityKey) ? <Eye size={15} /> : <EyeSlash size={15} />}
+                {getTimelineRowVisibility(track, visibilityKey) ? <Eye size={15} /> : <EyeSlash size={15} />}
               </button>
               <button
                 type="button"
@@ -1830,12 +1868,13 @@ export function Timeline({
                                 <img
                                   src={frameSrc}
                                   alt=""
+                                  crossOrigin="anonymous"
                                   draggable={false}
                                   key={`${segment.id}-frame-${frameIndex}`}
                                 />
                               ))
                             ) : (
-                              <video src={segmentSrc} muted playsInline preload="metadata" draggable={false} />
+                              <video src={segmentSrc} crossOrigin="anonymous" muted playsInline preload="metadata" draggable={false} />
                             )
                           ) : (
                             Array.from(
@@ -1850,7 +1889,7 @@ export function Timeline({
                                 ),
                               },
                               (_, thumbnailIndex) => (
-                                <img src={segmentSrc} alt="" draggable={false} key={thumbnailIndex} />
+                                <img src={segmentSrc} alt="" crossOrigin="anonymous" draggable={false} key={thumbnailIndex} />
                               ),
                             )
                           )}
@@ -2162,9 +2201,9 @@ export function Timeline({
         >
           <div className="timeline-drag-ghost-thumb">
             {(draggingVisualSegment.type || visualType) === "video" ? (
-              <video src={draggingVisualSegment.src || imageSrc} muted playsInline preload="metadata" draggable={false} />
+              <video src={draggingVisualSegment.src || imageSrc} crossOrigin="anonymous" muted playsInline preload="metadata" draggable={false} />
             ) : (
-              <img src={draggingVisualSegment.src || imageSrc} alt="" draggable={false} />
+              <img src={draggingVisualSegment.src || imageSrc} alt="" crossOrigin="anonymous" draggable={false} />
             )}
           </div>
           <span>{formatClock(draggingVisualSegment.duration)}</span>
@@ -2183,9 +2222,20 @@ export function Timeline({
           <button className="is-back" type="button" onClick={() => { closeMobileClipActions(); clearClipSelections(); }}><ArrowLeft size={21} /><span>{t("mobileClipDismiss")}</span></button>
           <div className="timeline-mobile-clip-action-scroller">
           {mobileClipActionIds.filter((actionId) => actionId !== "dismiss").map((actionId) => {
-            if (actionId === "edit") return <button type="button" key={actionId} onClick={openSelectedClipInspector}><SlidersHorizontal size={20} /><span>{t("mobileClipEdit")}</span></button>;
-            if (actionId === "properties") return <button type="button" key={actionId} onClick={openSelectedClipInspector}><SlidersHorizontal size={20} /><span>{t("properties")}</span></button>;
-            if (actionId === "audio") return <button type="button" key={actionId} onClick={openSelectedClipInspector}><SlidersHorizontal size={20} /><span>{t("mobileClipAudio")}</span></button>;
+            if (actionId === "visual-transform") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("transform")}><SlidersHorizontal size={20} /><span>{t("visualTabTransform")}</span></button>;
+            if (actionId === "visual-mask") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("mask")}><Crop size={20} /><span>{t("visualTabMask")}</span></button>;
+            if (actionId === "visual-filter") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("filters")}><Sparkle size={20} /><span>{t("visualTabEffects")}</span></button>;
+            if (actionId === "visual-animation") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("animation")}><MonitorPlay size={20} /><span>{t("visualTabAnimation")}</span></button>;
+            if (actionId === "visual-speed") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("speed")}><ArrowsOutLineHorizontal size={20} /><span>{t("visualTabSpeed")}</span></button>;
+            if (actionId === "visual-repair") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("repair")}><Sparkle size={20} /><span>{t("repairTab")}</span></button>;
+            if (actionId === "visual-vector") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("vector")}><Sparkle size={20} /><span>{t("vectorProperties", "矢量")}</span></button>;
+            if (actionId === "overlay-timing") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("timing")}><PictureInPicture size={20} /><span>{t("overlayTiming", "层级")}</span></button>;
+            if (actionId === "caption-properties") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("caption")}><ClosedCaptioning size={20} /><span>{t("caption")}</span></button>;
+            if (actionId === "caption-font") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("font")}><TextT size={20} /><span>{t("captionFont")}</span></button>;
+            if (actionId === "caption-voice") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("voice")}><Waveform size={20} /><span>{t("aiVoice")}</span></button>;
+            if (actionId === "sticker-properties") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("sticker")}><SlidersHorizontal size={20} /><span>{t("properties")}</span></button>;
+            if (actionId === "audio-properties") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("audio")}><Waveform size={20} /><span>{t("mobileClipAudio")}</span></button>;
+            if (actionId === "audio-fade") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("fade")}><ArrowsInLineHorizontal size={20} /><span>{t("mobileClipFade")}</span></button>;
             if (actionId === "split") return <button type="button" key={actionId} onClick={() => runMobileClipAction(handleCutTrack)}><Scissors size={20} /><span>{t("mobileClipSplit")}</span></button>;
             if (actionId === "copy") return <button type="button" key={actionId} onClick={() => runMobileClipAction(handleDuplicateTrack)}><CopySimple size={20} /><span>{t("mobileClipCopy")}</span></button>;
             if (actionId === "captions") return <button type="button" key={actionId} disabled={audioProcessingBusy || !selectedMobileAudioSegment} onClick={generateSelectedMobileAudioCaptions}><ClosedCaptioning size={20} /><span>{t("mobileClipCaptions")}</span></button>;
@@ -2248,7 +2298,7 @@ export function Timeline({
           ) : (
             <>
               {["image", "caption"].includes(contextMenu.track) ? <button type="button" role="menuitem" onClick={() => runContextAction(() => handleAddSegment(contextMenu.targetTime))}><PlusCircle size={16} />{t("addClip")}</button> : null}
-              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTrackVisibility(contextMenu.visibilityKey || contextMenu.track))}>{isRowVisible(contextMenu.visibilityKey || contextMenu.track) ? <EyeSlash size={16} /> : <Eye size={16} />}{t(isRowVisible(contextMenu.visibilityKey || contextMenu.track) ? "hideTrack" : "showTrack")}</button>
+              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track))}>{getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? <EyeSlash size={16} /> : <Eye size={16} />}{t(getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? "hideTrack" : "showTrack")}</button>
               <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTrackLock(contextMenu.track))}>{trackLocks[contextMenu.track] ? <LockKeyOpen size={16} /> : <LockKey size={16} />}{t(trackLocks[contextMenu.track] ? "unlockTrack" : "lockTrack")}</button>
             </>
           )}

@@ -1,5 +1,7 @@
-import { normalizeVisualKeyframes, upsertVisualKeyframe } from "./visualEffects.js";
+import { normalizeVisualKeyframes, resolveVisualTransform, upsertVisualKeyframe } from "./visualEffects.js";
 import { createVisualSegment } from "./timeline.js";
+import { normalizeVectorDesign } from "./vectorDesign.js";
+import { normalizeVisualClipAnimation } from "./visualClipAnimations.js";
 
 export const DEFAULT_OVERLAY_SECONDS = 5;
 
@@ -49,7 +51,9 @@ export function createVisualOverlaySegment(asset, start = 0, options = {}) {
     id: options.id || `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     assetId: asset?.id || "",
     name: asset?.name || "画中画",
+    nameKey: asset?.nameKey || "",
     type: asset?.type === "video" ? "video" : "image",
+    kind: asset?.kind || "",
     src: asset?.src || "",
     blob: asset?.blob,
     width: Number(asset?.width) || 0,
@@ -57,21 +61,39 @@ export function createVisualOverlaySegment(asset, start = 0, options = {}) {
     trackFrames: Array.isArray(asset?.trackFrames) ? asset.trackFrames : [],
     sourceStart: Math.max(0, Number(asset?.sourceStart) || 0),
     sourceDuration: Math.max(0, Number(asset?.sourceDuration) || Number(asset?.duration) || 0),
-    playbackRate: Math.max(0.25, Math.min(4, Number(asset?.playbackRate) || 1)),
+    playbackRate: Math.max(0.25, Math.min(4, Number(options.playbackRate ?? asset?.playbackRate) || 1)),
     start: Math.max(0, Number(start) || 0),
     duration,
     muted: options.muted === true,
+    volume: Math.max(0, Math.min(1, Number(options.volume) || 1)),
     layer: Math.max(1, Number(options.layer) || 1),
     baseTransform,
     keyframes: normalizeVisualKeyframes(options.keyframes || []),
+    mask: {
+      type: "none",
+      feather: 0,
+      inverted: false,
+      ...(options.mask || {}),
+    },
+    animation: normalizeVisualClipAnimation(options.animation),
+    filterId: typeof options.filterId === "string" ? options.filterId : "none",
+    ...(asset?.kind === "vector" || asset?.vectorBody ? {
+      vectorBody: asset?.vectorBody || "",
+      vectorBackground: asset?.vectorBackground || "transparent",
+      vectorColorSlots: asset?.vectorColorSlots,
+      vectorDesign: normalizeVectorDesign(options.vectorDesign || asset?.vectorDesign),
+    } : {}),
   };
 }
 
 export function createMainVisualFromOverlay(overlay) {
   if (!overlay?.src) return null;
-  return createVisualSegment(overlay.duration, {
+  return {
+    ...createVisualSegment(overlay.duration, {
     assetId: overlay.assetId,
     name: overlay.name,
+    nameKey: overlay.nameKey,
+    kind: overlay.kind,
     type: overlay.type,
     src: overlay.src,
     blob: overlay.blob,
@@ -79,13 +101,30 @@ export function createMainVisualFromOverlay(overlay) {
     height: overlay.height,
     duration: overlay.duration,
     trackFrames: overlay.trackFrames,
-  });
+    vectorBody: overlay.vectorBody,
+    vectorBackground: overlay.vectorBackground,
+    vectorColorSlots: overlay.vectorColorSlots,
+    vectorDesign: overlay.vectorDesign,
+    playbackRate: overlay.playbackRate,
+    }),
+    mask: overlay.mask,
+    animation: overlay.animation,
+    filterId: overlay.filterId,
+  };
 }
 
 export function getActiveVisualOverlays(segments = [], time = 0) {
   return segments
-    .filter((segment) => time >= segment.start && time < segment.start + segment.duration)
+    .filter((segment) => segment.hidden !== true && time >= segment.start && time < segment.start + segment.duration)
     .sort((left, right) => (left.layer || 1) - (right.layer || 1));
+}
+
+export function resolveVisualOverlayTransform(overlay, localTime = 0) {
+  return resolveVisualTransform(
+    overlay?.keyframes,
+    Math.max(0, Number(localTime) || 0),
+    overlay?.baseTransform,
+  );
 }
 
 export function updateVisualOverlayTransform(segment, localTime, transform) {

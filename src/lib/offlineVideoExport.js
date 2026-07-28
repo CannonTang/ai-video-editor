@@ -14,6 +14,7 @@ import {
 import { registerAacEncoder } from "@mediabunny/aac-encoder";
 
 import { throwIfExportAborted } from "./exportCancellation.js";
+import { resolveCaptionStyleForSegment } from "./captionFonts.js";
 import {
   createTemporalMaskCache,
   drawPreviewFrame,
@@ -30,6 +31,7 @@ import {
 import { resolveVisionAnalysisAtTime } from "./vision.js";
 import { getVisualSourceTime } from "./visualEffects.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
+import { getVectorRenderSource } from "./vectorDesign.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 let aacFallbackRegistered = false;
@@ -171,13 +173,17 @@ export async function mixOfflineAudio({
 
 async function prepareComposition(options) {
   throwIfExportAborted(options.signal);
+  const targetWidth = Math.max(2, Math.round(Number(options.exportSettings?.width) || options.ratio.width));
+  const targetHeight = Math.max(2, Math.round(Number(options.exportSettings?.height) || options.ratio.height));
   const segments = options.visualSegments.some((segment) => segment.src)
     ? options.visualSegments.filter((segment) => segment.src)
     : [{ id: "offline-visual", src: options.imageSrc, type: options.visualType, duration: options.duration }];
   const timeline = getVisualSegmentTimeline(segments);
   const items = await Promise.all(segments.map(async (segment, index) => {
     throwIfExportAborted(options.signal);
-    const visual = segment.type === "video" ? await loadVideo(segment.src) : await loadImage(segment.src);
+    const visual = segment.type === "video"
+      ? await loadVideo(segment.src)
+      : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight }));
     throwIfExportAborted(options.signal);
     const cutoutVisual = segment.type === "image" && segment.vision?.options?.removeBackground && segment.vision?.cutoutUrl
       ? await loadImage(segment.vision.cutoutUrl).catch(() => null) : null;
@@ -222,9 +228,11 @@ async function prepareComposition(options) {
     ...(options.sticker?.src ? [options.sticker.src] : []),
   ])];
   const stickerImages = new Map((await Promise.all(stickerSources.map(async (src) => [src, await loadImage(src).catch(() => null)]))).filter(([, image]) => image));
-  const overlayItems = await Promise.all((options.visualOverlaySegments || []).filter((segment) => segment.src).map(async (segment) => ({
+  const overlayItems = await Promise.all((options.visualOverlaySegments || []).filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => ({
     segment,
-    visual: segment.type === "video" ? await loadVideo(segment.src) : await loadImage(segment.src),
+    visual: segment.type === "video"
+      ? await loadVideo(segment.src)
+      : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight })),
   })));
   throwIfExportAborted(options.signal);
   return { segments, timeline, items, stickerImages, overlayItems };
@@ -260,7 +268,8 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
   if (next?.segment.type === "video") await seekVideoFrame(next.visual, getVisualSourceTime(next.segment, transitionProgress * transitionDuration));
   const captionSegments = options.captionSegments?.length ? options.captionSegments : createCaptionSegments(options.text);
   const captionIndex = getSegmentIndexAtTime(captionSegments, time, options.captionTargetDuration || 0);
-  const caption = captionIndex >= 0 && !captionSegments[captionIndex]?.hidden ? captionSegments[captionIndex].text : "";
+  const activeCaptionSegment = captionIndex >= 0 ? captionSegments[captionIndex] : null;
+  const caption = activeCaptionSegment && !activeCaptionSegment.hidden ? activeCaptionSegment.text : "";
   const stickers = getOfflineStickersAtTime(options.stickerSegments, options.sticker, time);
   const activeOverlaySegments = getOfflineVisualOverlaysAtTime(prepared.overlayItems.map((item) => item.segment), time);
   const activeOverlayIds = new Set(activeOverlaySegments.map((segment) => segment.id));
@@ -276,7 +285,8 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
     subtitle: caption, fitMode: options.fitMode, filter: options.filter,
     captionsEnabled: options.captionsEnabled, captionPosition: options.captionPosition,
     captionPlacement: options.captionPlacement, captionSize: options.captionSize,
-    captionStyle: options.captionStyle, captionReferenceSize: options.captionReferenceSize,
+    captionStyle: resolveCaptionStyleForSegment(options.captionStyle, activeCaptionSegment),
+    captionReferenceSize: options.captionReferenceSize,
     stickers, stickerImages: stickers.map((sticker) => prepared.stickerImages.get(sticker.src)),
     transitionId: next ? junction.id : "none",
     transitionNext: next ? { visual: next.cutoutVisual || next.visual } : null,

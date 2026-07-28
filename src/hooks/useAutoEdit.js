@@ -66,7 +66,11 @@ export function useAutoEdit({ language, visualSegments, captionSegments, commitC
     setJob({ running: true, progress: 15, phase: t("autoEditWritingCaptions") });
     try {
       const text = await generateImageVoiceoverText({ src: segment.src, language });
-      const caption = { id: makeId("caption"), text, start, end, hidden: false, visualSegmentId: segment.id };
+      const previousCaption = [...captionSegments]
+        .sort((left, right) => (Number(left.start) || 0) - (Number(right.start) || 0))
+        .filter((item) => (Number(item.start) || 0) <= start)
+        .at(-1);
+      const caption = { id: makeId("caption"), text, start, end, hidden: false, fontId: previousCaption?.fontId || "default", visualSegmentId: segment.id };
       const next = [...captionSegments, caption].sort((a, b) => (Number(a.start) || 0) - (Number(b.start) || 0));
       commitCaptionSegments(next, t("imageAiCaptionAdded"), next.findIndex((item) => item.id === caption.id));
       setCaptionsEnabled(true);

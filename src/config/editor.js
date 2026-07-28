@@ -216,7 +216,7 @@ export const RATIO_OPTIONS = [
   { id: "4:5", label: "4:5", width: 1080, height: 1350 },
 ];
 
-export const FILTER_OPTIONS = [
+const BASIC_FILTER_OPTIONS = [
   { id: "none", name: "原片", css: "none" },
   { id: "cool", name: "冷调清透", css: "contrast(1.04) saturate(0.96) hue-rotate(8deg)" },
   { id: "film", name: "胶片暗角", css: "contrast(1.12) saturate(0.82) brightness(0.92)" },
@@ -235,7 +235,8 @@ export const EFFECT_OPTIONS = [
   { id: "effect-dream", name: "梦幻", css: "brightness(1.1) saturate(1.18) blur(0.2px)" },
 ];
 
-export const VISUAL_STYLE_OPTIONS = [...FILTER_OPTIONS, ...EFFECT_OPTIONS];
+export const FILTER_OPTIONS = [...BASIC_FILTER_OPTIONS, ...EFFECT_OPTIONS];
+export const VISUAL_STYLE_OPTIONS = FILTER_OPTIONS;
 
 export const TRANSITIONS = [
   { id: "none", name: "无转场" },

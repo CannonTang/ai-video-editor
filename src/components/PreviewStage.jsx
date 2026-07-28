@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   CaretDown,
@@ -18,12 +18,32 @@ import { formatTime } from "../lib/timeline.js";
 import { getVisualMaskInsets, getVisualMaskSvgDataUrl, resolveVisualTransform, snapVisualScaleToFrameEdges } from "../lib/visualEffects.js";
 import { resolveVisualClipAnimation } from "../lib/visualClipAnimations.js";
 import { getStickerBaseSize } from "../lib/stickerGeometry.js";
+import { resolveCaptionStyleForSegment } from "../lib/captionFonts.js";
 import { CaptionOverlay } from "./CaptionOverlay.jsx";
 import { IconButton } from "./ui.jsx";
-import { getVisualOverlayPixelBox, snapVisualOverlayTransform } from "../lib/visualOverlayTimeline.js";
+import { getVisualOverlayPixelBox, resolveVisualOverlayTransform, snapVisualOverlayTransform } from "../lib/visualOverlayTimeline.js";
 import { getAnchoredResize } from "../lib/anchoredResize.js";
 import { getVisualFitRect } from "../lib/visualGeometry.js";
-import { RATIO_OPTIONS } from "../config/editor.js";
+import { getOverlayToolbarPosition } from "../lib/overlayToolbarPlacement.js";
+import { FILTER_OPTIONS, RATIO_OPTIONS } from "../config/editor.js";
+import { getVectorDesignAppearance, getVectorRenderSource } from "../lib/vectorDesign.js";
+
+function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
+  const videoRef = useRef(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || overlay.type !== "video") return;
+    const playbackRate = Math.max(0.25, Math.min(4, Number(overlay.playbackRate) || 1));
+    const sourceTime = Math.max(0, Number(overlay.sourceStart) || 0) + Math.max(0, localTime) * playbackRate;
+    video.playbackRate = playbackRate;
+    if (Number.isFinite(video.duration) && Math.abs(video.currentTime - sourceTime) > 0.12) video.currentTime = Math.min(sourceTime, Math.max(0, video.duration - 0.01));
+    if (isPlaying) video.play().catch(() => {});
+    else video.pause();
+  }, [isPlaying, localTime, overlay.playbackRate, overlay.sourceStart, overlay.type]);
+  return overlay.type === "video"
+    ? <video ref={videoRef} src={src} crossOrigin="anonymous" muted={overlay.muted === true} playsInline preload="metadata" style={style} />
+    : <img src={src} alt="" crossOrigin="anonymous" draggable={false} style={style} />;
+}
 
 export function PreviewStage({
   t,
@@ -90,6 +110,8 @@ export function PreviewStage({
   selectedVisualOverlayId = "",
   onSelectVisualOverlay,
   onUpdateVisualOverlay,
+  visualOverlayMaskEditable = false,
+  onUpdateVisualOverlayMask,
   onReorderVisualOverlay,
 }) {
   const [overlaySnapGuides, setOverlaySnapGuides] = useState([]);
@@ -101,8 +123,8 @@ export function PreviewStage({
   const focusPreviewOrientation = previewRatioValue > 1.1 ? "landscape" : previewRatioValue < 0.9 ? "portrait" : "square";
   const visibleStickers = stickers;
   const hasStickerOverlay = visibleStickers.some((sticker) => sticker?.src || sticker?.text);
-  const hasPreviewContent = Boolean(previewVisualSrc || hasStickerOverlay);
-  const renderedVisualSrc = previewVisualRenderSrc || previewVisualSrc;
+  const hasPreviewContent = Boolean(previewVisualSrc || hasStickerOverlay || visualOverlays.length);
+  const baseRenderedVisualSrc = previewVisualRenderSrc || previewVisualSrc;
   const activeObjectFit = visualObjectFit || fitMode;
   const activeObjectPosition = visualObjectPosition || "50% 50%";
   const visualTransform = resolveVisualTransform(visualEffects?.keyframes, visualLocalTime, visualEffects?.baseTransform);
@@ -121,6 +143,15 @@ export function PreviewStage({
     : previewFrameStyle;
   const frameWidth = Math.max(1, activePreviewFrameSize.width || 1);
   const frameHeight = Math.max(1, activePreviewFrameSize.height || 1);
+  const previewPixelRatio = typeof window === "undefined" ? 1 : Math.max(1, window.devicePixelRatio || 1);
+  const renderedVisualSrc = visualEffects?.kind === "vector" || visualEffects?.vectorBody
+    ? getVectorRenderSource(visualEffects, {
+        targetWidth: frameWidth,
+        targetHeight: frameHeight,
+        pixelRatio: previewPixelRatio,
+        scale: Math.max(1, visualTransform.scale * visualAnimation.scale),
+      })
+    : baseRenderedVisualSrc;
   const frameMinDimension = Math.min(frameWidth, frameHeight);
   const stickerBaseSize = getStickerBaseSize({ width: frameWidth, height: frameHeight });
   const circleSize = Number.isFinite(visualMask.size) ? visualMask.size : 72;
@@ -276,7 +307,7 @@ export function PreviewStage({
     onSelectVisualOverlay?.(overlay.id);
     const rect = frame.getBoundingClientRect();
     const localTime = Math.max(0, currentTime - (overlay.start || 0));
-    const initial = resolveVisualTransform(overlay.keyframes, localTime);
+    const initial = resolveVisualOverlayTransform(overlay, localTime);
     const startX = event.clientX; const startY = event.clientY;
     const centerX = rect.left + rect.width * (0.5 + initial.x / 100);
     const centerY = rect.top + rect.height * (0.5 + initial.y / 100);
@@ -287,7 +318,7 @@ export function PreviewStage({
         const candidate = { ...initial, x: round(initial.x + (moveEvent.clientX - startX) / Math.max(1, rect.width) * 100), y: round(initial.y + (moveEvent.clientY - startY) / Math.max(1, rect.height) * 100) };
         const snapped = snapVisualOverlayTransform(candidate);
         setOverlaySnapGuides(snapped.guides);
-        onUpdateVisualOverlay(snapped.transform);
+        onUpdateVisualOverlay(overlay.id, snapped.transform);
       }
       if (mode.startsWith("scale")) {
         const handle = mode.slice(6);
@@ -295,15 +326,59 @@ export function PreviewStage({
         let candidate = getAnchoredResize({ handle, pointer: { x: moveEvent.clientX, y: moveEvent.clientY }, frame: rect, box, transform: initial });
         const clampedScale = Math.max(0.08, Math.min(4, candidate.scale));
         candidate = getAnchoredResize({ handle, pointer: { x: moveEvent.clientX, y: moveEvent.clientY }, frame: rect, box, transform: initial, scale: clampedScale });
-        onUpdateVisualOverlay({ ...candidate, x: round(candidate.x), y: round(candidate.y), scale: round(candidate.scale) });
+        onUpdateVisualOverlay(overlay.id, { ...candidate, x: round(candidate.x), y: round(candidate.y), scale: round(candidate.scale) });
       }
       if (mode === "rotate") {
         const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX) * 180 / Math.PI;
-        onUpdateVisualOverlay({ ...initial, rotation: round(initial.rotation + angle - startAngle) });
+        onUpdateVisualOverlay(overlay.id, { ...initial, rotation: round(initial.rotation + angle - startAngle) });
       }
     };
     const end = () => { setOverlaySnapGuides([]); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", end, { once: true });
+  };
+  const startOverlayMaskEdit = (event, mode, overlay) => {
+    if (!overlay || !onUpdateVisualOverlayMask) return;
+    const layer = event.currentTarget.closest(".visual-overlay-layer");
+    if (!layer) return;
+    event.preventDefault(); event.stopPropagation();
+    const mask = overlay.mask ?? {};
+    const centerX = Number.isFinite(mask.centerX) ? mask.centerX : 50;
+    const centerY = Number.isFinite(mask.centerY) ? mask.centerY : 50;
+    const isCircle = mask.type === "circle";
+    const width = isCircle ? (Number.isFinite(mask.size) ? mask.size : 72) : (Number.isFinite(mask.width) ? mask.width : 80);
+    const height = isCircle ? width : (Number.isFinite(mask.height) ? mask.height : 80);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const radians = -(Number(overlay.baseTransform?.rotation) || 0) * Math.PI / 180;
+    const move = (moveEvent) => {
+      const clientDx = moveEvent.clientX - startX;
+      const clientDy = moveEvent.clientY - startY;
+      const localDx = clientDx * Math.cos(radians) - clientDy * Math.sin(radians);
+      const localDy = clientDx * Math.sin(radians) + clientDy * Math.cos(radians);
+      const dx = localDx / Math.max(1, layer.offsetWidth) * 100;
+      const dy = localDy / Math.max(1, layer.offsetHeight) * 100;
+      if (mode === "move") {
+        onUpdateVisualOverlayMask({
+          ...mask,
+          centerX: Math.max(width / 2, Math.min(100 - width / 2, centerX + dx)),
+          centerY: Math.max(height / 2, Math.min(100 - height / 2, centerY + dy)),
+        });
+      } else if (isCircle) {
+        onUpdateVisualOverlayMask({ ...mask, size: Math.max(8, Math.min(100, width + Math.max(dx, dy) * 2)) });
+      } else {
+        onUpdateVisualOverlayMask({
+          ...mask,
+          width: Math.max(8, Math.min(100, width + dx * 2)),
+          height: Math.max(8, Math.min(100, height + dy * 2)),
+        });
+      }
+    };
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end, { once: true });
   };
 
   useEffect(() => {
@@ -441,6 +516,7 @@ export function PreviewStage({
                 {previewVisualType === "image" ? <img
                   src={renderedVisualSrc}
                   alt={t("currentMediaAlt")}
+                  crossOrigin="anonymous"
                   style={{ ...visualTransformStyle, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
                 /> : null}
                 {previewVisualType === "video" ? <video
@@ -448,6 +524,7 @@ export function PreviewStage({
                   ref={previewVideoRef}
                   className="preview-video"
                   src={previewVisualSrc}
+                  crossOrigin="anonymous"
                   muted={previewVisualMuted}
                   playsInline
                   preload="metadata"
@@ -476,9 +553,8 @@ export function PreviewStage({
                 /> : null}
               </div>
             ) : null}
-            {renderedVisualSrc && trackVisibility.image && visualTransformEditable && (!visualMask.type || visualMask.type === "none") ? (
+            {renderedVisualSrc && trackVisibility.image && visualTransformEditable && !visualMaskEditable ? (
               <div className="visual-transform-box" style={visualTransformBoxStyle} onPointerDown={(event) => startVisualTransform(event, "move")}>
-                <span className="visual-transform-label">{t("visualBasic", "画面")}</span>
                 <button className="visual-transform-rotate" type="button" aria-label={t("visualRotation", "旋转")} onPointerDown={(event) => startVisualTransform(event, "rotate")} />
                 {['nw', 'ne', 'sw', 'se'].map((corner) => <button key={corner} className={`visual-transform-handle is-${corner}`} type="button" aria-label={t("visualScale", "缩放")} onPointerDown={(event) => startVisualTransform(event, `scale-${corner}`)} />)}
               </div>
@@ -486,38 +562,103 @@ export function PreviewStage({
             {previewTransition?.next?.src && trackVisibility.image ? (
               <div className={`preview-transition-layer type-${previewTransition.id}`} style={{ "--transition-progress": previewTransition.progress }}>
                 {previewTransition.next.type === "video" ? (
-                  <video src={previewTransition.next.src} muted playsInline autoPlay preload="auto" style={{ objectFit: activeObjectFit, objectPosition: activeObjectPosition }} />
+                  <video src={previewTransition.next.src} crossOrigin="anonymous" muted playsInline autoPlay preload="auto" style={{ objectFit: activeObjectFit, objectPosition: activeObjectPosition }} />
                 ) : (
-                  <img src={previewTransition.next.src} alt="" style={{ objectFit: activeObjectFit, objectPosition: activeObjectPosition }} />
+                  <img src={previewTransition.next.src} alt="" crossOrigin="anonymous" style={{ objectFit: activeObjectFit, objectPosition: activeObjectPosition }} />
                 )}
                 {previewTransition.id === "flash" ? <i /> : null}
               </div>
             ) : null}
             {visualOverlays.map((overlay) => {
               const localTime = Math.max(0, currentTime - (overlay.start || 0));
-              const transform = resolveVisualTransform(overlay.keyframes, localTime);
-              const containBox = getVisualOverlayPixelBox(overlay, activePreviewFrameSize);
-              const style = {
-                left: `${50 + transform.x}%`,
-                top: `${50 + transform.y}%`,
-                width: `${containBox.width * transform.scale}px`,
-                height: `${containBox.height * transform.scale}px`,
-                transform: `translate(-50%, -50%) rotate(${transform.rotation}deg)`,
-                opacity: transform.opacity,
+              const transform = resolveVisualOverlayTransform(overlay, localTime);
+              const animation = resolveVisualClipAnimation(overlay.animation, localTime, overlay.duration);
+              const animatedTransform = {
+                ...transform,
+                x: transform.x + animation.x,
+                y: transform.y + animation.y,
+                scale: transform.scale * animation.scale,
+                opacity: transform.opacity * animation.opacity,
               };
+              const vectorAppearance = getVectorDesignAppearance(overlay.vectorDesign);
+              const isVector = overlay.kind === "vector" || Boolean(overlay.vectorBody);
+              const containBox = getVisualOverlayPixelBox(overlay, activePreviewFrameSize);
+              const overlayFilter = FILTER_OPTIONS.find((option) => option.id === overlay.filterId)?.css || "none";
+              const overlayMask = overlay.mask ?? { type: "none" };
+              const hasOverlayMask = overlayMask.type && overlayMask.type !== "none";
+              const overlayMaskUrl = hasOverlayMask
+                ? getVisualMaskSvgDataUrl(overlayMask, {
+                    width: Math.max(1, containBox.width * animatedTransform.scale),
+                    height: Math.max(1, containBox.height * animatedTransform.scale),
+                  })
+                : "";
+              const style = {
+                left: `${50 + animatedTransform.x}%`,
+                top: `${50 + animatedTransform.y}%`,
+                width: `${containBox.width * animatedTransform.scale}px`,
+                height: `${containBox.height * animatedTransform.scale}px`,
+                transform: `translate(-50%, -50%) rotate(${animatedTransform.rotation}deg)`,
+                opacity: animatedTransform.opacity * (isVector ? vectorAppearance.opacity : 1),
+                mixBlendMode: isVector ? vectorAppearance.cssBlendMode : undefined,
+                WebkitMaskImage: overlayMaskUrl ? `url("${overlayMaskUrl}")` : undefined,
+                maskImage: overlayMaskUrl ? `url("${overlayMaskUrl}")` : undefined,
+                WebkitMaskSize: overlayMaskUrl ? "100% 100%" : undefined,
+                maskSize: overlayMaskUrl ? "100% 100%" : undefined,
+                WebkitMaskRepeat: overlayMaskUrl ? "no-repeat" : undefined,
+                maskRepeat: overlayMaskUrl ? "no-repeat" : undefined,
+              };
+              const mediaStyle = { filter: isVector ? vectorAppearance.filter : overlayFilter };
+              const overlayRenderSrc = isVector
+                ? getVectorRenderSource(overlay, {
+                    targetWidth: containBox.width * animatedTransform.scale,
+                    targetHeight: containBox.height * animatedTransform.scale,
+                    pixelRatio: previewPixelRatio,
+                    scale: 1,
+                  })
+                : overlay.src;
               const selected = overlay.id === selectedVisualOverlayId;
-              return <div className={`visual-overlay-layer ${selected ? "is-selected" : ""}`} key={overlay.id} style={{ ...style, zIndex: 3 + (overlay.layer || 1) }} onPointerDown={(event) => startOverlayTransform(event, "move", overlay)}>
-                {overlay.type === "video" ? <video src={overlay.src} muted={overlay.muted === true} playsInline autoPlay={isPlaying} preload="metadata" /> : <img src={overlay.src} alt="" draggable={false} />}
-                {selected && !isPlaying ? <>
-                  <span className="visual-transform-label">{overlay.name || t("pictureInPicture", "画中画")}</span>
-                  <div className="visual-overlay-order-actions">
-                    <button type="button" aria-label={t("moveLayerUp", "上移一层")} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onReorderVisualOverlay?.(overlay.id, 1); }}><ArrowUp size={12} /></button>
-                    <button type="button" aria-label={t("moveLayerDown", "下移一层")} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); onReorderVisualOverlay?.(overlay.id, -1); }}><ArrowDown size={12} /></button>
+              const overlayCenterX = frameWidth * (0.5 + animatedTransform.x / 100);
+              const overlayCenterY = frameHeight * (0.5 + animatedTransform.y / 100);
+              const overlayToolbar = getOverlayToolbarPosition({
+                frameWidth,
+                frameHeight,
+                centerX: overlayCenterX,
+                centerY: overlayCenterY,
+                width: containBox.width * animatedTransform.scale,
+                height: containBox.height * animatedTransform.scale,
+                rotation: animatedTransform.rotation,
+              });
+              return <Fragment key={overlay.id}>
+                <div className={`visual-overlay-layer ${selected ? "is-selected" : ""}`} style={{ ...style, zIndex: 3 + (overlay.layer || 1) }} onPointerDown={(event) => startOverlayTransform(event, "move", overlay)}>
+                  <VisualOverlayMedia overlay={overlay} src={overlayRenderSrc} style={mediaStyle} isPlaying={isPlaying} localTime={localTime} />
+                  {selected && !isPlaying && hasOverlayMask && visualOverlayMaskEditable ? <div
+                    className={`visual-mask-editor is-${overlayMask.type}`}
+                    style={{
+                      left: `${(Number.isFinite(overlayMask.centerX) ? overlayMask.centerX : 50) - (overlayMask.type === "circle" ? (Number.isFinite(overlayMask.size) ? overlayMask.size : 72) : (Number.isFinite(overlayMask.width) ? overlayMask.width : 80)) / 2}%`,
+                      top: `${(Number.isFinite(overlayMask.centerY) ? overlayMask.centerY : 50) - (overlayMask.type === "circle" ? (Number.isFinite(overlayMask.size) ? overlayMask.size : 72) : (Number.isFinite(overlayMask.height) ? overlayMask.height : 80)) / 2}%`,
+                      width: `${overlayMask.type === "circle" ? (Number.isFinite(overlayMask.size) ? overlayMask.size : 72) : (Number.isFinite(overlayMask.width) ? overlayMask.width : 80)}%`,
+                      height: `${overlayMask.type === "circle" ? (Number.isFinite(overlayMask.size) ? overlayMask.size : 72) : (Number.isFinite(overlayMask.height) ? overlayMask.height : 80)}%`,
+                    }}
+                    onPointerDown={(event) => startOverlayMaskEdit(event, "move", overlay)}
+                  ><span>{t("visualMask")}</span><button type="button" aria-label={t("visualMaskResize")} onPointerDown={(event) => startOverlayMaskEdit(event, "resize", overlay)} /></div> : null}
+                  {selected && !isPlaying && !visualOverlayMaskEditable ? <>
+                    <button className="visual-transform-rotate" type="button" aria-label={t("visualRotation", "旋转")} onPointerDown={(event) => startOverlayTransform(event, "rotate", overlay)} />
+                    {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => <button key={handle} className={`visual-transform-handle is-${handle}`} type="button" aria-label={t("visualScale", "缩放")} onPointerDown={(event) => startOverlayTransform(event, `scale-${handle}`, overlay)} />)}
+                  </> : null}
+                </div>
+                {selected && !isPlaying ? (
+                  <div
+                    className={`visual-overlay-order-actions is-${overlayToolbar.placement}`}
+                    style={{ left: `${overlayToolbar.left}px`, top: `${overlayToolbar.top}px` }}
+                    role="toolbar"
+                    aria-label={t("pictureInPicture", "画中画")}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    <button type="button" title={t("moveLayerUp", "上移一层")} aria-label={t("moveLayerUp", "上移一层")} onClick={(event) => { event.stopPropagation(); onReorderVisualOverlay?.(overlay.id, 1); }}><ArrowUp size={15} /></button>
+                    <button type="button" title={t("moveLayerDown", "下移一层")} aria-label={t("moveLayerDown", "下移一层")} onClick={(event) => { event.stopPropagation(); onReorderVisualOverlay?.(overlay.id, -1); }}><ArrowDown size={15} /></button>
                   </div>
-                  <button className="visual-transform-rotate" type="button" aria-label={t("visualRotation", "旋转")} onPointerDown={(event) => startOverlayTransform(event, "rotate", overlay)} />
-                  {['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map((handle) => <button key={handle} className={`visual-transform-handle is-${handle}`} type="button" aria-label={t("visualScale", "缩放")} onPointerDown={(event) => startOverlayTransform(event, `scale-${handle}`, overlay)} />)}
-                </> : null}
-              </div>;
+                ) : null}
+              </Fragment>;
             })}
             {overlaySnapGuides.map((guide) => <div className={`visual-snap-guide is-${guide}`} key={guide} />)}
             {showVisionOverlays
@@ -560,7 +701,7 @@ export function PreviewStage({
                       key={caption.id}
                       text={caption.text}
                       captionSize={captionSize}
-                      captionStyle={captionStyle}
+                      captionStyle={resolveCaptionStyleForSegment(captionStyle, caption)}
                       placement={{
                         ...basePlacement,
                         y: basePlacement.y + (caption.placement ? 0 : (index - (visibleCaptions.length - 1) / 2) * 12),

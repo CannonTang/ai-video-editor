@@ -80,6 +80,7 @@ import {
 } from "./lib/exportSettings.js";
 import { createVisualOverlaySegment, getVisualOverlayPreset, updateVisualOverlayTransform } from "./lib/visualOverlayTimeline.js";
 import { getMobileClipPanelOrigin } from "./lib/mobileClipActions.js";
+import { getVisualPropertyTabIds } from "./lib/visualPropertyTabs.js";
 
 export function App() {
   const [uiLanguage, setUiLanguage] = useState(() => getStoredLanguage());
@@ -87,6 +88,18 @@ export function App() {
   const [mobilePanelClosing, setMobilePanelClosing] = useState(false);
   const mobilePanelTimerRef = useRef(null);
   const [mobilePanelOrigin, setMobilePanelOrigin] = useState("");
+  const [mobileInspectorSection, setMobileInspectorSection] = useState("");
+  const [isMobileViewport, setIsMobileViewport] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches
+  ));
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 760px)");
+    if (!query) return undefined;
+    const update = () => setIsMobileViewport(query.matches);
+    update();
+    query.addEventListener?.("change", update);
+    return () => query.removeEventListener?.("change", update);
+  }, []);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [exportSettings, setExportSettings] = useState(() => loadExportSettings());
   useEffect(() => {
@@ -108,6 +121,7 @@ export function App() {
         setMobilePanel("");
         setMobilePanelClosing(false);
         setMobilePanelOrigin("");
+        setMobileInspectorSection("");
         mobilePanelTimerRef.current = null;
       }, 170);
       return;
@@ -308,6 +322,30 @@ export function App() {
   const selectedVisualOverlay = visualOverlaySegments.find((item) => item.id === selectedVisualOverlayId) ?? null;
   const selectedVisualRange = visualTimeline[selectedVisualSegmentIndex] ?? previewVisualRange;
   const [visualAnimationPreview, setVisualAnimationPreview] = useState(null);
+  const [visualCanvasEditMode, setVisualCanvasEditMode] = useState("transform");
+  useEffect(() => {
+    if (!isMobileViewport || mobilePanel !== "inspector" || !mobileInspectorSection) return;
+    if (!["visual-clip", "overlay-clip"].includes(mobilePanelOrigin)) return;
+    const segment = mobilePanelOrigin === "overlay-clip" ? selectedVisualOverlay : selectedVisualSegment;
+    if (!segment) return;
+    const isVector = segment.kind === "vector"
+      || Boolean(segment.vectorBody)
+      || String(segment.assetId || "").startsWith("vector-");
+    const supportedSections = getVisualPropertyTabIds({
+      isVector,
+      isVideo: segment.type === "video",
+      isOverlay: mobilePanelOrigin === "overlay-clip",
+      hasVectorEditor: isVector,
+    });
+    if (!supportedSections.includes(mobileInspectorSection)) setMobileInspectorSection(supportedSections[0] || "transform");
+  }, [
+    isMobileViewport,
+    mobileInspectorSection,
+    mobilePanel,
+    mobilePanelOrigin,
+    selectedVisualOverlay,
+    selectedVisualSegment,
+  ]);
   useEffect(() => {
     const clearCanvasVisualTarget = (event) => {
       if (event.target instanceof Element && event.target.closest(".preview-frame")) return;
@@ -336,6 +374,7 @@ export function App() {
       if (Number.isFinite(change.removeKeyframeAt)) return { ...item, keyframes: (item.keyframes ?? []).filter((frame) => Math.abs(frame.time - change.removeKeyframeAt) > 0.04) };
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
+      if (change.vectorPatch && (item.kind === "vector" || item.vectorBody)) return { ...item, ...change.vectorPatch };
       if (typeof change.enhancementEnabled === "boolean" && item.enhancement) {
         if (["remaster-drunet-full", "nanovsr-644k"].includes(item.enhancement.mode)) {
           const source = change.enhancementEnabled ? item.enhancement.processed : item.enhancement.original;
@@ -419,6 +458,11 @@ export function App() {
 
   const { builtInAssets, filteredVoices, libraryType, libraryQuery, setLibraryQuery,
     selectLibraryType, libraryStatus, libraryError, libraryProvider, assetDownloadStates, prefetchLibraryAsset } = useEditorCatalog(voiceFilter);
+  const handleGeneratedVector = (asset) => {
+    setUserAssets((current) => [asset, ...current]);
+    setSelectedLibraryAssetId(asset.id);
+    setMediaTab("mine");
+  };
 
   const {
     canDropAssetOnTrack, findAssetById, getActiveDraggedAsset, getDraggedAsset,
@@ -456,7 +500,7 @@ export function App() {
     startCaptionDrag, toggleCaptionSegmentHidden,
     unlinkAudioCaptions, unlinkCaptionAudio, updateCaptionSegmentText, updateScript,
   } = createCaptionEditingActions({
-    audioSegments, captionSegments, currentCaptionSegment, focusedSegmentIndex,
+    audioSegments, captionSegments, captionStyle, currentCaptionSegment, focusedSegmentIndex,
     notify, previewCanvasRef, previewVisionKey, previewVisionRecord, script,
     selectedSegmentId, setCaptionPlacement, setCaptionPosition, setCaptionSegments,
     setScript, setSelectedSegmentId, setSelectedTrack,
@@ -630,7 +674,7 @@ export function App() {
 
   const { handleAddCaptionSegment, handleAddSegment, handleRemoveSegment } = createTimelineSegmentCountActions({
     captionSegments, clearImageTrack, commitCaptionSegments, commitStickerSegments,
-    commitVisualSegments, currentStickerSegmentIndex, currentTime,
+    commitVisualSegments, currentStickerSegmentIndex, currentTime, captionStyle,
     currentVisualSegmentIndex, deleteCaptionSegment, focusedSegmentIndex,
     getCurrentVisualAssetSnapshot, getStickerDragAsset, imageClipCount,
     imageDuration, imageSrc, notify, selectedSegmentId, selectedSegmentIndex,
@@ -738,7 +782,7 @@ export function App() {
   });
 
   const generateCaptionsFromSourceAudio = useAutoCaptions({
-    notify, script, seekTo, setActiveTool, setCaptionSegments,
+    notify, script, seekTo, setActiveTool, setCaptionSegments, captionStyle,
     setCaptionsEnabled, setProgress, setScript, setSelectedSegmentId,
     setSelectedTrack, setStatus, setStatusText, setTrackVisibility, sourceAudioBlob,
     sourceAudioStart, status, t, trackLocks, uiLanguage,
@@ -781,13 +825,34 @@ export function App() {
     setSelectedTrack("overlay");
     notify("已添加为画中画，可在预览中拖动、缩放和旋转");
   };
-  const updateSelectedVisualOverlay = (transform) => {
+  const updateVisualOverlayById = (overlayId, transform) => {
+    if (!overlayId || trackLocks.overlay) return;
+    setVisualOverlaySegments((items) => items.map((item) => {
+      if (item.id !== overlayId) return item;
+      const localTime = Math.max(0, currentTime - item.start);
+      return item.keyframes?.length
+        ? updateVisualOverlayTransform(item, localTime, transform)
+        : { ...item, baseTransform: normalizeVisualTransform({ ...item.baseTransform, ...transform }) };
+    }));
+  };
+  const updateSelectedVisualOverlay = (transform) => updateVisualOverlayById(selectedVisualOverlayId, transform);
+  const updateSelectedVisualOverlayEffects = (change) => {
     const overlay = visualOverlaySegments.find((item) => item.id === selectedVisualOverlayId);
     if (!overlay || trackLocks.overlay) return;
-    const localTime = Math.max(0, currentTime - overlay.start);
-    setVisualOverlaySegments((items) => items.map((item) => item.id === overlay.id
-      ? updateVisualOverlayTransform(item, localTime, transform)
-      : item));
+    setVisualOverlaySegments((items) => items.map((item) => {
+      if (item.id !== overlay.id) return item;
+      if (Number.isFinite(change.playbackRate) && item.type === "video") return updateVisualSegmentPlaybackRate(item, change.playbackRate);
+      if (change.baseTransform) return { ...item, baseTransform: normalizeVisualTransform({ ...item.baseTransform, ...change.baseTransform }) };
+      if (change.keyframe) return { ...item, keyframes: upsertVisualKeyframe(item.keyframes, change.keyframe.time, change.keyframe) };
+      if (change.propertyKeyframe) return { ...item, keyframes: upsertVisualPropertyKeyframe(item.keyframes, change.propertyKeyframe.time, change.propertyKeyframe.key, change.propertyKeyframe.value) };
+      if (change.removePropertyKeyframe) return { ...item, keyframes: removeVisualPropertyKeyframe(item.keyframes, change.removePropertyKeyframe.time, change.removePropertyKeyframe.key) };
+      if (Number.isFinite(change.removeKeyframeAt)) return { ...item, keyframes: (item.keyframes ?? []).filter((frame) => Math.abs(frame.time - change.removeKeyframeAt) > 0.04) };
+      if (change.mask) return { ...item, mask: change.mask };
+      if (change.animation) return { ...item, animation: change.animation };
+      if (change.timing) return { ...item, ...change.timing };
+      if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
+      return item;
+    }));
   };
 
   const { handleExportProject, handleImportProject, handleNewProject } = useProjectFiles({
@@ -860,7 +925,7 @@ export function App() {
   });
 
   return (
-    <main className={`app-shell ${mobilePanel ? `mobile-panel-${mobilePanel}` : ""} ${mobilePanelClosing ? "is-mobile-panel-closing" : ""}`} lang={activeLanguage} onDragOver={(event) => {
+    <main className={`app-shell ${mobilePanel ? `mobile-panel-${mobilePanel}` : ""} ${isMobileViewport && mobileInspectorSection ? `mobile-section-${mobileInspectorSection}` : ""} ${isMobileViewport && mobileInspectorSection === "mask" && (selectedVisualOverlay || selectedVisualSegment)?.mask?.type && (selectedVisualOverlay || selectedVisualSegment).mask.type !== "none" ? "mobile-mask-active" : ""} ${mobilePanelClosing ? "is-mobile-panel-closing" : ""}`} lang={activeLanguage} onDragOver={(event) => {
       if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
     }} onDrop={async (event) => {
       const files = Array.from(event.dataTransfer?.files ?? []);
@@ -879,6 +944,17 @@ export function App() {
       }
       handleFiles(files);
     }}>
+      <input
+        ref={fileInputRef}
+        className="sr-only"
+        type="file"
+        accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mka,audio/mpeg,audio/wav,audio/mp4,audio/aac,audio/ogg,audio/flac,.ac3"
+        multiple
+        onChange={(event) => {
+          handleFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
       <Topbar
         t={t}
         compactRail={compactRail}
@@ -937,7 +1013,7 @@ export function App() {
           previewVisionOptions, previewVisualSrc, previewVisualType, progress, script,
           seekTo, segments, selectTool, selectedCaptionSegment, selectedFilterId,
           selectedLibraryAssetId, selectedSegmentId, selectedStickerId, selectedTransitionId,
-          selectedVoice, setCaptionSize, setCaptionStyle, setCaptionsEnabled, setIsDragging,
+          selectedVoice, setCaptionSegments, setCaptionSize, setCaptionStyle, setCaptionsEnabled, setIsDragging,
           setMediaTab, setMusicVolume, setSelectedAudioSegmentId, setSelectedFilterId, setSelectedSegmentId,
           setSelectedStickerId, setSelectedTrack, setSelectedTransitionId, setSourceAudioVolume, setVoiceTab,
           sourceAudioBlob, sourceAudioDuration, sourceAudioLinked, sourceAudioName, sourceAudioVolume, status, t,
@@ -945,7 +1021,7 @@ export function App() {
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
           selectedVisualSegment, visualLocalTime, updateSelectedVisualEffects, miganRepair, hdRestoration,
-          mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack,
+          mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
 
         <PreviewStage
@@ -970,9 +1046,9 @@ export function App() {
           visualLocalTime={visualAnimationPreview?.segmentId && visualAnimationPreview.segmentId === previewVisualSegment?.id
             ? visualAnimationPreview.localTime
             : previewVisualLocalTime}
-          visualMaskEditable={selectedTrack === "image" && Boolean(selectedVisualSegment)}
+          visualMaskEditable={selectedTrack === "image" && Boolean(selectedVisualSegment) && visualCanvasEditMode === "mask"}
           onUpdateVisualMask={(mask) => updateSelectedVisualEffects({ mask })}
-          visualTransformEditable={canvasVisualTarget === `visual:${previewVisualSegment?.id ?? ""}` && !isPlaying}
+          visualTransformEditable={canvasVisualTarget === `visual:${previewVisualSegment?.id ?? ""}` && visualCanvasEditMode !== "mask" && !isPlaying}
           onSelectVisual={() => {
             if (!previewVisualSegment?.id) return;
             setSelectedVisualSegmentId(previewVisualSegment.id);
@@ -1040,7 +1116,9 @@ export function App() {
             setSelectedTrack("overlay");
             setCanvasVisualTarget(`overlay:${id}`);
           }}
-          onUpdateVisualOverlay={updateSelectedVisualOverlay}
+          onUpdateVisualOverlay={updateVisualOverlayById}
+          visualOverlayMaskEditable={visualCanvasEditMode === "mask"}
+          onUpdateVisualOverlayMask={(mask) => updateSelectedVisualOverlayEffects({ mask })}
           onReorderVisualOverlay={(id, direction) => setVisualOverlaySegments((items) => {
             const ordered = [...items].sort((a, b) => (a.layer || 1) - (b.layer || 1));
             const index = ordered.findIndex((item) => item.id === id);
@@ -1111,6 +1189,7 @@ export function App() {
           deleteCaptionSegment={deleteCaptionSegment}
           importCaptionSegments={importCaptionSegments}
           addCaptionSegment={handleAddCaptionSegment}
+          currentTime={currentTime}
           seekTo={seekTo}
           sourceAudioBlob={sourceAudioBlob}
           sourceAudioLinked={sourceAudioLinked}
@@ -1122,6 +1201,9 @@ export function App() {
           aiMusic={aiMusic}
           autoEdit={autoEdit}
           uiLanguage={activeLanguage}
+          captionStyle={captionStyle}
+          setCaptionStyle={setCaptionStyle}
+          setCaptionSegments={setCaptionSegments}
           visionAnalysis={previewVisionAnalysis}
           visionOptions={previewVisionOptions}
           visionRunning={visionJob.running && visionJob.key === previewVisionKey}
@@ -1140,6 +1222,9 @@ export function App() {
           selectedAudioSegment={selectedAudioSegment}
           selectedTrackAudioSegment={selectedAudioToolTarget}
           audioClipInspectorOpen={mobilePanel === "inspector" && mobilePanelOrigin === "audio-clip"}
+          mobileInspectorOrigin={mobilePanel === "inspector" ? mobilePanelOrigin : ""}
+          mobileInspectorSection={isMobileViewport && mobilePanel === "inspector" ? mobileInspectorSection : ""}
+          onCloseMobileInspector={() => changeMobilePanel("")}
           updateSelectedTrackAudioSegment={updateSelectedTrackAudioSegment}
           deleteSelectedTrackAudioSegment={() => handleDeleteTrack()}
           updateAudioSegment={updateAudioSegment}
@@ -1160,6 +1245,8 @@ export function App() {
           trOption={trOption}
           selectedVisualOverlay={selectedVisualOverlay}
           updateVisualOverlaySegment={(patch) => setVisualOverlaySegments((items) => items.map((item) => item.id === selectedVisualOverlayId ? { ...item, ...patch } : item))}
+          updateVisualOverlayEffects={updateSelectedVisualOverlayEffects}
+          setVisualCanvasEditMode={setVisualCanvasEditMode}
           deleteVisualOverlay={() => handleDeleteTrack()}
           applyVisualOverlayPreset={(id) => {
             const preset = getVisualOverlayPreset(id);
@@ -1190,8 +1277,9 @@ export function App() {
         selectedTrack={selectedTrack}
         setSelectedTrack={setSelectedTrack}
         setActiveTool={setActiveTool}
-        openMobileInspector={(track) => {
+        openMobileInspector={(track, section = "") => {
           setMobilePanelOrigin(getMobileClipPanelOrigin(track));
+          setMobileInspectorSection(section);
           changeMobilePanel("inspector");
         }}
         openMobileTools={() => changeMobilePanel("tools")}
@@ -1290,11 +1378,35 @@ export function App() {
         startMusicMove={startMusicMove}
       />
 
-      {mobilePanel ? (
+      {mobilePanel && !(mobilePanel === "inspector" && isMobileViewport && mobileInspectorSection) ? (
         <header className="mobile-sheet-nav">
-          <strong>{mobilePanelOrigin === "audio-clip" ? t("audioClipProperties") : mobilePanelOrigin === "sticker-clip" ? t("stickerProperties") : t(activeTool)}</strong>
+          <strong>{({
+            transform: t("visualTabTransform"),
+            mask: t("visualTabMask"),
+            filters: t("visualTabEffects"),
+            animation: t("visualTabAnimation"),
+            speed: t("visualTabSpeed"),
+            vector: t("vectorProperties", "矢量"),
+            timing: t("overlayTiming", "层级与时长"),
+            repair: t("repairTab"),
+            caption: t("caption"),
+            voice: t("aiVoice"),
+            audio: t("mobileClipAudio"),
+            fade: t("mobileClipFade"),
+            sticker: t("stickerProperties"),
+          }[mobileInspectorSection]) || (mobilePanelOrigin === "audio-clip"
+            ? t("audioClipProperties")
+            : mobilePanelOrigin === "sticker-clip"
+              ? t("stickerProperties")
+              : mobilePanelOrigin === "visual-clip"
+                ? t("visualPanelTitle")
+                : mobilePanelOrigin === "overlay-clip"
+                  ? t("pictureInPicture", "画中画")
+                  : mobilePanelOrigin === "caption-clip"
+                    ? t("caption")
+                    : t(activeTool))}</strong>
           <div role="tablist" aria-label={t("mobilePanelView")}>
-            {!(["audio-clip", "sticker-clip"].includes(mobilePanelOrigin)) ? <>
+            {!mobilePanelOrigin.endsWith("-clip") ? <>
               <button className={mobilePanel === "tools" ? "is-active" : ""} type="button" role="tab" aria-selected={mobilePanel === "tools"} onClick={() => changeMobilePanel("tools")}>{t("mobileDrawerTools")}</button>
               <button className={mobilePanel === "inspector" ? "is-active" : ""} type="button" role="tab" aria-selected={mobilePanel === "inspector"} onClick={() => changeMobilePanel("inspector")}>{t("properties")}</button>
             </> : null}

@@ -1,20 +1,32 @@
-const GENERIC_CLIP_ACTIONS = ["dismiss", "edit", "split", "copy", "delete"];
-const AUDIO_CLIP_ACTIONS = ["dismiss", "edit", "split", "captions", "separate", "delete"];
-const MUSIC_CLIP_ACTIONS = ["dismiss", "audio", "split", "captions", "separate", "delete"];
-const SOURCE_AUDIO_CLIP_ACTIONS = ["dismiss", "audio", "split", "captions", "delete"];
-const STICKER_CLIP_ACTIONS = ["dismiss", "properties", "copy", "delete"];
+const AUDIO_CLIP_ACTIONS = ["dismiss", "audio-properties", "audio-fade", "split", "captions", "separate", "delete"];
+const MUSIC_CLIP_ACTIONS = ["dismiss", "audio-properties", "audio-fade", "split", "captions", "separate", "delete"];
+const SOURCE_AUDIO_CLIP_ACTIONS = ["dismiss", "audio-properties", "split", "captions", "delete"];
+const STICKER_CLIP_ACTIONS = ["dismiss", "sticker-properties", "copy", "delete"];
 
 export function getMobileClipActionIds(track, options = {}) {
   const associationActions = ["caption-link", ...(options.hasLinkedCaption ? ["caption-align"] : [])];
-  if (track === "caption") return ["dismiss", "edit", "split", "copy", ...associationActions, "delete"];
+  if (track === "caption") return ["dismiss", "caption-properties", "caption-font", "caption-voice", "split", "copy", ...associationActions, "delete"];
   if (track === "audio") return [...AUDIO_CLIP_ACTIONS.slice(0, -1), ...associationActions, "delete"];
   if (track === "music") return MUSIC_CLIP_ACTIONS;
   if (track === "source") return SOURCE_AUDIO_CLIP_ACTIONS;
   if (track === "sticker") return STICKER_CLIP_ACTIONS;
-  if (track === "image" && options.canExtractSourceAudio) {
-    return ["dismiss", "edit", "split", "copy", "extract-source-audio", "delete"];
+  if (track === "image" || track === "overlay") {
+    const actions = [
+      "dismiss",
+      "visual-transform",
+      ...(options.isVector ? ["visual-vector"] : ["visual-mask", "visual-filter"]),
+      "visual-animation",
+      ...(!options.isVector && options.isVideo ? ["visual-speed"] : []),
+      ...(track === "image" && !options.isVector ? ["visual-repair"] : []),
+      ...(track === "overlay" ? ["overlay-timing"] : []),
+      "split",
+      "copy",
+      ...(track === "image" && options.canExtractSourceAudio ? ["extract-source-audio"] : []),
+      "delete",
+    ];
+    return actions;
   }
-  return GENERIC_CLIP_ACTIONS;
+  return ["dismiss", "split", "copy", "delete"];
 }
 
 export function getMobileClipPanel() {
@@ -22,8 +34,29 @@ export function getMobileClipPanel() {
 }
 
 export function getMobileClipPanelOrigin(track) {
+  if (track === "image") return "visual-clip";
+  if (track === "overlay") return "overlay-clip";
+  if (track === "caption") return "caption-clip";
   if (track === "sticker") return "sticker-clip";
   return ["audio", "source", "music"].includes(track) ? "audio-clip" : "";
+}
+
+export function resolveInspectorPanelContext({ origin = "", activeTool = "", selectedTrack = "" } = {}) {
+  const explicitContext = {
+    "visual-clip": "visual",
+    "overlay-clip": "overlay",
+    "caption-clip": "caption",
+    "sticker-clip": "sticker",
+    "audio-clip": "audio",
+  }[origin];
+  if (explicitContext) return explicitContext;
+  if (activeTool === "smart") return "smart";
+  if (activeTool === "caption") return "caption";
+  if (selectedTrack === "image") return "visual";
+  if (selectedTrack === "overlay") return "overlay";
+  if (selectedTrack === "sticker") return "sticker";
+  if (["audio", "source", "music"].includes(selectedTrack)) return "audio";
+  return "voice";
 }
 
 export function shouldActivateToolRailForClip(isMobile) {

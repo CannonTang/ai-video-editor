@@ -1,30 +1,60 @@
 import {
+  ArrowsOut,
+  CaretDown,
+  CaretRight,
   CheckCircle,
   ClosedCaptioning,
+  CursorClick,
+  Drop,
   Eye,
   EyeSlash,
   ImageSquare,
+  Info,
   Link,
   LinkBreak,
   ListBullets,
   PersonSimpleRun,
   Plus,
   Scissors,
+  ShieldCheck,
+  SlidersHorizontal,
   Sparkle,
+  Stack,
+  Sun,
   Trash,
   UploadSimple,
   Waveform,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { formatTime, getSegmentStartTime } from "../lib/timeline.js";
 import { LIVE_PORTRAIT_WEB_MODEL } from "../config/livePortrait.js";
 import { probeLivePortraitWebEnvironment } from "../lib/livePortraitWeb.js";
+import {
+  ensureCaptionFontLoaded,
+  getCaptionFont,
+  getCaptionFontsForLanguage,
+  resolveCaptionFontFamily,
+  resolveCaptionFontWeight,
+} from "../lib/captionFonts.js";
 import { getCaptionVoiceSegment } from "../lib/captionVoice.js";
 import { findCaptionAudioLinkTarget } from "../lib/captionEditingActions.js";
+import { resolveInspectorPanelContext } from "../lib/mobileClipActions.js";
 import { normalizeVisualKeyframes } from "../lib/visualEffects.js";
+import {
+  buildVectorDesignPatch,
+  getVectorDesignAppearance,
+  normalizeVectorDesign,
+  recolorVectorBody,
+} from "../lib/vectorDesign.js";
+import {
+  createEditableVectorDocument,
+  createVectorPartThumbnail,
+  createVectorSelectionBody,
+  updateVectorPart,
+} from "../lib/vectorDocument.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
 import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 
@@ -107,6 +137,352 @@ function AutoEditPanel({ t, hasVisual, autoEdit }) {
     </div>
     <AutoEditReviewDialog t={t} autoEdit={autoEdit} />
   </>);
+}
+
+function VectorDesignRange({ label, value, min, max, step = 1, suffix = "", onChange }) {
+  return (
+    <label className="vector-design-range">
+      <span>{label}<output>{value}{suffix}</output></span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </label>
+  );
+}
+
+const VECTOR_PART_LABEL_KEYS = {
+  text: ["vectorPartText", "文字"],
+  rectangle: ["vectorPartRectangle", "矩形"],
+  rectangleGroup: ["vectorPartRectangleGroup", "矩形组合"],
+  circle: ["vectorPartCircle", "圆形"],
+  pointGroup: ["vectorPartPointGroup", "圆点组合"],
+  line: ["vectorPartLine", "线条"],
+  lineGroup: ["vectorPartLineGroup", "线条组合"],
+  textGroup: ["vectorPartTextGroup", "文字组合"],
+  group: ["vectorPartGroup", "图形组合"],
+  shape: ["vectorPartShape", "图形"],
+};
+
+function getVectorPartLabel(part, t) {
+  if (part?.name) return part.name;
+  const [key, fallback] = VECTOR_PART_LABEL_KEYS[part?.kind] || VECTOR_PART_LABEL_KEYS.shape;
+  return `${t(key, fallback)} ${Number(part?.index || 0) + 1}`;
+}
+
+function VectorPartAction({ icon, title, hint, active, disabled = false, onClick, children }) {
+  return (
+    <div className={`vector-part-action ${active ? "is-open" : ""} ${disabled ? "is-disabled" : ""}`}>
+      <button type="button" disabled={disabled} aria-expanded={active} onClick={onClick}>
+        <i>{icon}</i>
+        <span><strong>{title}</strong><small>{hint}</small></span>
+        {active ? <CaretDown size={16} /> : <CaretRight size={16} />}
+      </button>
+      {active && !disabled ? <div className="vector-part-action-body">{children}</div> : null}
+    </div>
+  );
+}
+
+function VectorDesignDialog({ t, segment, onApply, onClose }) {
+  const [initialState] = useState(() => {
+    const design = normalizeVectorDesign(segment.vectorDesign);
+    const hydrated = buildVectorDesignPatch(segment, design);
+    return {
+      design,
+      document: createEditableVectorDocument(hydrated.vectorBody || ""),
+    };
+  });
+  const initialDocument = initialState.document;
+  const initialDesign = initialState.design;
+  const [draftBody, setDraftBody] = useState(initialDocument.body);
+  const [draft, setDraft] = useState(initialDesign);
+  const documentState = useMemo(() => createEditableVectorDocument(draftBody), [draftBody]);
+  const [selectedPartId, setSelectedPartId] = useState(() => initialDocument.parts[0]?.id || "");
+  const [openAction, setOpenAction] = useState("");
+  const [professionalOpen, setProfessionalOpen] = useState(false);
+  const previewRef = useRef(null);
+  const [previewViewBox, setPreviewViewBox] = useState("0 0 1200 1200");
+  const update = (patch) => setDraft((current) => normalizeVectorDesign({ ...current, ...patch }));
+  const appearance = getVectorDesignAppearance(draft);
+  const selectedPart = documentState.parts.find((part) => part.id === selectedPartId) || documentState.parts[0] || null;
+  const hasChanges = draftBody !== initialDocument.body || JSON.stringify(draft) !== JSON.stringify(initialDesign);
+  const activeStep = hasChanges ? 2 : selectedPart ? 1 : 0;
+  const previewBody = useMemo(() => createVectorSelectionBody(
+    recolorVectorBody(documentState.body, draft, segment.vectorColorSlots),
+    selectedPart?.id,
+  ), [documentState.body, draft, segment.vectorColorSlots, selectedPart?.id]);
+
+  useEffect(() => {
+    if (selectedPart || !documentState.parts.length) return;
+    setSelectedPartId(documentState.parts[0].id);
+  }, [documentState.parts, selectedPart]);
+
+  useEffect(() => {
+    const preview = previewRef.current;
+    if (!preview) return;
+    const bounds = preview.getBBox?.();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+      setPreviewViewBox("0 0 1200 1200");
+      return;
+    }
+    const padding = Math.max(bounds.width, bounds.height) * 0.1;
+    setPreviewViewBox([
+      bounds.x - padding,
+      bounds.y - padding,
+      bounds.width + padding * 2,
+      bounds.height + padding * 2,
+    ].join(" "));
+  }, [previewBody]);
+
+  const updateSelectedPart = (patch) => {
+    if (!selectedPart) return;
+    const next = updateVectorPart(documentState.body, selectedPart.id, patch);
+    setDraftBody(next.body);
+  };
+
+  const handleCanvasPartSelection = (event) => {
+    const target = event.target?.closest?.("[data-vector-part-id]");
+    const id = target?.getAttribute?.("data-vector-part-id");
+    if (id) setSelectedPartId(id);
+  };
+
+  const handleCanvasKeyDown = (event) => {
+    if (!["Enter", " "].includes(event.key)) return;
+    const target = event.target?.closest?.("[data-vector-part-id]");
+    const id = target?.getAttribute?.("data-vector-part-id");
+    if (!id) return;
+    event.preventDefault();
+    setSelectedPartId(id);
+  };
+
+  const toggleAction = (id) => setOpenAction((current) => current === id ? "" : id);
+  const resetAll = () => {
+    setDraftBody(initialDocument.body);
+    setDraft(initialDesign);
+    setSelectedPartId(initialDocument.parts[0]?.id || "");
+    setOpenAction("");
+    setProfessionalOpen(false);
+  };
+
+  return createPortal(
+    <div className="vector-design-backdrop" onPointerDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}>
+      <section className="vector-design-dialog" role="dialog" aria-modal="true" aria-labelledby="vector-design-title">
+        <header>
+          <div><span>{t("vectorAdvancedKicker", "矢量设计")}</span><h2 id="vector-design-title">{t("vectorAdvancedTitle", "高级矢量设计")}</h2></div>
+          <button type="button" aria-label={t("close", "关闭")} onClick={onClose}><X size={18} /></button>
+        </header>
+        <nav className="vector-design-steps" aria-label={t("vectorDesignSteps", "编辑步骤")}>
+          {[
+            [t("vectorStepSelect", "选择部分"), CursorClick],
+            [t("vectorStepAdjust", "调整样式"), SlidersHorizontal],
+            [t("vectorStepFinish", "完成"), CheckCircle],
+          ].map(([label, Icon], index) => (
+            <div className={`${activeStep === index ? "is-active" : ""} ${activeStep > index ? "is-complete" : ""}`} key={label}>
+              <i>{activeStep > index ? <CheckCircle size={17} weight="fill" /> : <Icon size={16} />}</i>
+              <strong>{index + 1}</strong>
+              <span>{label}</span>
+            </div>
+          ))}
+        </nav>
+        <div className="vector-design-layout">
+          <div className="vector-design-stage">
+            <svg
+              ref={previewRef}
+              className="vector-design-svg"
+              viewBox={previewViewBox}
+              preserveAspectRatio="xMidYMid meet"
+              role="img"
+              aria-label={t("vectorCanvasLabel", "可选择图形部分的矢量预览")}
+              onClick={handleCanvasPartSelection}
+              onKeyDown={handleCanvasKeyDown}
+              style={{ filter: appearance.filter, opacity: appearance.opacity, mixBlendMode: appearance.cssBlendMode }}
+              dangerouslySetInnerHTML={{ __html: previewBody }}
+            />
+            <div className="vector-design-stage-hint"><CursorClick size={15} /><span>{t("vectorCanvasHint", "点击画布或图层，选择要编辑的部分")}</span></div>
+          </div>
+          <aside className="vector-parts-panel">
+            <div className="vector-parts-heading">
+              <div><strong>{t("vectorPartsTitle", "图形部分")}</strong><span>{t("vectorPartsDetected", "已自动识别")}</span></div>
+              <Info size={15} />
+            </div>
+            <p>{t("vectorPartsHint", "每个图形会根据实际结构显示不同部分")}</p>
+            {documentState.parts.length ? (
+              <div className="vector-parts-list" role="listbox" aria-label={t("vectorPartsTitle", "图形部分")}>
+                {documentState.parts.map((part) => {
+                  const active = part.id === selectedPart?.id;
+                  const label = getVectorPartLabel(part, t);
+                  return (
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      className={active ? "is-active" : ""}
+                      onClick={() => setSelectedPartId(part.id)}
+                      key={part.id}
+                    >
+                      <img src={createVectorPartThumbnail(documentState.body, part.id)} alt="" />
+                      <span>
+                        <strong>{label}</strong>
+                        <small>{part.count > 1
+                          ? t("vectorPartItems", "{count} items").replace("{count}", part.count)
+                          : t("vectorPartSingle", "1 个元素")}</small>
+                      </span>
+                      {active ? <i /> : <CaretRight size={15} />}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : <div className="vector-parts-empty">{t("vectorPartsUnavailable", "这个图形暂时只能进行整体调整")}</div>}
+          </aside>
+          <div className="vector-design-controls">
+            <div className="vector-selected-heading">
+              <span>{t("vectorEditQuestion", "你想修改什么？")}</span>
+              <strong>{selectedPart ? getVectorPartLabel(selectedPart, t) : t("vectorWholeGraphic", "整个图形")}</strong>
+            </div>
+            {selectedPart ? <>
+              <VectorPartAction
+                icon={<Drop size={20} weight="duotone" />}
+                title={t("vectorActionColor", "换颜色")}
+                hint={t("vectorActionColorHint", "更改这个部分的颜色")}
+                active={openAction === "color"}
+                disabled={!selectedPart.supportsColor}
+                onClick={() => toggleAction("color")}
+              >
+                <div className="vector-part-color-editor">
+                  <input aria-label={t("vectorActionColor", "换颜色")} type="color" value={selectedPart.color} onChange={(event) => updateSelectedPart({ color: event.target.value })} />
+                  {["#35ead9", "#4d96ff", "#ff5f65", "#ffde59", "#f5fbff"].map((color) => (
+                    <button type="button" aria-label={color} style={{ "--vector-swatch": color }} onClick={() => updateSelectedPart({ color })} key={color} />
+                  ))}
+                </div>
+              </VectorPartAction>
+              <VectorPartAction
+                icon={<SlidersHorizontal size={20} />}
+                title={t("vectorActionThickness", "调整粗细")}
+                hint={selectedPart.supportsStroke ? t("vectorActionThicknessHint", "让线条更粗或更细") : t("vectorActionUnavailable", "这个部分没有可调整的线条")}
+                active={openAction === "stroke"}
+                disabled={!selectedPart.supportsStroke}
+                onClick={() => toggleAction("stroke")}
+              >
+                <VectorDesignRange label={t("vectorOutlineWidth", "轮廓宽度")} value={selectedPart.strokeWidth} min="1" max="120" suffix="px" onChange={(value) => updateSelectedPart({ strokeWidth: value })} />
+              </VectorPartAction>
+              <VectorPartAction
+                icon={<ArrowsOut size={20} />}
+                title={t("vectorActionTransform", "移动与缩放")}
+                hint={t("vectorActionTransformHint", "调整位置、大小或方向")}
+                active={openAction === "transform"}
+                onClick={() => toggleAction("transform")}
+              >
+                <div className="vector-part-transform-grid">
+                  <label><span>X</span><input type="number" value={selectedPart.translateX} onChange={(event) => updateSelectedPart({ translateX: event.target.value })} /></label>
+                  <label><span>Y</span><input type="number" value={selectedPart.translateY} onChange={(event) => updateSelectedPart({ translateY: event.target.value })} /></label>
+                  <label className="is-wide"><span>{t("vectorScale", "大小")}</span><input type="range" min=".1" max="3" step=".05" value={selectedPart.scale} onChange={(event) => updateSelectedPart({ scale: event.target.value })} /><output>{Math.round(selectedPart.scale * 100)}%</output></label>
+                </div>
+              </VectorPartAction>
+              <VectorPartAction
+                icon={<Sun size={20} />}
+                title={t("vectorActionShadow", "添加阴影")}
+                hint={t("vectorActionShadowHint", "为这个部分增加层次")}
+                active={openAction === "shadow"}
+                onClick={() => toggleAction("shadow")}
+              >
+                <button type="button" className={`vector-part-shadow-toggle ${selectedPart.shadowEnabled ? "is-active" : ""}`} aria-pressed={selectedPart.shadowEnabled} onClick={() => updateSelectedPart({ shadowEnabled: !selectedPart.shadowEnabled })}>
+                  {selectedPart.shadowEnabled ? t("enabled", "已开启") : t("disabled", "已关闭")}
+                </button>
+              </VectorPartAction>
+            </> : null}
+
+            <section className={`vector-professional-options ${professionalOpen ? "is-open" : ""}`}>
+              <button type="button" aria-expanded={professionalOpen} onClick={() => setProfessionalOpen((value) => !value)}>
+                <span><Stack size={17} /><strong>{t("vectorProfessionalOptions", "显示专业选项")}</strong></span>
+                {professionalOpen ? <CaretDown size={16} /> : <CaretRight size={16} />}
+              </button>
+              <small>{t("vectorProfessionalHint", "渐变、整体外观与精度控制")}</small>
+              {professionalOpen ? <div className="vector-professional-body">
+                <div className="vector-design-mode">
+                  <button type="button" className={!draft.paletteEnabled ? "is-active" : ""} onClick={() => update({ paletteEnabled: false })}>{t("vectorOriginalColors", "原始配色")}</button>
+                  <button type="button" className={draft.paletteEnabled ? "is-active" : ""} onClick={() => update({ paletteEnabled: true })}>{t("vectorCustomPalette", "自定义配色")}</button>
+                </div>
+                <div className="vector-design-colors">
+                  {[
+                    ["primary", t("vectorPrimaryColor", "主色")],
+                    ["secondary", t("vectorSecondaryColor", "辅色")],
+                    ["accent", t("vectorAccentColor", "强调色")],
+                  ].map(([key, label]) => (
+                    <label key={key}><span>{label}</span><input type="color" value={draft[key]} onChange={(event) => update({ paletteEnabled: true, [key]: event.target.value })} /></label>
+                  ))}
+                </div>
+                <VectorDesignRange label={t("vectorOpacity", "透明度")} value={Math.round(draft.opacity * 100)} min="0" max="100" suffix="%" onChange={(value) => update({ opacity: value / 100 })} />
+                <VectorDesignRange label={t("vectorSaturation", "饱和度")} value={draft.saturation} min="0" max="240" suffix="%" onChange={(value) => update({ saturation: value })} />
+                <VectorDesignRange label={t("vectorBrightness", "亮度")} value={draft.brightness} min="20" max="200" suffix="%" onChange={(value) => update({ brightness: value })} />
+                <VectorDesignRange label={t("vectorContrast", "对比度")} value={draft.contrast} min="20" max="200" suffix="%" onChange={(value) => update({ contrast: value })} />
+                <label className="vector-design-select"><span>{t("vectorBlendMode", "混合模式")}</span><select value={draft.blendMode} onChange={(event) => update({ blendMode: event.target.value })}>
+                  <option value="source-over">{t("vectorBlendNormal", "正常")}</option>
+                  <option value="multiply">{t("vectorBlendMultiply", "正片叠底")}</option>
+                  <option value="screen">{t("vectorBlendScreen", "滤色")}</option>
+                  <option value="overlay">{t("vectorBlendOverlay", "叠加")}</option>
+                </select></label>
+              </div> : null}
+            </section>
+            <div className="vector-design-reassurance"><ShieldCheck size={16} /><span>{t("vectorReversibleHint", "不会破坏原始图形，随时可以重置")}</span></div>
+          </div>
+        </div>
+        <footer>
+          <button type="button" className="panel-secondary" disabled={!hasChanges} onClick={resetAll}>{t("resetAll", "重置所有")}</button>
+          <span />
+          <button type="button" className="panel-secondary" onClick={onClose}>{t("cancel", "取消")}</button>
+          <button type="button" className="vector-design-apply" onClick={() => onApply({ design: draft, body: documentState.body })}>{t("apply", "应用")}</button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function VectorControls({ t, segment, onUpdate }) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const design = normalizeVectorDesign(segment.vectorDesign);
+  const commit = (patch) => {
+    const next = normalizeVectorDesign({ ...design, ...patch });
+    onUpdate(buildVectorDesignPatch(segment, next));
+  };
+  return (
+    <>
+      <section className="vector-overlay-quick">
+        <div className="vector-overlay-quick-title"><div><strong>{t("vectorQuickStyle", "矢量样式")}</strong><span>{t("vectorQuickStyleHint", "常用属性即时生效")}</span></div><Sparkle size={17} weight="duotone" /></div>
+        <div className="vector-design-mode">
+          <button type="button" className={!design.paletteEnabled ? "is-active" : ""} onClick={() => commit({ paletteEnabled: false })}>{t("vectorOriginalColors", "原始配色")}</button>
+          <button type="button" className={design.paletteEnabled ? "is-active" : ""} onClick={() => commit({ paletteEnabled: true })}>{t("vectorCustomPalette", "自定义配色")}</button>
+        </div>
+        <div className="vector-overlay-inline-colors">
+          <label>
+            <span>{t("vectorPrimaryColor", "主色")}</span>
+            <span className="vector-color-value">
+              <code>{design.primary.toUpperCase()}</code>
+              <span className="vector-color-swatch" style={{ "--vector-quick-color": design.primary }}>
+                <input aria-label={t("vectorPrimaryColor", "主色")} type="color" value={design.primary} onChange={(event) => commit({ paletteEnabled: true, primary: event.target.value })} />
+              </span>
+            </span>
+          </label>
+          <label><span>{t("vectorOpacity", "透明度")}</span><input type="range" min="0" max="1" step="0.01" value={design.opacity} onChange={(event) => commit({ opacity: event.target.value })} /><output>{Math.round(design.opacity * 100)}%</output></label>
+        </div>
+        <button type="button" className="vector-advanced-open" onClick={() => setAdvancedOpen(true)}><Sparkle size={15} />{t("vectorOpenAdvanced", "高级设计…")}</button>
+      </section>
+      {advancedOpen ? <VectorDesignDialog
+        t={t}
+        segment={segment}
+        onClose={() => setAdvancedOpen(false)}
+        onApply={({ design, body }) => {
+          onUpdate(buildVectorDesignPatch({
+            ...segment,
+            id: "",
+            assetId: "",
+            vectorBody: body,
+            vectorColorSlots: null,
+          }, design));
+          setAdvancedOpen(false);
+        }}
+      /> : null}
+    </>
+  );
 }
 
 function CaptionContextPanel({
@@ -338,47 +714,81 @@ function CaptionContextPanel({
   );
 }
 
-function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegmentReverse, deleteAudioSegment, downloadBlob }) {
+function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegmentReverse, deleteAudioSegment, downloadBlob, requestedSection = "" }) {
+  const [activeTab, setActiveTab] = useState("audio");
   const isVoiceClip = segment.track === "audio";
   const trackLabel = segment.track === "music" ? t("musicTrack") : segment.track === "source" ? t("sourceTrack") : t("voiceTrack");
+  const sourceKind = segment.track === "music"
+    ? "music"
+    : segment.track === "source"
+      ? "source"
+      : segment.sourceKind === "ai-voice" || segment.voiceId
+        ? "ai-voice"
+        : segment.sourceKind || "voiceover";
+  const sourceLabel = {
+    "ai-voice": t("audioSourceAiVoice"),
+    upload: t("audioSourceUpload"),
+    recording: t("audioSourceRecording"),
+    separated: t("audioSourceSeparated"),
+    voiceover: trackLabel,
+    music: t("musicTrack"),
+    source: t("sourceTrack"),
+  }[sourceKind] || trackLabel;
+  const displayName = sourceKind === "ai-voice"
+    ? segment.voiceName || segment.name || t("audioClip")
+    : segment.name || t("audioClip");
+  const shownTab = requestedSection === "fade" ? "fade" : requestedSection === "audio" ? "audio" : activeTab;
+  const canFade = segment.track !== "source";
+  useEffect(() => {
+    if (requestedSection === "audio" || requestedSection === "fade") setActiveTab(requestedSection);
+  }, [requestedSection, segment.id]);
   return (
     <div className="audio-clip-context-panel">
-      <div className="avatar-context-hero">
-        <span><Waveform size={22} weight="duotone" /></span>
-        <div><small>{trackLabel}</small><strong>{segment.name || t("audioClip")}</strong><em>{formatTime(segment.duration)}</em></div>
+      <div className={`audio-identity-hero is-${sourceKind}`}>
+        <span>{sourceKind === "ai-voice" ? <Sparkle size={22} weight="duotone" /> : sourceKind === "upload" ? <UploadSimple size={22} weight="duotone" /> : <Waveform size={22} weight="duotone" />}</span>
+        <div><small>{sourceLabel}</small><strong>{displayName}</strong><em>{formatTime(segment.duration)}</em></div>
       </div>
-      {segment.canChangeStart !== false ? <label className="audio-property-row">
-        <span>{t("audioClipStart")}</span>
-        <input type="number" min="0" step="0.1" value={Number(segment.start.toFixed(1))} onChange={(event) => updateAudioSegment(segment.id, { start: Math.max(0, Number(event.target.value) || 0) })} />
-      </label> : null}
-      <label className="audio-property-slider">
-        <span><b>{t("volume")}</b><em>{Math.round((segment.volume ?? 1) * 100)}%</em></span>
-        <input type="range" min="0" max="1" step="0.01" value={segment.volume ?? 1} onChange={(event) => updateAudioSegment(segment.id, { volume: Number(event.target.value) })} />
-      </label>
-      {segment.canChangeSpeed !== false ? <div className="audio-property-slider">
-        <span><b>{t("visualSpeed")}</b><em>{(segment.playbackRate ?? 1).toFixed((segment.playbackRate ?? 1) % 1 ? 2 : 0)}×</em></span>
-        <div className="visual-speed-presets" aria-label={t("visualSpeed")}>
-          {[0.5, 1, 1.5, 2, 3, 4].map((rate) => (
-            <button type="button" className={Math.abs((segment.playbackRate ?? 1) - rate) < 0.001 ? "is-active" : ""} key={rate} onClick={() => updateAudioSegment(segment.id, { playbackRate: rate })}>{rate}×</button>
-          ))}
-        </div>
-        <input aria-label={t("visualSpeed")} type="range" min="0.25" max="4" step="0.05" value={segment.playbackRate ?? 1} onChange={(event) => updateAudioSegment(segment.id, { playbackRate: Number(event.target.value) })} />
+      {!requestedSection && canFade ? <div className="audio-context-tabs" role="tablist" aria-label={t("audioClipProperties")}>
+        <button className={shownTab === "audio" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "audio"} onClick={() => setActiveTab("audio")}>{t("mobileClipAudio")}</button>
+        <button className={shownTab === "fade" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "fade"} onClick={() => setActiveTab("fade")}>{t("mobileClipFade")}</button>
       </div> : null}
-      {isVoiceClip ? <label className="audio-property-slider">
-        <span><b>{t("fadeIn")}</b><em>{(segment.fadeIn ?? 0).toFixed(1)}s</em></span>
-        <input type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeIn ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeIn: Number(event.target.value) })} />
-      </label> : null}
-      {isVoiceClip ? <label className="audio-property-slider">
-        <span><b>{t("fadeOut")}</b><em>{(segment.fadeOut ?? 0).toFixed(1)}s</em></span>
-        <input type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeOut ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeOut: Number(event.target.value) })} />
-      </label> : null}
-      <div className="audio-context-actions">
+      {shownTab === "audio" ? <div className="audio-context-section">
+        {segment.canChangeStart !== false ? <label className="audio-property-row">
+          <span>{t("audioClipStart")}</span>
+          <input type="number" min="0" step="0.1" value={Number(segment.start.toFixed(1))} onChange={(event) => updateAudioSegment(segment.id, { start: Math.max(0, Number(event.target.value) || 0) })} />
+        </label> : null}
+        <label className="audio-property-slider">
+          <span><b>{t("volume")}</b><em>{Math.round((segment.volume ?? 1) * 100)}%</em></span>
+          <input type="range" min="0" max="1" step="0.01" value={segment.volume ?? 1} onChange={(event) => updateAudioSegment(segment.id, { volume: Number(event.target.value) })} />
+        </label>
+        {segment.canChangeSpeed !== false ? <div className="audio-property-slider">
+          <span><b>{t("visualSpeed")}</b><em>{(segment.playbackRate ?? 1).toFixed((segment.playbackRate ?? 1) % 1 ? 2 : 0)}×</em></span>
+          <div className="visual-speed-presets" aria-label={t("visualSpeed")}>
+            {[0.5, 1, 1.5, 2, 3, 4].map((rate) => (
+              <button type="button" className={Math.abs((segment.playbackRate ?? 1) - rate) < 0.001 ? "is-active" : ""} key={rate} onClick={() => updateAudioSegment(segment.id, { playbackRate: rate })}>{rate}×</button>
+            ))}
+          </div>
+          <input aria-label={t("visualSpeed")} type="range" min="0.25" max="4" step="0.05" value={segment.playbackRate ?? 1} onChange={(event) => updateAudioSegment(segment.id, { playbackRate: Number(event.target.value) })} />
+        </div> : null}
+      </div> : null}
+      {shownTab === "fade" && canFade ? <div className="audio-context-section audio-fade-section">
+        <p>{t("audioFadeHint")}</p>
+        <label className="audio-property-slider">
+          <span><b>{t("fadeIn")}</b><em>{(segment.fadeIn ?? 0).toFixed(1)}s</em></span>
+          <input aria-label={t("fadeIn")} type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeIn ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeIn: Number(event.target.value) })} />
+        </label>
+        <label className="audio-property-slider">
+          <span><b>{t("fadeOut")}</b><em>{(segment.fadeOut ?? 0).toFixed(1)}s</em></span>
+          <input aria-label={t("fadeOut")} type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeOut ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeOut: Number(event.target.value) })} />
+        </label>
+      </div> : null}
+      {shownTab === "audio" || !requestedSection ? <div className="audio-context-actions">
         {isVoiceClip ? <button className={`panel-secondary ${segment.reversed ? "is-active" : ""}`} type="button" disabled={segment.reversing} onClick={() => toggleAudioSegmentReverse(segment.id)}>
           {segment.reversing ? t("audioReversing") : segment.reversed ? t("audioReverseRestore") : t("audioReverse")}
         </button> : null}
         <button className="panel-secondary" type="button" onClick={() => downloadBlob(segment.blob, `${segment.name || "audio"}.wav`)}>{t("downloadAudioClip")}</button>
         <button className="panel-secondary is-danger" type="button" onClick={() => deleteAudioSegment(segment.id)}><Trash size={15} />{t("deleteAudioClip")}</button>
-      </div>
+      </div> : null}
     </div>
   );
 }
@@ -482,6 +892,123 @@ function AvatarContextPanel({ t, hasVisual, visualType, audioBlob, audioDuration
   );
 }
 
+function CaptionFontSheet({
+  t,
+  language,
+  captionStyle,
+  setCaptionStyle,
+  selectedCaptionSegment,
+  setCaptionSegments,
+  captionSegments,
+}) {
+  const [fontStatus, setFontStatus] = useState("");
+  const [loadingFontId, setLoadingFontId] = useState("");
+  const languageOptions = useMemo(() => getCaptionFontsForLanguage(language), [language]);
+  const selectedFontId = selectedCaptionSegment?.fontId || captionStyle?.fontId || "default";
+  const options = useMemo(() => {
+    if (languageOptions.some((font) => font.id === selectedFontId)) return languageOptions;
+    const current = getCaptionFont(selectedFontId);
+    return [languageOptions[0], current, ...languageOptions.slice(1)]
+      .filter((font, index, items) => font && items.findIndex((candidate) => candidate.id === font.id) === index);
+  }, [languageOptions, selectedFontId]);
+
+  useEffect(() => {
+    let canceled = false;
+    if (selectedFontId === "default") {
+      setFontStatus("");
+      setLoadingFontId("");
+      return undefined;
+    }
+    setFontStatus("loading");
+    setLoadingFontId(selectedFontId);
+    ensureCaptionFontLoaded(selectedFontId, selectedCaptionSegment?.text || "")
+      .then(() => {
+        if (!canceled) setFontStatus("ready");
+      })
+      .catch(() => {
+        if (!canceled) setFontStatus("failed");
+      })
+      .finally(() => {
+        if (!canceled) setLoadingFontId("");
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [selectedCaptionSegment?.text, selectedFontId]);
+
+  const selectFont = async (fontId) => {
+    if (selectedCaptionSegment?.id) {
+      setCaptionSegments?.((items) => items.map((segment) => (
+        segment.id === selectedCaptionSegment.id ? { ...segment, fontId } : segment
+      )));
+    } else {
+      setCaptionStyle?.((style) => ({ ...style, fontId }));
+    }
+    if (fontId === "default") {
+      setFontStatus("ready");
+      setLoadingFontId("");
+      return;
+    }
+    setFontStatus("loading");
+    setLoadingFontId(fontId);
+    try {
+      await ensureCaptionFontLoaded(
+        fontId,
+        selectedCaptionSegment?.text || captionSegments.map((segment) => segment.text || "").join(" "),
+      );
+      setFontStatus("ready");
+    } catch {
+      setFontStatus("failed");
+    } finally {
+      setLoadingFontId("");
+    }
+  };
+
+  return (
+    <section className="mobile-caption-font-sheet" aria-label={t("captionFont")}>
+      <p>{t("captionFontHint")}</p>
+      <div className="mobile-caption-font-grid">
+        {options.map((font) => {
+          const selected = font.id === selectedFontId;
+          const loading = font.id === loadingFontId;
+          return (
+            <button
+              type="button"
+              className={selected ? "is-selected" : ""}
+              aria-pressed={selected}
+              disabled={loading}
+              key={font.id}
+              onClick={() => selectFont(font.id)}
+            >
+              <span
+                className="mobile-caption-font-sample"
+                style={{
+                  fontFamily: resolveCaptionFontFamily(font.id),
+                  fontWeight: resolveCaptionFontWeight(font.id),
+                }}
+              >
+                {font.sample}
+              </span>
+              <strong>{font.id === "default" ? t("captionFontDefault") : font.label}</strong>
+              {selected && !loading ? <CheckCircle size={17} weight="fill" /> : null}
+              {loading ? <i className="mobile-caption-font-loading" aria-hidden="true" /> : null}
+            </button>
+          );
+        })}
+      </div>
+      {fontStatus ? (
+        <small className={`caption-font-status is-${fontStatus}`}>
+          {t(fontStatus === "loading"
+            ? "captionFontLoading"
+            : fontStatus === "failed"
+              ? "captionFontFailed"
+              : "captionFontReady")}
+        </small>
+      ) : null}
+    </section>
+  );
+}
+
 export function VoicePanel({
   t,
   activeTool,
@@ -539,6 +1066,7 @@ export function VoicePanel({
   deleteCaptionSegment,
   importCaptionSegments,
   addCaptionSegment,
+  currentTime = 0,
   seekTo,
   sourceAudioBlob,
   sourceAudioLinked,
@@ -550,6 +1078,9 @@ export function VoicePanel({
   aiMusic,
   autoEdit,
   uiLanguage,
+  captionStyle,
+  setCaptionStyle,
+  setCaptionSegments,
   visionAnalysis,
   visionOptions,
   visionRunning,
@@ -568,6 +1099,9 @@ export function VoicePanel({
   selectedAudioSegment,
   selectedTrackAudioSegment,
   audioClipInspectorOpen = false,
+  mobileInspectorOrigin = "",
+  mobileInspectorSection = "",
+  onCloseMobileInspector,
   updateSelectedTrackAudioSegment,
   deleteSelectedTrackAudioSegment,
   updateAudioSegment,
@@ -588,6 +1122,8 @@ export function VoicePanel({
   trOption,
   selectedVisualOverlay,
   updateVisualOverlaySegment,
+  updateVisualOverlayEffects,
+  setVisualCanvasEditMode,
   deleteVisualOverlay,
   applyVisualOverlayPreset,
   alignCaptionToAudio,
@@ -596,21 +1132,59 @@ export function VoicePanel({
 }) {
   const [captionPanelTab, setCaptionPanelTab] = useState("caption");
   const panelRef = useRef(null);
-  const isCaptionContext = activeTool === "caption";
-  const isSmartContext = activeTool === "smart";
+  const panelContext = resolveInspectorPanelContext({
+    origin: mobileInspectorOrigin,
+    activeTool,
+    selectedTrack,
+  });
+  const isCaptionContext = panelContext === "caption";
+  const isSmartContext = panelContext === "smart";
   const isAvatarContext = isSmartContext && smartMode === "avatar" && avatarPanelOpen;
   const isSmartAutoContext = isSmartContext && smartMode === "auto-edit";
   const isSmartFrameContext = isSmartContext && smartMode === "smart-frame";
   const isAiMusicContext = isSmartContext && smartMode === "ai-music";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
-  const isAudioClipContext = Boolean(selectedTrack === "audio" && selectedAudioSegment)
-    || Boolean(audioClipInspectorOpen && ["source", "music"].includes(selectedTrack) && audioPropertySegment);
-  const isVisualContext = !isSmartContext && selectedTrack === "image";
-  const isStickerContext = selectedTrack === "sticker" && Boolean(selectedStickerSegment);
-  const isOverlayContext = selectedTrack === "overlay" && Boolean(selectedVisualOverlay);
+  const isAudioClipContext = panelContext === "audio" && (
+    Boolean(selectedTrack === "audio" && selectedAudioSegment)
+    || Boolean(audioClipInspectorOpen && ["source", "music"].includes(selectedTrack) && audioPropertySegment)
+  );
+  const isVisualContext = panelContext === "visual";
+  const isStickerContext = panelContext === "sticker" && Boolean(selectedStickerSegment);
+  const isOverlayContext = panelContext === "overlay" && Boolean(selectedVisualOverlay);
+  const isVectorOverlay = isOverlayContext && (
+    selectedVisualOverlay.kind === "vector"
+    || Boolean(selectedVisualOverlay.vectorBody)
+    || String(selectedVisualOverlay.assetId || "").startsWith("vector-")
+  );
+  const isVectorVisual = isVisualContext && (
+    selectedVisualSegment?.kind === "vector"
+    || Boolean(selectedVisualSegment?.vectorBody)
+    || String(selectedVisualSegment?.assetId || "").startsWith("vector-")
+  );
+  const vectorOverlayAppearance = getVectorDesignAppearance(selectedVisualOverlay?.vectorDesign);
+  const visualOverlayLocalTime = Math.max(0, Math.min(
+    selectedVisualOverlay?.duration ?? 0,
+    currentTime - (selectedVisualOverlay?.start ?? 0),
+  ));
   const selectedCaptionAudioSegment = getCaptionVoiceSegment(audioSegments, selectedCaptionSegment);
   const localizedStatusText = statusText?.startsWith?.("tts") ? t(statusText) : statusText;
-  const title = isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice");
+  const focusedSectionTitle = {
+    transform: t("visualTabTransform"),
+    mask: t("visualTabMask"),
+    filters: t("visualTabEffects"),
+    animation: t("visualTabAnimation"),
+    speed: t("visualTabSpeed"),
+    vector: t("vectorProperties", "矢量"),
+    timing: t("overlayTiming", "层级与时长"),
+    repair: t("repairTab"),
+    caption: t("caption"),
+    font: t("captionFont"),
+    voice: t("aiVoice"),
+    audio: t("mobileClipAudio"),
+    fade: t("mobileClipFade"),
+    sticker: t("stickerProperties"),
+  }[mobileInspectorSection];
+  const title = focusedSectionTitle || (isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
   const panelStatusText = isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
     ? captionSegments.length
       ? `${captionSegments.length} ${t("captionSegmentsUnit", "条字幕")}`
@@ -643,11 +1217,18 @@ export function VoicePanel({
   }, [captionVoiceFocusRequest, isCaptionContext]);
 
   useEffect(() => {
+    if (!isCaptionContext) return;
+    if (mobileInspectorSection === "voice") setCaptionPanelTab("voice");
+    if (mobileInspectorSection === "caption" || mobileInspectorSection === "font") setCaptionPanelTab("caption");
+  }, [isCaptionContext, mobileInspectorSection]);
+
+  useEffect(() => {
     panelRef.current?.querySelector(".voice-tab-body")?.scrollTo({ top: 0 });
   }, [activeTool, smartMode]);
 
   return (
-    <aside ref={panelRef} className={`voice-panel ${isCaptionContext ? "is-caption-context" : ""} ${isAvatarContext ? "is-avatar-context" : ""} ${isAudioClipContext ? "is-audio-clip-context" : ""} ${isStickerContext ? "is-sticker-context" : ""} ${isVisualContext ? "is-visual-context" : ""}`}>
+    <aside ref={panelRef} className={`voice-panel ${isCaptionContext ? "is-caption-context" : ""} ${isAvatarContext ? "is-avatar-context" : ""} ${isAudioClipContext ? "is-audio-clip-context" : ""} ${isStickerContext ? "is-sticker-context" : ""} ${isVisualContext ? "is-visual-context" : ""} ${isVectorOverlay ? "is-vector-overlay-context" : ""} ${mobileInspectorSection ? "is-focused-mobile-section" : ""}`}>
+      {mobileInspectorSection ? <header className="focused-mobile-sheet-header"><strong>{title}</strong><button type="button" aria-label={t("close", "关闭")} onClick={onCloseMobileInspector}>×</button></header> : null}
       <div className="panel-title-row">
         <h1>{title}</h1>
         <span className={`status-pill ${isCaptionContext ? "done" : status}`}>
@@ -674,7 +1255,7 @@ export function VoicePanel({
         </div>
       ) : null}
 
-      {isCaptionContext ? (
+      {isCaptionContext && !mobileInspectorSection ? (
         <div className="tabs compact caption-context-tabs" role="tablist" aria-label={t("captionTools", "字幕工具")}>
           <button
             className={captionPanelTab === "caption" ? "is-active" : ""}
@@ -703,14 +1284,25 @@ export function VoicePanel({
         {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}
         {isStickerContext ? <StickerContextPanel t={t} segment={selectedStickerSegment} updateStickerSegment={updateStickerSegment} deleteStickerSegment={deleteStickerSegment} /> : null}
         {isOverlayContext ? <div className="visual-overlay-inspector">
-          <div className="sticker-properties-preview">{selectedVisualOverlay.type === "video" ? <video src={selectedVisualOverlay.src} muted playsInline /> : <img src={selectedVisualOverlay.src} alt="" />}</div>
-          <section className="visual-overlay-presets"><strong>{t("layoutPresets", "布局预设")}</strong><div>
-            {[["top-left", "↖"], ["top-right", "↗"], ["bottom-left", "↙"], ["bottom-right", "↘"], ["center", "●"], ["full", "□"]].map(([id, label]) => <button type="button" key={id} title={id} aria-label={`${t("layoutPresets", "布局预设")} ${id}`} onClick={() => applyVisualOverlayPreset?.(id)}>{label}</button>)}
-          </div></section>
-          <label><span>{t("clipStart", "开始时间")}</span><input type="number" min="0" step="0.1" value={selectedVisualOverlay.start} onChange={(event) => updateVisualOverlaySegment?.({ start: Math.max(0, Number(event.target.value) || 0) })} /></label>
-          <label><span>{t("clipDuration", "持续时间")}</span><input type="number" min="0.1" step="0.1" value={selectedVisualOverlay.duration} onChange={(event) => updateVisualOverlaySegment?.({ duration: Math.max(0.1, Number(event.target.value) || 0.1) })} /></label>
-          <label><span>{t("layer", "图层")}</span><input type="number" min="1" step="1" value={selectedVisualOverlay.layer || 1} onChange={(event) => updateVisualOverlaySegment?.({ layer: Math.max(1, Math.round(Number(event.target.value) || 1)) })} /></label>
-          <button className="panel-secondary visual-overlay-delete" type="button" onClick={deleteVisualOverlay}><Trash size={14} />{t("delete", "删除")}</button>
+          {!mobileInspectorSection ? <div className={`sticker-properties-preview ${isVectorOverlay ? "is-vector" : ""}`}>{selectedVisualOverlay.type === "video" ? <video src={selectedVisualOverlay.src} muted playsInline /> : <img src={selectedVisualOverlay.src} alt="" style={isVectorOverlay ? { filter: vectorOverlayAppearance.filter, opacity: vectorOverlayAppearance.opacity, mixBlendMode: vectorOverlayAppearance.cssBlendMode } : undefined} />}</div> : null}
+          <VisualEffectsPanel
+            contextMode
+            mode="overlay"
+            t={t}
+            segment={selectedVisualOverlay}
+            localTime={visualOverlayLocalTime}
+            onChange={updateVisualOverlayEffects}
+            onSeek={(time) => seekTo((selectedVisualOverlay.start || 0) + time)}
+            selectedFilterId={selectedVisualOverlay.filterId || "none"}
+            trOption={trOption}
+            onSelectFilter={(id) => updateVisualOverlayEffects?.({ filterId: id })}
+            onCanvasEditModeChange={setVisualCanvasEditMode}
+            vectorEditor={isVectorOverlay ? <VectorControls t={t} segment={selectedVisualOverlay} onUpdate={updateVisualOverlaySegment} /> : null}
+            onApplyPreset={applyVisualOverlayPreset}
+            onDelete={deleteVisualOverlay}
+            requestedTab={mobileInspectorSection}
+            singleSection={mobileInspectorSection}
+          />
         </div> : null}
         {isVisualContext && selectedVisualSegment ? (
           <VisualEffectsPanel
@@ -724,9 +1316,13 @@ export function VoicePanel({
             selectedFilterId={selectedFilterId}
             trOption={trOption}
             onSelectFilter={(id) => { setSelectedFilterId(id); notify(t("effectApplied")); }}
+            onCanvasEditModeChange={setVisualCanvasEditMode}
             sourceAudioLinked={sourceAudioLinked}
             miganRepair={miganRepair}
             hdRestoration={hdRestoration}
+            requestedTab={mobileInspectorSection}
+            singleSection={mobileInspectorSection}
+            vectorEditor={isVectorVisual ? <VectorControls t={t} segment={selectedVisualSegment} onUpdate={(patch) => updateSelectedVisualEffects?.({ vectorPatch: patch })} /> : null}
           />
         ) : null}
         {isVisualContext && !selectedVisualSegment ? (
@@ -736,7 +1332,18 @@ export function VoicePanel({
             <span>{t("previewEmptyTitle")}</span>
           </div>
         ) : null}
-        {isCaptionContext && captionPanelTab === "caption" ? (
+        {isCaptionContext && captionPanelTab === "caption" && mobileInspectorSection === "font" ? (
+          <CaptionFontSheet
+            t={t}
+            language={uiLanguage}
+            captionStyle={captionStyle}
+            setCaptionStyle={setCaptionStyle}
+            selectedCaptionSegment={selectedCaptionSegment}
+            setCaptionSegments={setCaptionSegments}
+            captionSegments={captionSegments}
+          />
+        ) : null}
+        {isCaptionContext && captionPanelTab === "caption" && mobileInspectorSection !== "font" ? (
           <CaptionContextPanel
             t={t}
             captionSegments={captionSegments}
@@ -800,7 +1407,7 @@ export function VoicePanel({
 
         {isAvatarContext ? <AvatarContextPanel t={t} hasVisual={hasVisual} visualType={visualType} audioBlob={audioBlob} audioDuration={audioDuration} captionSegments={captionSegments} selectedVoice={selectedVoice} avatarJob={avatarJob} generateAvatarAcceptanceFrame={generateAvatarAcceptanceFrame} /> : null}
 
-        {isAudioClipContext ? <AudioClipContextPanel t={t} segment={{ ...audioPropertySegment, id: audioPropertySegment.id || audioPropertySegment.segmentId }} updateAudioSegment={selectedTrack === "audio" ? updateAudioSegment : updateSelectedTrackAudioSegment} toggleAudioSegmentReverse={toggleAudioSegmentReverse} deleteAudioSegment={selectedTrack === "audio" ? deleteAudioSegment : deleteSelectedTrackAudioSegment} downloadBlob={downloadBlob} /> : null}
+        {isAudioClipContext ? <AudioClipContextPanel t={t} segment={{ ...audioPropertySegment, id: audioPropertySegment.id || audioPropertySegment.segmentId }} updateAudioSegment={selectedTrack === "audio" ? updateAudioSegment : updateSelectedTrackAudioSegment} toggleAudioSegmentReverse={toggleAudioSegmentReverse} deleteAudioSegment={selectedTrack === "audio" ? deleteAudioSegment : deleteSelectedTrackAudioSegment} downloadBlob={downloadBlob} requestedSection={mobileInspectorSection} /> : null}
 
         {!isSmartContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "synthesis" ? (
           <VoiceSynthesisPanel

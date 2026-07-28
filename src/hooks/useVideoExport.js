@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { ensureCaptionFontLoaded } from "../lib/captionFonts.js";
 import { isExportAbortError, throwIfExportAborted } from "../lib/exportCancellation.js";
 import {
   getEffectiveExportBitrate,
@@ -51,6 +52,17 @@ export function useVideoExport(d) {
       const exportAudio = exportSettings.audio !== "none";
       const captionDelivery = exportSettings.captions || "burned";
       const burnCaptions = captionDelivery !== "none" && d.captionsEnabled && d.trackVisibility.caption;
+      if (burnCaptions) {
+        const captionsByFont = new Map();
+        d.captionSegments.forEach((segment) => {
+          const fontId = segment.fontId || d.captionStyle?.fontId || "default";
+          captionsByFont.set(fontId, `${captionsByFont.get(fontId) || ""} ${segment.text || ""}`.trim());
+        });
+        await Promise.all([...captionsByFont].map(([fontId, text]) => (
+          ensureCaptionFontLoaded(fontId, text)
+        )));
+        throwIfExportAborted(signal);
+      }
       const fullDuration = getExportContentDuration({
         visualDuration: d.imageDuration,
         voiceDuration: d.voiceTrackDuration,
@@ -114,7 +126,9 @@ export function useVideoExport(d) {
         // Stickers are timeline clips; a selected library item is not export content.
         sticker: null,
         stickerSegments: d.trackVisibility.sticker ? d.stickerSegments : [],
-        visualOverlaySegments: d.trackVisibility.overlay === false ? [] : d.visualOverlaySegments,
+        visualOverlaySegments: d.trackVisibility.overlay === false
+          ? []
+          : d.visualOverlaySegments.filter((segment) => segment.hidden !== true),
         transitionId: "none", exportSettings, onProgress: progress, signal,
       };
       let video;

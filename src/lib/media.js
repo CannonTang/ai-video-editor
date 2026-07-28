@@ -2,7 +2,7 @@ import ffmpegCoreURL from "@ffmpeg/core?url";
 import ffmpegCoreWasmURL from "@ffmpeg/core/wasm?url";
 import ffmpegClassWorkerURL from "@ffmpeg/ffmpeg/worker?worker&url";
 
-import { AUDIO_RECORDING_FORMATS, EXPORT_RECORDING_FORMATS } from "../config/editor.js";
+import { AUDIO_RECORDING_FORMATS, EXPORT_RECORDING_FORMATS, FILTER_OPTIONS } from "../config/editor.js";
 import { throwIfExportAborted, waitForExportTimeout } from "./exportCancellation.js";
 import {
   createCaptionSegments,
@@ -16,6 +16,7 @@ import {
   getCaptionTextLayout,
   positionCaptionLayout,
 } from "./captionLayout.js";
+import { resolveCaptionStyleForSegment } from "./captionFonts.js";
 import { resolveVisionAnalysisAtTime } from "./vision.js";
 import { getCaptionAvoidancePlacement, getSmartCropRect, getVisualFitRect } from "./visualGeometry.js";
 import {
@@ -29,6 +30,7 @@ import { resolveVisualClipAnimation } from "./visualClipAnimations.js";
 import { getStickerRenderGeometry } from "./stickerGeometry.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
 import { emitMediaBackendDiagnostic, getMediaFileExtension, isLibavCompatibilityEnabled, MEDIA_BACKENDS } from "./mediaCompatibility.js";
+import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -479,6 +481,28 @@ function drawVisualEffectsMask(context, mask, canvas) {
   context.restore();
 }
 
+function drawOverlayMaskShape(context, mask, canvas, visual) {
+  const visualSize = getVisualDimensions(visual);
+  const box = getVisualFitRect(visualSize, canvas, "contain");
+  const geometry = getVisualMaskGeometry(mask, { width: box.width, height: box.height });
+  const feather = getVisualMaskFeatherPixels(mask, { width: box.width, height: box.height });
+  context.fillStyle = "#fff";
+  context.filter = feather ? `blur(${feather}px)` : "none";
+  context.beginPath();
+  if (mask.type === "circle") {
+    context.arc(box.x + geometry.centerX, box.y + geometry.centerY, geometry.radius, 0, Math.PI * 2);
+  } else {
+    context.roundRect(
+      box.x + geometry.centerX - geometry.width / 2,
+      box.y + geometry.centerY - geometry.height / 2,
+      geometry.width,
+      geometry.height,
+      geometry.cornerRadius,
+    );
+  }
+  context.fill();
+}
+
 function getMaskedVisualLayer(canvas) {
   let layer = maskedVisualLayerCache.get(canvas);
   if (!layer) {
@@ -685,15 +709,65 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     const overlayVisual = visualOverlaySources[index];
     if (!overlayVisual) return;
     const overlayTime = Math.max(0, visualTime - (overlay.start || 0));
-    const overlayTransform = resolveVisualTransform(overlay.keyframes, overlayTime);
-    context.save();
-    context.globalAlpha = overlayTransform.opacity;
-    context.translate(width / 2 + (overlayTransform.x / 100) * width, height / 2 + (overlayTransform.y / 100) * height);
-    context.rotate((overlayTransform.rotation * Math.PI) / 180);
-    context.scale(overlayTransform.scale, overlayTransform.scale);
-    context.translate(-width / 2, -height / 2);
-    drawFittedVisual(context, overlayVisual, canvas, "contain", "none", null);
-    context.restore();
+    const overlayTransform = resolveVisualTransform(overlay.keyframes, overlayTime, overlay.baseTransform);
+    const overlayAnimation = resolveVisualClipAnimation(overlay.animation, overlayTime, overlay.duration);
+    const animatedOverlayTransform = {
+      ...overlayTransform,
+      x: overlayTransform.x + overlayAnimation.x,
+      y: overlayTransform.y + overlayAnimation.y,
+      scale: overlayTransform.scale * overlayAnimation.scale,
+      opacity: overlayTransform.opacity * overlayAnimation.opacity,
+    };
+    const isVector = overlay.kind === "vector" || Boolean(overlay.vectorBody);
+    const vectorAppearance = getVectorDesignAppearance(overlay.vectorDesign);
+    const overlayFilter = isVector
+      ? vectorAppearance.filter
+      : FILTER_OPTIONS.find((option) => option.id === overlay.filterId)?.css || "none";
+    const mask = overlay.mask ?? { type: "none" };
+    const hasMask = mask.type && mask.type !== "none";
+    const paintOverlay = (targetContext) => {
+      targetContext.save();
+      targetContext.globalAlpha = animatedOverlayTransform.opacity * (isVector ? vectorAppearance.opacity : 1);
+      targetContext.translate(width / 2 + (animatedOverlayTransform.x / 100) * width, height / 2 + (animatedOverlayTransform.y / 100) * height);
+      targetContext.rotate((animatedOverlayTransform.rotation * Math.PI) / 180);
+      targetContext.scale(animatedOverlayTransform.scale, animatedOverlayTransform.scale);
+      targetContext.translate(-width / 2, -height / 2);
+      drawFittedVisual(targetContext, overlayVisual, canvas, "contain", overlayFilter, null);
+      targetContext.restore();
+    };
+    if (hasMask) {
+      const layers = getVisualEffectsLayers(canvas);
+      const layerContext = layers.visual.getContext("2d");
+      const maskContext = layers.mask.getContext("2d");
+      layerContext.clearRect(0, 0, width, height);
+      maskContext.clearRect(0, 0, width, height);
+      paintOverlay(layerContext);
+      maskContext.save();
+      if (mask.inverted) {
+        maskContext.fillStyle = "#fff";
+        maskContext.fillRect(0, 0, width, height);
+        maskContext.globalCompositeOperation = "destination-out";
+      }
+      maskContext.translate(width / 2 + (animatedOverlayTransform.x / 100) * width, height / 2 + (animatedOverlayTransform.y / 100) * height);
+      maskContext.rotate((animatedOverlayTransform.rotation * Math.PI) / 180);
+      maskContext.scale(animatedOverlayTransform.scale, animatedOverlayTransform.scale);
+      maskContext.translate(-width / 2, -height / 2);
+      drawOverlayMaskShape(maskContext, mask, canvas, overlayVisual);
+      maskContext.restore();
+      layerContext.save();
+      layerContext.globalCompositeOperation = "destination-in";
+      layerContext.drawImage(layers.mask, 0, 0);
+      layerContext.restore();
+      context.save();
+      if (isVector) context.globalCompositeOperation = vectorAppearance.compositeOperation;
+      context.drawImage(layers.visual, 0, 0);
+      context.restore();
+    } else {
+      context.save();
+      if (isVector) context.globalCompositeOperation = vectorAppearance.compositeOperation;
+      paintOverlay(context);
+      context.restore();
+    }
   });
 
   if (captionsEnabled && subtitle) {
@@ -873,9 +947,15 @@ export async function exportBrowserVideo({
     ? visualSegments.filter((segment) => segment.src)
     : [{ id: "export-visual", src: imageSrc, type: visualType, duration }];
   const exportVisualTimeline = getVisualSegmentTimeline(exportVisualSegments);
+  const exportWidth = Math.max(2, Math.round(Number(exportSettings.width) || ratio.width));
+  const exportHeight = Math.max(2, Math.round(Number(exportSettings.height) || ratio.height));
   const visualItems = await Promise.all(
     exportVisualSegments.map(async (segment) => {
-      const visual = segment.type === "video" ? await loadVideo(segment.src) : await loadImage(segment.src);
+      const visualSource = getVectorRenderSource(segment, {
+        targetWidth: exportWidth,
+        targetHeight: exportHeight,
+      });
+      const visual = segment.type === "video" ? await loadVideo(segment.src) : await loadImage(visualSource);
       if (segment.type === "video") {
         await seekVideoFrame(
           visual,
@@ -931,16 +1011,21 @@ export async function exportBrowserVideo({
   throwIfExportAborted(signal);
   const stickerImageMap = new Map(stickerImageEntries.filter(([, image]) => image));
   const visualOverlayItems = await Promise.all(
-    visualOverlaySegments.filter((segment) => segment.src).map(async (segment) => ({
+    visualOverlaySegments.filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => ({
       segment,
-      visual: segment.type === "video" ? await loadVideo(segment.src) : await loadImage(segment.src),
+      visual: segment.type === "video"
+        ? await loadVideo(segment.src)
+        : await loadImage(getVectorRenderSource(segment, {
+            targetWidth: exportWidth,
+            targetHeight: exportHeight,
+          })),
     })),
   );
   throwIfExportAborted(signal);
   onProgress?.({ progress: 8, phaseKey: "exportPrepareTracks" });
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(2, Math.round(Number(exportSettings.width) || ratio.width));
-  canvas.height = Math.max(2, Math.round(Number(exportSettings.height) || ratio.height));
+  canvas.width = exportWidth;
+  canvas.height = exportHeight;
   const context = canvas.getContext("2d");
   const exportFrameRate = Math.max(24, Math.min(60, Number(exportSettings.frameRate) || 30));
   const canvasStream = canvas.captureStream(exportFrameRate);
@@ -1187,8 +1272,9 @@ export async function exportBrowserVideo({
     const elapsed = Math.min(totalDuration, (performance.now() - startTime) / 1000);
     const timelineTime = rangeStart + elapsed;
     const segmentIndex = getSegmentIndexAtTime(exportSegments, timelineTime, captionTargetDuration);
+    const activeCaptionSegment = segmentIndex >= 0 ? exportSegments[segmentIndex] : null;
     const exportCaption =
-      segmentIndex >= 0 && !exportSegments[segmentIndex]?.hidden ? segments[segmentIndex] : "";
+      activeCaptionSegment && !activeCaptionSegment.hidden ? segments[segmentIndex] : "";
     const { item: visualItem, range: visualRange } = getVisualItemAtTime(timelineTime);
     const localTime = Math.max(0, timelineTime - (visualRange?.start ?? 0));
     const visualSourceTime = syncVideoItem(visualItem, localTime);
@@ -1230,7 +1316,7 @@ export async function exportBrowserVideo({
       captionPosition,
       captionPlacement,
       captionSize,
-      captionStyle,
+      captionStyle: resolveCaptionStyleForSegment(captionStyle, activeCaptionSegment),
       captionReferenceSize,
       stickers: exportStickers,
       stickerImages: exportStickers.map((item) => item?.src ? stickerImageMap.get(item.src) : null),
@@ -1275,6 +1361,7 @@ export async function exportBrowserVideo({
     throwIfExportAborted(signal);
     const finalTimelineTime = rangeStart + Math.max(0, totalDuration - 1 / exportFrameRate);
     const finalSegmentIndex = getSegmentIndexAtTime(exportSegments, finalTimelineTime, captionTargetDuration);
+    const finalCaptionSegment = finalSegmentIndex >= 0 ? exportSegments[finalSegmentIndex] : null;
     const { item: finalVisualItem, range: finalVisualRange } = getVisualItemAtTime(finalTimelineTime);
     const finalStickers = getStickersAtTime(finalTimelineTime);
     const finalVisualOverlays = getVisualOverlaysAtTime(finalTimelineTime);
@@ -1306,7 +1393,7 @@ export async function exportBrowserVideo({
       captionPosition,
       captionPlacement,
       captionSize,
-      captionStyle,
+      captionStyle: resolveCaptionStyleForSegment(captionStyle, finalCaptionSegment),
       captionReferenceSize,
       stickers: finalStickers,
       stickerImages: finalStickers.map((item) => item?.src ? stickerImageMap.get(item.src) : null),

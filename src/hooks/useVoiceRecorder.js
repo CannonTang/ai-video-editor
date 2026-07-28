@@ -9,7 +9,10 @@ export function useVoiceRecorder(d) {
       const decoded = await decodeWaveform(blob); const createdAt = formatSavedTime();
       const recording = { id: crypto.randomUUID(), blob, name: `${d.t("recordVoice")} ${createdAt}`,
         duration: decoded.duration, peaks: decoded.peaks, createdAt, extension };
-      d.replaceAudio(blob, decoded.duration, decoded.peaks, d.t("recordingReady"));
+      d.replaceAudio(blob, decoded.duration, decoded.peaks, d.t("recordingReady"), {
+        sourceKind: "recording",
+        name: recording.name,
+      });
       d.setRecordedVoices((items) => [recording, ...items.slice(0, 8)]);
       d.setSelectedTrack("audio"); d.setActiveTool("audio"); d.setVoiceTab("mine"); d.notify(d.t("recordingReady"));
     } catch (error) {
@@ -49,7 +52,10 @@ export function useVoiceRecorder(d) {
     d.setRecordingState("processing"); recorder.stop();
   };
   const useRecordedVoice = (recording) => {
-    d.replaceAudio(recording.blob, recording.duration, recording.peaks, recording.name);
+    d.replaceAudio(recording.blob, recording.duration, recording.peaks, recording.name, {
+      sourceKind: "recording",
+      name: recording.name,
+    });
     d.setSelectedTrack("audio"); d.setActiveTool("audio"); d.setVoiceTab("mine"); d.notify(d.t("recordingReady"));
   };
   return { startVoiceRecording, stopVoiceRecording, useRecordedVoice };

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { VOICES } from "../config/editor.js";
 import { getRemoteAssetBlob } from "../lib/remoteAssetCache.js";
+import { VECTOR_ASSETS } from "../lib/vectorAssets.js";
 
-const DEFAULT_QUERY = { image: "nature", video: "nature", audio: "ambient" };
+const DEFAULT_QUERY = { image: "nature", video: "nature", audio: "ambient", vector: "" };
 
 const formatDuration = (seconds = 0) => {
   const value = Math.max(0, Number(seconds) || 0);
@@ -121,6 +122,16 @@ export function useEditorCatalog(voiceFilter) {
 
   useEffect(() => {
     const controller = new AbortController();
+    if (libraryType === "vector") {
+      const query = libraryQuery.trim().toLocaleLowerCase();
+      const assets = query
+        ? VECTOR_ASSETS.filter((item) => `${item.name} ${item.tags.join(" ")}`.toLocaleLowerCase().includes(query))
+        : VECTOR_ASSETS;
+      setBuiltInAssets(assets);
+      setLibraryStatus("ready");
+      setLibraryError("");
+      return () => controller.abort();
+    }
     setLibraryStatus("loading"); setLibraryError("");
     const timer = setTimeout(async () => {
       try {
@@ -155,5 +166,5 @@ export function useEditorCatalog(voiceFilter) {
       setAssetDownloadStates((states) => ({ ...states, [asset.id]: { status: "error", progress: 0 } }));
     }
   };
-  return { builtInAssets, filteredVoices, libraryType, libraryQuery, setLibraryQuery, selectLibraryType, libraryStatus, libraryError, assetDownloadStates, prefetchLibraryAsset, libraryProvider: libraryType === "audio" ? "Openverse Music" : pexelsKey ? "Pexels" : "Wikimedia Commons" };
+  return { builtInAssets, filteredVoices, libraryType, libraryQuery, setLibraryQuery, selectLibraryType, libraryStatus, libraryError, assetDownloadStates, prefetchLibraryAsset, libraryProvider: libraryType === "vector" ? "Timeline Studio" : libraryType === "audio" ? "Openverse Music" : pexelsKey ? "Pexels" : "Wikimedia Commons" };
 }

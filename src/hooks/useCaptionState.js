@@ -14,6 +14,7 @@ const DEFAULT_CAPTION_STYLE = {
   paddingY: 12,
   shadowOpacity: 0.45,
   effect: "normal",
+  fontId: "default",
 };
 
 export function useCaptionState() {

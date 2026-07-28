@@ -71,7 +71,12 @@ export function useEditorLifecycle(d) {
       })
       .then(async (blob) => {
         const waveform = await decodeWaveform(blob);
-        d.replaceAudio(blob, waveform.duration, waveform.peaks, "端到端测试配音已载入");
+        d.replaceAudio(blob, waveform.duration, waveform.peaks, "端到端测试配音已载入", {
+          sourceKind: "ai-voice",
+          voiceId: "zh_CN-xiao_ya-medium",
+          voiceName: "Xiaoya",
+          name: "Xiaoya",
+        });
         d.notify("端到端测试配音已载入配音轨");
       })
       .catch((error) => {

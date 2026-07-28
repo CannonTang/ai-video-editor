@@ -4,6 +4,9 @@ import {
   __resetModelSourceRoutingForTests,
   fetchFirstAvailableModel,
   getModelSourcePreference,
+  hubModelFileUrls,
+  loadFromModelHubs,
+  modelHubRemoteHosts,
   mirroredModelFileUrls,
   orderModelUrlsForNetwork,
   orderModelSourceUrls,
@@ -33,6 +36,19 @@ describe("model source mirrors", () => {
     ]);
   });
 
+  it("builds same-owner public hub candidates for third-party voice models", () => {
+    expect(hubModelFileUrls({
+      repository: "rhasspy/piper-voices",
+      revision: "main",
+      path: "zh/zh_CN/xiao_ya/medium/model.onnx",
+      preference: "modelscope",
+    })).toEqual([
+      "https://www.modelscope.cn/models/rhasspy/piper-voices/resolve/main/zh/zh_CN/xiao_ya/medium/model.onnx",
+      "https://huggingface.co/rhasspy/piper-voices/resolve/main/zh/zh_CN/xiao_ya/medium/model.onnx",
+    ]);
+    expect(modelHubRemoteHosts("modelscope")[0]).toBe("https://www.modelscope.cn/models/");
+  });
+
   it("deduplicates identical source URLs", () => {
     expect(orderModelSourceUrls("https://example.com/model", "https://example.com/model")).toEqual([
       "https://example.com/model",
@@ -48,6 +64,26 @@ describe("model source mirrors", () => {
     expect(await result.response.text()).toBe("model");
     expect(result.url).toBe("https://second.test/model");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries Transformers model loading against the alternate public hub", async () => {
+    vi.stubGlobal("fetch", vi.fn((url, init) => {
+      if (init?.method === "HEAD") {
+        if (String(url).includes("modelscope.cn")) return Promise.resolve(new Response("", { status: 200 }));
+        return new Promise((resolve) => setTimeout(() => resolve(new Response("", { status: 200 })), 20));
+      }
+      return Promise.resolve(new Response(""));
+    }));
+    const env = {};
+    const loader = vi.fn((remoteHost) => {
+      if (remoteHost.includes("modelscope.cn")) throw new Error("mirror unavailable");
+      return Promise.resolve("loaded");
+    });
+
+    await expect(loadFromModelHubs(env, loader, "modelscope")).resolves.toBe("loaded");
+    expect(loader).toHaveBeenCalledTimes(2);
+    expect(env.remoteHost).toBe("https://huggingface.co/");
+    expect(env.remotePathTemplate).toBe("{model}/resolve/{revision}/");
   });
 
   it("selects the first reachable public mirror and remembers it for the session", async () => {

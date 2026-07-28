@@ -2,10 +2,12 @@ import {
   ArrowClockwise,
   ArrowCounterClockwise,
   CaretDown,
+  DiscordLogo,
   FileArrowDown,
   FileArrowUp,
   FilePlus,
   GearSix,
+  GithubLogo,
   Pause,
   Play,
   ShieldCheck,
@@ -16,6 +18,11 @@ import { RATIO_OPTIONS } from "../config/editor.js";
 import { APP_LANGUAGES, saveLanguagePreference } from "../i18n.js";
 import { ExportSettingsPanel } from "./ExportSettingsPanel.jsx";
 import { IconButton, Popover } from "./ui.jsx";
+
+const COMMUNITY_LINKS = Object.freeze({
+  discord: "https://discord.gg/uq2uvUTBr",
+  github: "https://github.com/MartinDelophy/ai-video-editor",
+});
 
 export function Topbar({
   t,
@@ -155,6 +162,26 @@ export function Topbar({
       </div>
 
       <div className="topbar-actions">
+        <nav className="topbar-community-links" aria-label={t("communityLinks", "社区链接")}>
+          <a
+            href={COMMUNITY_LINKS.discord}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t("discordCommunity", "Discord 社区")}
+            title={t("discordCommunity", "Discord 社区")}
+          >
+            <DiscordLogo size={19} weight="fill" aria-hidden="true" />
+          </a>
+          <a
+            href={COMMUNITY_LINKS.github}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={t("githubRepository", "GitHub 仓库")}
+            title={t("githubRepository", "GitHub 仓库")}
+          >
+            <GithubLogo size={19} weight="fill" aria-hidden="true" />
+          </a>
+        </nav>
         <button className="preview-button" type="button" onClick={handlePlayToggle}>
           {isPlaying ? <Pause size={16} weight="fill" /> : <Play size={16} weight="fill" />}
           {t("preview")}

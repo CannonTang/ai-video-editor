@@ -133,6 +133,61 @@ export function mirroredModelBaseUrls(options) {
   return mirroredModelFileUrls(options).map((url) => `${url.replace(/\/+$/, "")}/`);
 }
 
+export function hubModelFileUrls({
+  repository,
+  revision = "main",
+  path,
+  preference,
+}) {
+  const suffix = path ? `/${String(path).replace(/^\/+/, "")}` : "";
+  const resolvedPreference = preference === "huggingface" || preference === "modelscope"
+    ? preference
+    : getModelSourcePreference(preference);
+  return orderModelSourceUrls(
+    `https://huggingface.co/${repository}/resolve/${revision}${suffix}`,
+    `https://www.modelscope.cn/models/${repository}/resolve/${revision}${suffix}`,
+    resolvedPreference,
+  );
+}
+
+export function hubModelBaseUrls(options) {
+  return hubModelFileUrls(options).map((url) => `${url.replace(/\/+$/, "")}/`);
+}
+
+export function modelHubRemoteHosts(preference) {
+  const resolvedPreference = preference === "huggingface" || preference === "modelscope"
+    ? preference
+    : getModelSourcePreference(preference);
+  return orderModelSourceUrls(
+    "https://huggingface.co/",
+    "https://www.modelscope.cn/models/",
+    resolvedPreference,
+  );
+}
+
+export async function loadFromModelHubs(transformersEnv, loader, preference) {
+  const candidates = await orderModelUrlsForNetwork(modelHubRemoteHosts(preference));
+  const failures = [];
+  for (const remoteHost of candidates) {
+    transformersEnv.remoteHost = remoteHost;
+    transformersEnv.remotePathTemplate = "{model}/resolve/{revision}/";
+    try {
+      const result = await loader(remoteHost);
+      runtimeModelSource = modelSourceFromUrl(remoteHost) || runtimeModelSource;
+      return result;
+    } catch (error) {
+      failures.push(`${new URL(remoteHost).hostname}: ${error?.message || String(error)}`);
+      if (modelSourceFromUrl(remoteHost) === runtimeModelSource) runtimeModelSource = "";
+    }
+  }
+  throw new Error(`MODEL_MIRRORS_UNAVAILABLE: ${failures.join("; ")}`);
+}
+
+export function isModelDownloadError(error) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /MODEL_MIRRORS_UNAVAILABLE|failed to fetch|fetch failed|networkerror|load failed/i.test(message);
+}
+
 export async function fetchFirstAvailableModel(urls, init) {
   const failures = [];
   const candidates = await orderModelUrlsForNetwork(urls);

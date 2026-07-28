@@ -54,6 +54,13 @@ export function EditorSidebar({ model: d }) {
             applyAssetToTrack={d.applyAssetToTrack}
             closeMobilePanel={() => d.setMobilePanel?.("")}
             mobilePanelOpen={d.mobilePanel === "tools"}
+            language={d.activeLanguage}
+            onGeneratedVector={d.handleGeneratedVector}
+            onOpenAiMusic={() => {
+              d.setSmartMode("ai-music");
+              d.selectTool("smart");
+              if (window.matchMedia?.("(max-width: 760px)").matches) d.setMobilePanel?.("inspector");
+            }}
           />
         ) : (
           <ToolPanel
@@ -81,6 +88,7 @@ export function EditorSidebar({ model: d }) {
             setCaptionSize={d.setCaptionSize}
             captionStyle={d.captionStyle}
             setCaptionStyle={d.setCaptionStyle}
+            setCaptionSegments={d.setCaptionSegments}
             captionsEnabled={d.captionsEnabled}
             setCaptionsEnabled={d.setCaptionsEnabled}
             selectedFilterId={d.selectedFilterId}

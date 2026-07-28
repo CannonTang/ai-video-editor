@@ -2,6 +2,7 @@ import * as ort from "onnxruntime-web/webgpu";
 import ortWasmMjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
 import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
 import { pinyin } from "pinyin-pro";
+import { fetchFirstAvailableModel, hubModelFileUrls } from "./modelSources.js";
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
@@ -13,7 +14,6 @@ const PINYIN_VOICES = {
   "zh_CN-chaowen-medium": "zh/zh_CN/chaowen/medium",
 };
 export const isBuiltInPinyinVoice = (voiceId) => voiceId in PINYIN_VOICES;
-const PIPER_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main";
 const INITIALS = ["zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h", "j", "q", "x", "r", "z", "c", "s", "y", "w"];
 const GROUP_END = new Set(["1", "2", "3", "4", "5", "。", ".", "？", "?", "！", "!", "—", "…", "、", "，", ",", "：", ":", "；", ";", " "]);
 const DIGITS = { 0: "零", 1: "一", 2: "二", 3: "三", 4: "四", 5: "五", 6: "六", 7: "七", 8: "八", 9: "九" };
@@ -101,15 +101,14 @@ function encodeWav(samples, sampleRate) {
   return new Blob([buffer], { type: "audio/wav" });
 }
 
-async function fetchArrayBufferWithProgress(url, onProgress, voiceName) {
-  const cacheName = `${voiceName}-${url.split("/").at(-1)}`;
+async function fetchArrayBufferWithProgress(urls, onProgress, voiceName) {
+  const cacheName = `${voiceName}-${urls[0].split("/").at(-1)}`;
   const cached = await readPinyinCache(cacheName);
   if (cached) {
-    onProgress?.({ url, total: cached.byteLength, loaded: cached.byteLength, cached: true });
+    onProgress?.({ url: urls[0], total: cached.byteLength, loaded: cached.byteLength, cached: true });
     return cached;
   }
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${voiceName}模型下载失败 (${response.status})`);
+  const { response, url } = await fetchFirstAvailableModel(urls);
   const total = Number(response.headers.get("content-length")) || 0;
   if (!response.body) {
     const data = await response.arrayBuffer();
@@ -135,19 +134,20 @@ async function fetchArrayBufferWithProgress(url, onProgress, voiceName) {
 async function loadPinyinVoice(voiceId, onProgress) {
   const voicePath = PINYIN_VOICES[voiceId];
   const voiceName = voiceId === "zh_CN-xiao_ya-medium" ? "小雅" : "超文";
-  const voiceBase = `${PIPER_BASE}/${voicePath}`;
-  const configUrl = `${voiceBase}/${voiceId}.onnx.json`;
+  const fileUrls = (fileName) => hubModelFileUrls({
+    repository: "rhasspy/piper-voices",
+    path: `${voicePath}/${fileName}`,
+  });
   const cachedConfig = await readPinyinCache(`${voiceName}-${voiceId}.onnx.json`);
   let config;
   if (cachedConfig) config = JSON.parse(new TextDecoder().decode(cachedConfig));
   else {
-    const configResponse = await fetch(configUrl);
-    if (!configResponse.ok) throw new Error(`${voiceName}配置下载失败 (${configResponse.status})`);
+    const { response: configResponse } = await fetchFirstAvailableModel(fileUrls(`${voiceId}.onnx.json`));
     const configBytes = await configResponse.arrayBuffer();
     config = JSON.parse(new TextDecoder().decode(configBytes));
     await writePinyinCache(`${voiceName}-${voiceId}.onnx.json`, configBytes);
   }
-  const model = await fetchArrayBufferWithProgress(`${voiceBase}/${voiceId}.onnx`, onProgress, voiceName);
+  const model = await fetchArrayBufferWithProgress(fileUrls(`${voiceId}.onnx`), onProgress, voiceName);
   onProgress?.({ phase: "initializing", loaded: model.byteLength, total: model.byteLength });
   if (globalThis.navigator?.gpu) {
     try {

@@ -23,6 +23,7 @@ AGENTS.md
 .netlify/
 .vite/
 .vite-temp/
+.artifacts/
 
 # logs
 *.log

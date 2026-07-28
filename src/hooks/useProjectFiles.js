@@ -68,7 +68,13 @@ export function useProjectFiles(deps) {
       commandStateRef.current = data.commandState || { schemaVersion: 1, revision: 0, appliedOperationIds: [] };
       deps.setTimelineHorizon(DEFAULT_TIMELINE_DURATION_SECONDS);
       deps.setScript(typeof data.script === "string" ? data.script : DEFAULT_SCRIPT);
-      const captions = Array.isArray(data.captionSegments) ? data.captionSegments : createCaptionSegments(data.script || DEFAULT_SCRIPT);
+      const legacyFontId = data.captionStyle?.fontId || "default";
+      let inheritedCaptionFontId = legacyFontId;
+      const captions = (Array.isArray(data.captionSegments) ? data.captionSegments : createCaptionSegments(data.script || DEFAULT_SCRIPT))
+        .map((segment) => {
+          inheritedCaptionFontId = segment.fontId || inheritedCaptionFontId;
+          return segment.fontId ? segment : { ...segment, fontId: inheritedCaptionFontId };
+        });
       deps.markTimelineViewRestored?.(Boolean(captions.length || data.visualSegments?.length || audio || sourceAudio || music));
       deps.setCaptionSegments(captions); deps.setSelectedSegmentId(captions[0]?.id ?? "");
       deps.setSelectedVoiceId(data.selectedVoiceId || VOICES[0].id); deps.setSpeed(Number(data.speed) || 1);

@@ -22,7 +22,11 @@ describe("asset timeline drops", () => {
 
     await createAssetDropActions(deps).applyAssetToTrack(asset, "audio");
 
-    expect(deps.replaceAudio).toHaveBeenCalledWith(asset.blob, 10, asset.peaks, "音频已写入配音轨");
+    expect(deps.replaceAudio).toHaveBeenCalledWith(asset.blob, 10, asset.peaks, "音频已写入配音轨", {
+      sourceKind: "upload",
+      assetId: asset.id,
+      name: asset.name,
+    });
     expect(deps.setSelectedTrack).toHaveBeenCalledWith("audio");
     expect(deps.setActiveTool).not.toHaveBeenCalled();
   });

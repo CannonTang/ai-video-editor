@@ -38,9 +38,15 @@ export function useAutoCaptions(d) {
         preferredLanguage: d.uiLanguage, timelineOffset,
         onProgress: ({ progress, phase }) => { d.setProgress((current) => Math.max(current, progress)); d.setStatusText(localizeAutoCaptionPhase(phase, d.t)); },
       });
-      d.setCaptionSegments((segments) => options.append
-        ? [...segments, ...result.segments].sort((a, b) => (a.start || 0) - (b.start || 0))
-        : result.segments);
+      d.setCaptionSegments((segments) => {
+        const combined = (options.append ? [...segments, ...result.segments] : result.segments)
+          .sort((a, b) => (a.start || 0) - (b.start || 0));
+        let inheritedFontId = d.captionStyle?.fontId || "default";
+        return combined.map((segment) => {
+          inheritedFontId = segment.fontId || inheritedFontId;
+          return segment.fontId ? segment : { ...segment, fontId: inheritedFontId };
+        });
+      });
       d.setScript((script) => options.append && script ? `${script}\n${result.text}` : result.text);
       d.setSelectedSegmentId(result.segments[0]?.id ?? ""); d.setSelectedTrack("caption"); d.setActiveTool("caption");
       d.setCaptionsEnabled(true); d.setTrackVisibility((visibility) => ({ ...visibility, caption: true }));

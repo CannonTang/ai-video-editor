@@ -7,8 +7,8 @@ export function AssetDragPreview({ preview, t }) {
   const label = preview.type === "audio" ? t("assetAudio") : preview.type === "video" ? t("assetVideo") : preview.type === "sticker" ? t("assetSticker") : t("assetImage");
   return <div className={`asset-drag-preview type-${preview.type}`} style={{ left: preview.x, top: preview.y }}>
     {preview.src ? <div className="asset-drag-thumb">
-      {preview.type === "video" ? <video src={preview.src} muted playsInline preload="metadata" draggable={false} />
-        : preview.type === "audio" ? <span>{label}</span> : <img src={preview.src} alt="" draggable={false} />}
+      {preview.type === "video" ? <video src={preview.src} crossOrigin="anonymous" muted playsInline preload="metadata" draggable={false} />
+        : preview.type === "audio" ? <span>{label}</span> : <img src={preview.src} alt="" crossOrigin="anonymous" draggable={false} />}
     </div> : null}
     <span>{label}</span><strong>{preview.name}</strong>
   </div>;

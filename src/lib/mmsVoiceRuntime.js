@@ -1,3 +1,9 @@
+import {
+  fetchFirstAvailableModel,
+  hubModelFileUrls,
+  loadFromModelHubs,
+} from "./modelSources.js";
+
 const MMS_MODEL_BY_VOICE = {
   "ko_KR-mms-medium": "Xenova/mms-tts-kor",
   "vi_VN-mms-medium": "Xenova/mms-tts-vie",
@@ -28,12 +34,12 @@ export async function predictMmsVoice(input, onProgress) {
       const { env, pipeline } = await import("@huggingface/transformers");
       env.useBrowserCache = false;
       const isRootOnnxModel = modelId === "siridech/mms-tts-tha-onnx";
-      return pipeline("text-to-speech", modelId, {
+      return loadFromModelHubs(env, () => pipeline("text-to-speech", modelId, {
         dtype: isRootOnnxModel ? "fp32" : "q8",
         device: "wasm",
         ...(isRootOnnxModel ? { model_file_name: "../model" } : {}),
         progress_callback: (event) => onProgress?.(event),
-      });
+      }));
     })().catch((error) => { runtimePromises.delete(modelId); throw error; }));
   }
   const synthesizer = await runtimePromises.get(modelId);
@@ -46,8 +52,10 @@ export async function predictMmsVoice(input, onProgress) {
   let samples;
   let sampleRate = 16000;
   if (input.voiceId === "th_TH-mms-medium") {
-    thaiVocabPromise ??= fetch("https://huggingface.co/siridech/mms-tts-tha-onnx/resolve/main/vocab.json").then((response) => {
-      if (!response.ok) throw new Error(`Thai MMS vocabulary failed to load (${response.status})`);
+    thaiVocabPromise ??= fetchFirstAvailableModel(hubModelFileUrls({
+      repository: "siridech/mms-tts-tha-onnx",
+      path: "vocab.json",
+    })).then(({ response }) => {
       return response.json();
     });
     const [vocab, { Tensor }] = await Promise.all([thaiVocabPromise, import("@huggingface/transformers")]);

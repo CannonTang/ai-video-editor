@@ -62,3 +62,32 @@ describe("caption voiceover links", () => {
     expect(() => actions.unlinkCaptionAudio("caption-1")).not.toThrow();
   });
 });
+
+describe("caption font persistence", () => {
+  it("preserves explicit per-clip fonts and fills missing legacy fonts by inheritance", () => {
+    let captions = [];
+    const setCaptionSegments = vi.fn((next) => { captions = next; });
+    const actions = createCaptionEditingActions({
+      audioSegments: [],
+      captionSegments: [],
+      captionStyle: { fontId: "default" },
+      trackLocks: { caption: false },
+      setCaptionSegments,
+      setScript: vi.fn(),
+      setSelectedTrack: vi.fn(),
+      setSelectedSegmentId: vi.fn(),
+      notify: vi.fn(),
+      t: (key) => key,
+    });
+    actions.commitCaptionSegments([
+      { id: "one", text: "One", fontId: "ma-shan-zheng" },
+      { id: "two", text: "Two" },
+      { id: "three", text: "Three", fontId: "noto-serif-sc" },
+    ]);
+    expect(captions.map((caption) => caption.fontId)).toEqual([
+      "ma-shan-zheng",
+      "ma-shan-zheng",
+      "noto-serif-sc",
+    ]);
+  });
+});

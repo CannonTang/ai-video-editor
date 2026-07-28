@@ -2,6 +2,7 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const RAW_KEY_ENGLISH = {
+  apply: "Apply",
   cancel: "Cancel",
   canvasRatio: "Canvas ratio",
   clipDuration: "Clip duration",
@@ -9,6 +10,7 @@ const RAW_KEY_ENGLISH = {
   complete: "Complete",
   layer: "Layer",
   lock: "Lock",
+  reset: "Reset",
   visualBasic: "Basic",
 };
 

@@ -84,7 +84,11 @@ export function createAssetDropActions(d) {
       const decoded = asset.peaks?.length && hasValidDuration
         ? { duration: Number(asset.duration), peaks: asset.peaks }
         : await decodeWaveform(asset.blob, 96);
-      d.replaceAudio(asset.blob, decoded.duration, decoded.peaks, "音频已写入配音轨");
+      d.replaceAudio(asset.blob, decoded.duration, decoded.peaks, "音频已写入配音轨", {
+        sourceKind: "upload",
+        assetId: asset.id,
+        name: asset.name,
+      });
       d.setSelectedTrack("audio");
       d.notify(tr("audioDroppedOnVoiceTrack", "音频已拖入配音音频轨"));
       return;

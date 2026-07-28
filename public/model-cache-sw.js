@@ -55,8 +55,11 @@ function isHuggingFaceModelRequest(url) {
 }
 
 function isModelScopeModelRequest(url) {
-  return MODEL_SCOPE_HOSTS.has(url.hostname)
-    && (url.hostname !== "www.modelscope.cn" || url.pathname.includes("/resolve/"));
+  if (!MODEL_SCOPE_HOSTS.has(url.hostname)) return false;
+  // Piper is persisted in OPFS by its runtime so both public sources share
+  // one source-independent cache entry instead of duplicating a large model.
+  if (url.pathname.includes("/rhasspy/piper-voices/resolve/")) return false;
+  return url.hostname !== "www.modelscope.cn" || url.pathname.includes("/resolve/");
 }
 
 function canonicalModelIdentity(url) {

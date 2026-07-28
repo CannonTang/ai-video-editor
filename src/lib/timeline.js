@@ -42,6 +42,15 @@ export function getVisualAssetPayload(asset) {
     sourceDuration: Math.max(0, Number(asset.sourceDuration ?? asset.duration) || 0),
     playbackRate: Math.max(0.25, Math.min(4, Number(asset.playbackRate) || 1)),
     trackFrames: Array.isArray(asset.trackFrames) ? asset.trackFrames : [],
+    kind: asset.kind ?? "",
+    vectorBody: asset.vectorBody ?? "",
+    vectorBackground: asset.vectorBackground ?? "",
+    vectorColorSlots: asset.vectorColorSlots ? {
+      primary: [...(asset.vectorColorSlots.primary || [])],
+      secondary: [...(asset.vectorColorSlots.secondary || [])],
+      accent: [...(asset.vectorColorSlots.accent || [])],
+    } : undefined,
+    vectorDesign: asset.vectorDesign ? { ...asset.vectorDesign } : undefined,
     preparing: Boolean(asset.preparing),
     prepareProgress: Math.max(0, Math.min(1, Number(asset.prepareProgress) || 0)),
   };
@@ -291,6 +300,7 @@ export function createCaptionSegments(text) {
     text: segment,
     weight: getCaptionDefaultWeight(segment),
     hidden: false,
+    fontId: "default",
   }));
 }
 

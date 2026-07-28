@@ -25,4 +25,15 @@ describe("caption design scaling", () => {
     expect(getCaptionScale(null, { width: 3840, height: 2160 })).toBe(6);
     expect(getCaptionScale(null, { width: 2160, height: 3840 })).toBe(6);
   });
+
+  it("uses the selected artistic font in canvas metrics", () => {
+    const metrics = resolveCaptionMetrics({
+      captionStyle: { fontId: "ma-shan-zheng" },
+      renderFrame: { width: 640, height: 360 },
+    });
+    expect(metrics.fontId).toBe("ma-shan-zheng");
+    expect(metrics.fontFamily).toContain('"Ma Shan Zheng"');
+    expect(metrics.fontWeight).toBe(400);
+    expect(metrics.font).toContain('"Ma Shan Zheng"');
+  });
 });

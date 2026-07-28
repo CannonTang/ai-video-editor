@@ -47,6 +47,7 @@ export function useVocalSeparation({ sourceAudioBlob, sourceAudioName, replaceAu
       replaceAudio(result.vocals, voiceMeta.duration, voiceMeta.peaks, t("vocalStemPlaced"), {
         start,
         name: `${base}-${t("vocalStemFile")}.wav`,
+        sourceKind: "separated",
         replaceSegmentId: track === "audio" ? segmentId : "",
       });
       replaceMusic(result.accompaniment, musicMeta.duration, musicMeta.peaks, `${base}-${t("instrumentalStemFile")}.wav`, t("instrumentalStemPlaced"), { start });

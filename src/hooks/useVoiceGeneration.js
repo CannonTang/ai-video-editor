@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { MODEL_ID } from "../config/editor.js";
 import { isBuiltInPinyinVoice, predictPiperVoice } from "../lib/piperVoiceRuntime.js";
 import { predictMmsVoice } from "../lib/mmsVoiceRuntime.js";
+import { isModelDownloadError, loadFromModelHubs } from "../lib/modelSources.js";
 import { clearPiperCacheIfStorageTight, isPiperSymbolError, isStorageQuotaError, prepareTextForVoice, TtsInputError } from "../lib/ttsText.js";
 
 export function useVoiceGeneration(d) {
@@ -75,7 +76,11 @@ export function useVoiceGeneration(d) {
         if (webGpuAdapter) {
           try {
             d.setStatusText("ttsStatusLoadingWebGpu");
-            tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "fp32", device: "webgpu", progress_callback: progressCallback });
+            tts = await loadFromModelHubs(transformersEnv, () => KokoroTTS.from_pretrained(MODEL_ID, {
+              dtype: "fp32",
+              device: "webgpu",
+              progress_callback: progressCallback,
+            }));
             d.setStatusText("ttsStatusGeneratingWebGpu");
             blob = (await tts.generate(prepared.text, { voice: d.selectedVoice.id, speed: d.speed })).toBlob();
           } catch (error) {
@@ -84,7 +89,11 @@ export function useVoiceGeneration(d) {
           }
         }
         if (!blob) {
-          tts = await KokoroTTS.from_pretrained(MODEL_ID, { dtype: "q8", device: "wasm", progress_callback: progressCallback });
+          tts = await loadFromModelHubs(transformersEnv, () => KokoroTTS.from_pretrained(MODEL_ID, {
+            dtype: "q8",
+            device: "wasm",
+            progress_callback: progressCallback,
+          }));
           d.setStatusText("ttsStatusGeneratingWasm");
           blob = (await tts.generate(prepared.text, { voice: d.selectedVoice.id, speed: d.speed })).toBlob();
         }
@@ -99,7 +108,9 @@ export function useVoiceGeneration(d) {
       console.error(error);
       const message = error instanceof TtsInputError ? d.t(error.code)
         : d.selectedVoice.engine === "piper" && isPiperSymbolError(error) ? d.t("ttsErrorUnsupportedPiperSymbols")
-          : isStorageQuotaError(error) ? d.t("ttsErrorStorageQuota") : error instanceof Error ? error.message : d.t("ttsErrorGenerationFailed");
+          : isStorageQuotaError(error) ? d.t("ttsErrorStorageQuota")
+            : isModelDownloadError(error) ? d.t("ttsErrorModelDownload")
+              : error instanceof Error ? error.message : d.t("ttsErrorGenerationFailed");
       d.setStatus("error"); d.setStatusText(message); d.setProgress(0); d.notify(message);
     }
   }, [d]);

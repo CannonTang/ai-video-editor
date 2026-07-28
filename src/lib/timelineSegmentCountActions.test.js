@@ -24,6 +24,26 @@ describe("timeline segment insertion", () => {
     expect(commitCaptionSegments.mock.calls[0][2]).toBe(0);
   });
 
+  it("inherits the previous timeline caption font without changing other clips", () => {
+    const commitCaptionSegments = vi.fn();
+    const captionSegments = [
+      { id: "caption-1", text: "First", start: 0, end: 2, fontId: "ma-shan-zheng" },
+      { id: "caption-2", text: "Later", start: 8, end: 10, fontId: "noto-serif-sc" },
+    ];
+    const controls = createTimelineSegmentCountActions({
+      selectedTrack: "caption", currentTime: 4, captionSegments, captionStyle: { fontId: "default" },
+      trackLocks: {}, commitCaptionSegments, notify: vi.fn(),
+      t: (key) => key === "newCaptionDefault" ? "New caption" : key,
+    });
+    controls.handleAddCaptionSegment();
+    const next = commitCaptionSegments.mock.calls[0][0];
+    expect(next.find((segment) => segment.text === "New caption")).toMatchObject({
+      start: 4,
+      fontId: "ma-shan-zheng",
+    });
+    expect(next.find((segment) => segment.id === "caption-2")?.fontId).toBe("noto-serif-sc");
+  });
+
   it("splits the active visual and inserts the new clip at the playhead", () => {
     const commitVisualSegments = vi.fn();
     const source = { id: "visual-1", type: "image", src: "image.png", duration: 8 };
