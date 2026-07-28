@@ -129,6 +129,7 @@ Timeline Studio is looking for contributors interested in browser media, WebCode
 
 - Try the [live editor](https://video-editor.ai-creator.top/) and report reproducible bugs in [Issues](https://github.com/MartinDelophy/ai-video-editor/issues).
 - Join [Discussions](https://github.com/MartinDelophy/ai-video-editor/discussions) to propose features, share projects, or help prioritize the roadmap.
+- Read the [contribution guide](CONTRIBUTING.md) for setup, validation, and first-contribution guidance.
 - Contributions of focused fixes, tests, translations, documentation, and example projects are especially useful.
 
 ## Quick start
