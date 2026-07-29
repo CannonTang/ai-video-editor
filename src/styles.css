@@ -4241,6 +4241,11 @@ button:disabled {
   overflow: hidden;
 }
 
+.visual-media-layer.is-subject-sync-source {
+  opacity: 0;
+  pointer-events: none;
+}
+
 
 .visual-media-layer.is-transform-editable { cursor: move; }
 
