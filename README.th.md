@@ -26,6 +26,10 @@ Timeline Studio คือโปรแกรมตัดต่อวิดีโ�
 - ส่งออก MP4/WebM ในเบราว์เซอร์ด้วย WebCodecs และการมิกซ์เสียง
 - PWA ที่ติดตั้งได้ แคชโมเดลในเครื่อง และโปรเจกต์ `.timeline`
 
+## เดโมเสียงพากย์ AI
+
+[ชมเดโมเสียงพากย์ AI หลายภาษา](docs/demos/ai-voiceover.mp4)
+
 ## Agent Skill
 
 รีโพซิทอรีนี้มี Agent Skill [`edit-timeline-studio`](skills/edit-timeline-studio/SKILL.md) สำหรับวางแผน ดำเนินการ และตรวจสอบไทม์ไลน์วิดีโอที่ยังแก้ไขต่อได้ ติดตั้งด้วย GitHub CLI 2.90.0 ขึ้นไป

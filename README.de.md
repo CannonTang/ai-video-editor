@@ -26,6 +26,10 @@ Timeline Studio ist ein lokaler KI-Videoeditor für den Browser. Er verbindet ei
 - MP4/WebM-Export im Browser mit WebCodecs und Audiomischung.
 - Installierbare PWA, lokaler Modellcache und `.timeline`-Projektdateien.
 
+## KI-Voiceover-Demo
+
+[Mehrsprachige KI-Voiceover-Demo ansehen](docs/demos/ai-voiceover.mp4)
+
 ## Agent Skill
 
 Dieses Repository enthält den Agent Skill [`edit-timeline-studio`](skills/edit-timeline-studio/SKILL.md) zum Planen, Ausführen und Prüfen editierbarer Video-Timelines. Die Installation erfordert GitHub CLI 2.90.0 oder neuer.

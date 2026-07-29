@@ -35,6 +35,10 @@ Timed watermark removal with before/after review.
 
 https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
+### AI Voiceover
+
+[Watch the multilingual AI voiceover demo](docs/demos/ai-voiceover.mp4)
+
 ![Timeline Studio editor](docs/screenshots/editor-timeline.png)
 
 ## AI capabilities
