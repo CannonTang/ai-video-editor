@@ -3,6 +3,13 @@
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | **한국어** | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Português](README.pt-BR.md) | [ไทย](README.th.md) | [Tiếng Việt](README.vi.md) | [Русский](README.ru.md)
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## 프로젝트 업데이트
+
+- **2026년 7월 29일 — 효과 작업공간:** 인물 외곽선을 개발 중이며, 개체 외곽선, 옵티컬 플로 추적, 스웨이 모션을 다음 단계로 계획하고 있습니다.
+- **2026년 7월 28일 — v0.8.0:** 기여자 온보딩 및 릴리스 문서를 개선했습니다.
+- 계획된 작업은 [Roadmap](ROADMAP.md), 출시된 변경 사항은 [Releases](https://github.com/MartinDelophy/ai-video-editor/releases), 개별 작업과 버그는 [Issues](https://github.com/MartinDelophy/ai-video-editor/issues)에서 확인하세요.
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -28,7 +35,7 @@ Timeline Studio는 브라우저에서 실행되는 로컬 우선 AI 동영상 �
 
 ## AI 음성 데모
 
-[다국어 AI 음성 데모 보기](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## Agent Skill
 
@@ -76,7 +83,6 @@ npm run dev
 ## 검증
 
 ```bash
-npm test
 npm run build
 npm run check
 ```

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { RATIO_OPTIONS } from "../config/editor.js";
-import { decodeWaveform } from "../lib/media.js";
 import { disposeVisionWorker } from "../lib/vision.js";
 import { disposeVocalSeparationWorker } from "../lib/vocalSeparation.js";
 import {
@@ -22,68 +21,6 @@ export function useEditorLifecycle(d) {
   useEffect(() => {
     d.setFitMode("contain");
   }, [d.ratioId]);
-
-  useEffect(() => {
-    const testImageUrl = import.meta.env.DEV ? import.meta.env.VITE_AVATAR_TEST_IMAGE_URL : "";
-    if (!testImageUrl || d.avatarTestImportedRef.current) return;
-    d.avatarTestImportedRef.current = true;
-    fetch(testImageUrl)
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.blob();
-      })
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        d.imageUrlRefs.current.add(url);
-        const asset = {
-          id: crypto.randomUUID(),
-          type: "image",
-          src: url,
-          name: "老外戴眼镜中年人物肖像生成-modnet.png",
-          meta: "819 x 1024 · E2E test",
-          blob,
-          duration: 4,
-          width: 819,
-          height: 1024,
-          trackFrames: [],
-        };
-        d.setUserAssets((assets) => [asset, ...assets]);
-        d.replaceVisualTimeline(asset, 4);
-        d.notify("端到端测试肖像已载入画面轨");
-      })
-      .catch((error) => {
-        d.avatarTestImportedRef.current = false;
-        console.error("Avatar E2E test image import failed", error);
-      });
-  }, []);
-
-  useEffect(() => {
-    if (
-      !import.meta.env.DEV ||
-      !import.meta.env.VITE_AVATAR_TEST_IMAGE_URL ||
-      d.avatarTestAudioImportedRef.current
-    ) return;
-    d.avatarTestAudioImportedRef.current = true;
-    fetch("/assets/avatar-e2e-16k.wav")
-      .then((response) => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.blob();
-      })
-      .then(async (blob) => {
-        const waveform = await decodeWaveform(blob);
-        d.replaceAudio(blob, waveform.duration, waveform.peaks, "端到端测试配音已载入", {
-          sourceKind: "ai-voice",
-          voiceId: "zh_CN-xiao_ya-medium",
-          voiceName: "Xiaoya",
-          name: "Xiaoya",
-        });
-        d.notify("端到端测试配音已载入配音轨");
-      })
-      .catch((error) => {
-        d.avatarTestAudioImportedRef.current = false;
-        console.error("Avatar E2E test audio import failed", error);
-      });
-  }, []);
 
   useEffect(() => {
     const ratioSource = d.visualSegments.find((segment) => segment.width > 0 && segment.height > 0);

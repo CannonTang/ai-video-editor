@@ -31,6 +31,7 @@ import { getStickerRenderGeometry } from "./stickerGeometry.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
 import { emitMediaBackendDiagnostic, getMediaFileExtension, isLibavCompatibilityEnabled, MEDIA_BACKENDS } from "./mediaCompatibility.js";
 import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign.js";
+import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -47,6 +48,28 @@ export function getAudioRecordingFormat() {
 
 let ffmpegLoadPromise = null;
 let ffmpegTaskQueue = Promise.resolve();
+const subjectMaterialImageCache = new Map();
+
+const SUBJECT_MATERIAL_TEXTURES = {
+  paper: "/assets/effects/paper-fiber.webp?v=3",
+  frosted: "/assets/effects/frosted-grain.webp?v=3",
+  halo: "/assets/effects/halo-ring.webp?v=3",
+  chrome: "/assets/effects/chrome-flow.webp?v=3",
+  impasto: "/assets/effects/impasto-paint.webp?v=3",
+  ink: "/assets/effects/ink-bleed.webp?v=3",
+};
+
+function getSubjectMaterialTexture(materialId) {
+  if (typeof Image === "undefined") return null;
+  if (!subjectMaterialImageCache.has(materialId)) {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.src = SUBJECT_MATERIAL_TEXTURES[materialId] || SUBJECT_MATERIAL_TEXTURES.paper;
+    subjectMaterialImageCache.set(materialId, image);
+  }
+  const image = subjectMaterialImageCache.get(materialId);
+  return image?.complete && image.naturalWidth > 0 ? image : null;
+}
 
 const VIDEO_TRACK_FRAME_MAX = 120;
 const VIDEO_TRACK_FRAME_HEIGHT = 90;
@@ -441,7 +464,11 @@ const visualEffectsLayerCache = new WeakMap();
 function getVisualEffectsLayers(canvas) {
   let layers = visualEffectsLayerCache.get(canvas);
   if (!layers) {
-    layers = { visual: document.createElement("canvas"), mask: document.createElement("canvas") };
+    layers = {
+      visual: document.createElement("canvas"),
+      mask: document.createElement("canvas"),
+      shadow: document.createElement("canvas"),
+    };
     visualEffectsLayerCache.set(canvas, layers);
   }
   for (const layer of Object.values(layers)) {
@@ -544,7 +571,7 @@ function drawVisualUsingLayout(context, visual, layout, isMask = false) {
   );
 }
 
-function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = null) {
+function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = null, requestedSubjectEffect = null) {
   const { width, height } = canvas;
   const visualSize = getVisualDimensions(visual);
   const smartCropEnabled = Boolean(fitMode === "cover" && vision?.options?.smartCrop && vision?.subject?.box);
@@ -572,8 +599,11 @@ function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = nul
     };
   }
 
-  const maskVisual =
-    vision?.options?.removeBackground && vision?.maskVisual ? vision.maskVisual : null;
+  const subjectEffect = normalizeSubjectEffect(requestedSubjectEffect);
+  const subjectEffectActive = hasSubjectEffect(subjectEffect) && Boolean(vision?.maskVisual);
+  const maskVisual = (
+    vision?.options?.removeBackground || subjectEffectActive
+  ) && vision?.maskVisual ? vision.maskVisual : null;
   if (maskVisual) {
     const layer = getMaskedVisualLayer(canvas);
     const layerContext = layer.getContext("2d");
@@ -585,6 +615,95 @@ function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = nul
     layerContext.globalCompositeOperation = "destination-in";
     drawVisualUsingLayout(layerContext, maskVisual, layout, true);
     layerContext.restore();
+    if (subjectEffectActive) {
+      const background = subjectEffect.background;
+      if (background.visible !== false && background.mode === "original") {
+        context.filter = filter;
+        drawVisualUsingLayout(context, visual, layout);
+        context.filter = "none";
+      } else if (background.visible !== false && background.mode === "blur") {
+        context.save();
+        context.filter = `blur(${background.blur}px) brightness(${1 - background.darken})`;
+        context.globalAlpha = background.opacity;
+        drawVisualUsingLayout(context, visual, layout);
+        context.restore();
+      } else if (background.visible !== false && background.mode === "color") {
+        context.save();
+        context.globalAlpha = background.opacity;
+        context.fillStyle = background.color;
+        context.fillRect(layout.drawRect.x, layout.drawRect.y, layout.drawRect.width, layout.drawRect.height);
+        context.restore();
+      }
+      if (subjectEffect.outline.enabled && subjectEffect.outline.width > 0) {
+        const outlineLayer = getVisualEffectsLayers(canvas).mask;
+        const outlineContext = outlineLayer.getContext("2d");
+        outlineContext.clearRect(0, 0, outlineLayer.width, outlineLayer.height);
+        outlineContext.drawImage(layer, 0, 0);
+        outlineContext.globalCompositeOperation = "source-in";
+        outlineContext.globalAlpha = subjectEffect.outline.opacity;
+        const materialTexture = getSubjectMaterialTexture(subjectEffect.material.id);
+        if (materialTexture) {
+          const pattern = outlineContext.createPattern(materialTexture, "repeat");
+          const textureScale = Math.max(0.35, subjectEffect.material.textureScale);
+          pattern?.setTransform?.(new DOMMatrix().scale(0.22 / textureScale));
+          outlineContext.fillStyle = pattern || subjectEffect.outline.color;
+          outlineContext.fillRect(0, 0, outlineLayer.width, outlineLayer.height);
+          outlineContext.globalCompositeOperation = "source-atop";
+          outlineContext.globalAlpha = Math.max(0, 1 - subjectEffect.material.textureStrength) * subjectEffect.outline.opacity;
+          outlineContext.fillStyle = subjectEffect.outline.color;
+          outlineContext.fillRect(0, 0, outlineLayer.width, outlineLayer.height);
+        } else {
+          outlineContext.fillStyle = subjectEffect.outline.color;
+          outlineContext.fillRect(0, 0, outlineLayer.width, outlineLayer.height);
+        }
+        outlineContext.globalAlpha = 1;
+        outlineContext.globalCompositeOperation = "source-over";
+        const width = subjectEffect.outline.width;
+        const materialId = subjectEffect.material.id;
+        const edgeDensity = subjectEffect.material.edgeDensity;
+        const irregularity = ["paper", "impasto", "ink"].includes(materialId)
+          ? subjectEffect.material.irregularity * width * (materialId === "ink" ? 0.32 : 0.18)
+          : 0;
+        const waveCount = 2.4 + edgeDensity * 9.6;
+        const offsetAt = (angle, radius) => [
+          Math.cos(angle) * (radius + Math.sin(angle * waveCount + 0.7) * irregularity),
+          Math.sin(angle) * (radius + Math.cos(angle * (waveCount * 0.89) - 0.35) * irregularity),
+        ];
+        const offsetCount = Math.round((materialId === "frosted" ? 18 : 10) + edgeDensity * 14);
+        const offsets = Array.from({ length: offsetCount }, (_, index) => (
+          offsetAt((Math.PI * 2 * index) / offsetCount, width)
+        ));
+        if (materialId === "halo" && subjectEffect.material.rings > 1) {
+          const secondRadius = width + subjectEffect.material.ringGap;
+          offsets.push(...Array.from({ length: 16 }, (_, index) => offsetAt((Math.PI * 2 * index) / 16, secondRadius)));
+        }
+        if (subjectEffect.material.shadowDepth > 0) {
+          const shadowLayer = getVisualEffectsLayers(canvas).shadow;
+          const shadowContext = shadowLayer.getContext("2d");
+          const shadowDepth = subjectEffect.material.shadowDepth;
+          shadowContext.clearRect(0, 0, shadowLayer.width, shadowLayer.height);
+          shadowContext.save();
+          shadowContext.shadowColor = `rgba(2, 4, 6, ${shadowDepth * 0.9})`;
+          shadowContext.shadowBlur = 1 + width * 0.32 * shadowDepth;
+          shadowContext.shadowOffsetX = 0.8 + width * 0.08 * shadowDepth;
+          shadowContext.shadowOffsetY = 1.2 + width * 0.12 * shadowDepth;
+          offsets.forEach(([x, y]) => shadowContext.drawImage(outlineLayer, x, y));
+          shadowContext.restore();
+          shadowContext.save();
+          shadowContext.globalCompositeOperation = "destination-out";
+          offsets.forEach(([x, y]) => shadowContext.drawImage(outlineLayer, x, y));
+          shadowContext.restore();
+          context.drawImage(shadowLayer, 0, 0);
+        }
+        context.save();
+        if (subjectEffect.outline.glow > 0) {
+          context.shadowColor = subjectEffect.outline.color;
+          context.shadowBlur = subjectEffect.outline.glowRadius * subjectEffect.outline.glow;
+        }
+        offsets.forEach(([x, y]) => context.drawImage(outlineLayer, x, y));
+        context.restore();
+      }
+    }
     context.drawImage(layer, 0, 0);
   } else {
     context.filter = filter;
@@ -624,6 +743,14 @@ export function drawPreviewFrame(context, visual, canvas, options) {
   context.clearRect(0, 0, width, height);
   context.fillStyle = "#090b0f";
   context.fillRect(0, 0, width, height);
+  const subjectEffect = normalizeSubjectEffect(visualEffects?.subjectEffect);
+  if (hasSubjectEffect(subjectEffect) && subjectEffect.background.mode === "color") {
+    context.save();
+    context.globalAlpha = subjectEffect.background.opacity;
+    context.fillStyle = subjectEffect.background.color;
+    context.fillRect(0, 0, width, height);
+    context.restore();
+  }
   const transform = resolveVisualTransform(visualEffects?.keyframes, visualTime, visualEffects?.baseTransform);
   const animation = resolveVisualClipAnimation(visualEffects?.animation, visualTime, visualEffects?.duration);
   const animatedTransform = {
@@ -652,7 +779,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     layerContext.rotate((animatedTransform.rotation * Math.PI) / 180);
     layerContext.scale(animatedTransform.scale, animatedTransform.scale);
     layerContext.translate(-width / 2, -height / 2);
-    visualLayout = drawFittedVisual(layerContext, visual, layers.visual, fitMode, filter, vision);
+    visualLayout = drawFittedVisual(layerContext, visual, layers.visual, fitMode, filter, vision, visualEffects?.subjectEffect);
     layerContext.restore();
     drawVisualEffectsMask(maskContext, mask, layers.mask);
     layerContext.save();
@@ -674,7 +801,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     context.rotate((animatedTransform.rotation * Math.PI) / 180);
     context.scale(animatedTransform.scale, animatedTransform.scale);
     context.translate(-width / 2, -height / 2);
-    visualLayout = drawFittedVisual(context, visual, canvas, fitMode, filter, vision);
+    visualLayout = drawFittedVisual(context, visual, canvas, fitMode, filter, vision, visualEffects?.subjectEffect);
     context.restore();
   }
 
@@ -732,7 +859,15 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       targetContext.rotate((animatedOverlayTransform.rotation * Math.PI) / 180);
       targetContext.scale(animatedOverlayTransform.scale, animatedOverlayTransform.scale);
       targetContext.translate(-width / 2, -height / 2);
-      drawFittedVisual(targetContext, overlayVisual, canvas, "contain", overlayFilter, null);
+      drawFittedVisual(
+        targetContext,
+        overlayVisual,
+        canvas,
+        "contain",
+        overlayFilter,
+        overlay.vision || null,
+        overlay.subjectEffect,
+      );
       targetContext.restore();
     };
     if (hasMask) {
@@ -964,14 +1099,16 @@ export async function exportBrowserVideo({
       }
       const shouldUseCutout = Boolean(
         segment.type === "image" &&
-          segment.vision?.options?.removeBackground &&
+          (segment.vision?.options?.removeBackground || hasSubjectEffect(segment.subjectEffect)) &&
           segment.vision?.cutoutUrl,
       );
       const cutoutVisual = shouldUseCutout
         ? await loadImage(segment.vision.cutoutUrl).catch(() => null)
         : null;
       const temporalMaskUrls =
-        segment.type === "video" && segment.vision?.options?.removeBackground
+        segment.type === "video" && (
+          segment.vision?.options?.removeBackground || hasSubjectEffect(segment.subjectEffect)
+        )
           ? Array.from(
               new Set(
                 (segment.vision.samples ?? [])
@@ -1011,15 +1148,29 @@ export async function exportBrowserVideo({
   throwIfExportAborted(signal);
   const stickerImageMap = new Map(stickerImageEntries.filter(([, image]) => image));
   const visualOverlayItems = await Promise.all(
-    visualOverlaySegments.filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => ({
-      segment,
-      visual: segment.type === "video"
-        ? await loadVideo(segment.src)
-        : await loadImage(getVectorRenderSource(segment, {
-            targetWidth: exportWidth,
-            targetHeight: exportHeight,
-          })),
-    })),
+    visualOverlaySegments.filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => {
+      const subjectMaskNeeded = hasSubjectEffect(segment.subjectEffect);
+      const maskUrls = (
+        segment.type === "video"
+        && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
+      ) ? [...new Set((segment.vision?.samples || []).map((sample) => sample.cutoutUrl).filter(Boolean))] : [];
+      const imageMaskUrl = (
+        segment.type === "image"
+        && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
+      ) ? segment.vision?.cutoutUrl : "";
+      const temporalMaskCache = createTemporalMaskCache(imageMaskUrl ? [imageMaskUrl] : maskUrls);
+      if (imageMaskUrl || maskUrls[0]) await temporalMaskCache.prepare(imageMaskUrl || maskUrls[0]);
+      return {
+        segment,
+        visual: segment.type === "video"
+          ? await loadVideo(segment.src)
+          : await loadImage(getVectorRenderSource(segment, {
+              targetWidth: exportWidth,
+              targetHeight: exportHeight,
+            })),
+        temporalMaskCache,
+      };
+    }),
   );
   throwIfExportAborted(signal);
   onProgress?.({ progress: 8, phaseKey: "exportPrepareTracks" });
@@ -1260,9 +1411,14 @@ export async function exportBrowserVideo({
     .filter(({ segment }) => timelineTime >= segment.start && timelineTime < segment.start + segment.duration)
     .sort((left, right) => (left.segment.layer || 1) - (right.segment.layer || 1));
   const syncVisualOverlays = (items, timelineTime) => {
-    items.forEach(({ segment, visual }) => {
+    items.forEach(({ segment, visual, temporalMaskCache }) => {
+      const sourceTime = segment.type === "video"
+        ? getVisualSourceTime(segment, Math.max(0, timelineTime - segment.start))
+        : Math.max(0, timelineTime - segment.start);
+      const vision = resolveVisionAnalysisAtTime(segment.vision || null, sourceTime);
+      if (vision?.cutoutUrl) void temporalMaskCache?.prepare(vision.cutoutUrl);
       if (segment.type !== "video") return;
-      const expectedTime = getVisualSourceTime(segment, Math.max(0, timelineTime - segment.start));
+      const expectedTime = sourceTime;
       if (!visual.seeking && Math.abs((visual.currentTime || 0) - expectedTime) > 0.12) visual.currentTime = expectedTime;
       visual.playbackRate = normalizeVisualPlaybackRate(segment.playbackRate);
       visual.play().catch(() => {});
@@ -1281,6 +1437,23 @@ export async function exportBrowserVideo({
     const exportStickers = getStickersAtTime(timelineTime);
     const activeVisualOverlays = getVisualOverlaysAtTime(timelineTime);
     syncVisualOverlays(activeVisualOverlays, timelineTime);
+    const renderedVisualOverlays = activeVisualOverlays.map((item) => {
+      const sourceTime = item.segment.type === "video"
+        ? getVisualSourceTime(item.segment, Math.max(0, timelineTime - item.segment.start))
+        : Math.max(0, timelineTime - item.segment.start);
+      const vision = resolveVisionAnalysisAtTime(item.segment.vision || null, sourceTime);
+      return {
+        ...item,
+        renderSegment: vision ? {
+          ...item.segment,
+          vision: {
+            ...vision,
+            options: item.segment.vision?.options || vision.options,
+            maskVisual: item.temporalMaskCache?.get(vision.cutoutUrl) || null,
+          },
+        } : item.segment,
+      };
+    });
     const exportVisual = visualItem.cutoutVisual || visualItem.visual;
     const visualIndex = visualItems.indexOf(visualItem);
     const junction = visualItem.segment.transition;
@@ -1326,11 +1499,11 @@ export async function exportBrowserVideo({
       vision: frameVision,
       visualEffects: visualItem.segment,
       visualTime: localTime,
-      visualOverlays: activeVisualOverlays.map(({ segment }) => ({
-        ...segment,
+      visualOverlays: renderedVisualOverlays.map(({ segment, renderSegment }) => ({
+        ...renderSegment,
         start: segment.start - (visualRange?.start ?? 0),
       })),
-      visualOverlaySources: activeVisualOverlays.map(({ visual }) => visual),
+      visualOverlaySources: renderedVisualOverlays.map(({ visual }) => visual),
     });
 
     if (elapsed === totalDuration || performance.now() - lastProgressUpdate > 180) {

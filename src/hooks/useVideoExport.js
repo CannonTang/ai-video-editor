@@ -128,7 +128,15 @@ export function useVideoExport(d) {
         stickerSegments: d.trackVisibility.sticker ? d.stickerSegments : [],
         visualOverlaySegments: d.trackVisibility.overlay === false
           ? []
-          : d.visualOverlaySegments.filter((segment) => segment.hidden !== true),
+          : d.visualOverlaySegments
+              .filter((segment) => segment.hidden !== true)
+              .map((segment) => {
+                const record = d.visionRecords[getVisionKey(segment)];
+                return record ? {
+                  ...segment,
+                  vision: { ...record.analysis, options: record.options },
+                } : segment;
+              }),
         transitionId: "none", exportSettings, onProgress: progress, signal,
       };
       let video;

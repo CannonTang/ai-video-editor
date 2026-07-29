@@ -1,5 +1,24 @@
 import { MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
 import { createVisualSegment, getVisualSegmentTimeline, getVisualSegmentsTotal, hasExplicitCaptionTiming, makeId } from "./timeline.js";
+import { normalizeVisualKeyframes, resolveVisualTransform } from "./visualEffects.js";
+
+function splitVisualKeyframes(keyframes, splitTime, duration, baseTransform) {
+  const frames = normalizeVisualKeyframes(keyframes);
+  if (!frames.length) return { left: frames, right: frames };
+  const splitTransform = resolveVisualTransform(frames, splitTime, baseTransform);
+  return {
+    left: normalizeVisualKeyframes([
+      ...frames.filter((frame) => frame.time < splitTime),
+      { time: splitTime, ...splitTransform },
+    ]),
+    right: normalizeVisualKeyframes([
+      { time: 0, ...splitTransform },
+      ...frames
+        .filter((frame) => frame.time > splitTime && frame.time <= duration)
+        .map((frame) => ({ ...frame, time: frame.time - splitTime })),
+    ]),
+  };
+}
 
 export function createTimelineCutActions(d) {
   const handleCutVisualSegment = () => {
@@ -113,8 +132,50 @@ export function createTimelineCutActions(d) {
     d.setMusicSegments(next);
     d.notify("已在播放头位置切开音乐片段");
   };
+  const handleCutOverlaySegment = () => {
+    if (d.trackLocks.overlay) return void d.notify(d.t("effectClipLocked"));
+    const index = d.visualOverlaySegments.findIndex((segment) => segment.id === d.selectedVisualOverlayId);
+    const source = d.visualOverlaySegments[index];
+    if (!source) return void d.notify("请先选择一个画中画片段");
+    const start = Math.max(0, Number(source.start) || 0);
+    const duration = Math.max(0, Number(source.duration) || 0);
+    const time = Math.max(start, Math.min(start + duration, d.currentTime));
+    const firstDuration = time - start;
+    const secondDuration = duration - firstDuration;
+    if (firstDuration < MIN_VISUAL_SEGMENT_SECONDS || secondDuration < MIN_VISUAL_SEGMENT_SECONDS) {
+      return void d.notify("切点离片段边缘太近，先把播放头移到片段中间");
+    }
+    const firstId = makeId("overlay");
+    const secondId = makeId("overlay");
+    const playbackRate = source.type === "video" ? Math.max(0.25, Math.min(4, Number(source.playbackRate) || 1)) : 1;
+    const keyframes = splitVisualKeyframes(source.keyframes, firstDuration, duration, source.baseTransform);
+    const first = {
+      ...source,
+      id: firstId,
+      duration: firstDuration,
+      keyframes: keyframes.left,
+      ...(source.type === "video" ? { sourceDuration: firstDuration * playbackRate } : {}),
+    };
+    const second = {
+      ...source,
+      id: secondId,
+      start: time,
+      duration: secondDuration,
+      keyframes: keyframes.right,
+      ...(source.type === "video" ? {
+        sourceStart: Math.max(0, Number(source.sourceStart) || 0) + firstDuration * playbackRate,
+        sourceDuration: secondDuration * playbackRate,
+      } : {}),
+    };
+    const next = [...d.visualOverlaySegments];
+    next.splice(index, 1, first, second);
+    d.setVisualOverlaySegments(next);
+    d.setSelectedVisualOverlayId(secondId);
+    d.notify("已在播放头位置切开视觉片段");
+  };
   const handleCutTrack = () => {
     if (d.selectedTrack === "image") return void handleCutVisualSegment();
+    if (d.selectedTrack === "overlay") return void handleCutOverlaySegment();
     if (d.selectedTrack === "caption") return void handleCutCaption();
     if (d.selectedTrack === "audio") return void handleCutAudioSegment();
     if (d.selectedTrack === "music") return void handleCutMusicSegment();

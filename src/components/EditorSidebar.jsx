@@ -126,6 +126,7 @@ export function EditorSidebar({ model: d }) {
             visionProgress={d.visionJob.key === d.previewVisionKey ? d.visionJob.progress : 0}
             visionPhase={d.visionJob.key === d.previewVisionKey ? d.visionJob.phase : ""}
             analyzeCurrentVisual={d.analyzeCurrentVisual}
+            analyzeEffectVisual={d.analyzeEffectVisual}
             toggleVisionOption={d.toggleVisionOption}
             clearVisionAnalysis={d.clearVisionAnalysis}
             downloadVisionCutout={d.downloadVisionCutout}
@@ -146,6 +147,14 @@ export function EditorSidebar({ model: d }) {
             t={d.t}
             trOption={d.trOption}
             selectedVisualSegment={d.selectedVisualSegment}
+            selectedEffectSegment={d.selectedEffectSegment}
+            effectAnalysis={d.effectAnalysis}
+            effectRunning={d.effectRunning}
+            effectProgress={d.effectProgress}
+            effectPhase={d.effectPhase}
+            updateSelectedSubjectEffect={d.updateSelectedSubjectEffect}
+            removeSelectedSubjectEffect={d.removeSelectedSubjectEffect}
+            openEffectsInspector={() => d.setMobilePanel?.("inspector")}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
             miganRepair={d.miganRepair}

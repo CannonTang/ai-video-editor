@@ -19,7 +19,7 @@ import {
   getVisualSegmentTimeline,
   packCaptionSegmentsIntoLanes,
 } from "../lib/timeline.js";
-import { getVisionKey } from "../lib/vision.js";
+import { getVisionKey, resolveVisionAnalysisAtTime } from "../lib/vision.js";
 import { getVisualSourceTime } from "../lib/visualEffects.js";
 import { getTimelineProjectDuration } from "../lib/timelineScale.js";
 import { getActiveVisualOverlays } from "../lib/visualOverlayTimeline.js";
@@ -168,7 +168,18 @@ export function useTimelineModel(d) {
   const previewStickers = currentStickerSegments;
   const previewVisualOverlays = d.trackVisibility.overlay === false
     ? []
-    : getActiveVisualOverlays(d.visualOverlaySegments, d.currentTime);
+    : getActiveVisualOverlays(d.visualOverlaySegments, d.currentTime).map((overlay) => {
+        const record = d.visionRecords[getVisionKey(overlay)];
+        const localTime = Math.max(0, d.currentTime - (overlay.start || 0));
+        const sourceTime = overlay.type === "video"
+          ? getVisualSourceTime(overlay, localTime)
+          : localTime;
+        return record ? {
+          ...overlay,
+          visionAnalysis: resolveVisionAnalysisAtTime(record.analysis, sourceTime),
+          visionOptions: record.options,
+        } : overlay;
+      });
   const currentVisualSegmentIndex = getVisualSegmentIndexAtTime(d.visualSegments, d.currentTime);
   const currentVisualSegment = currentVisualSegmentIndex >= 0
     ? d.visualSegments[currentVisualSegmentIndex] ?? null

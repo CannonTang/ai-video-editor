@@ -71,6 +71,8 @@ import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentId
 import { normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
 import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
 import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
+import { getVisionKey } from "./lib/vision.js";
+import { DEFAULT_SUBJECT_EFFECT, normalizeSubjectEffect } from "./lib/subjectEffects.js";
 import {
   getExportContentDuration,
   getExportDimensions,
@@ -196,7 +198,7 @@ export function App() {
   const {
     assetDropPulseTimerRef, audioRef, audioSegmentRefs, audioUrlRef, autoRatioSourceKeyRef,
     avatarMotionCacheRef, avatarMotionWorkerRef, avatarRenderWorkerRef,
-    avatarTestAudioImportedRef, avatarTestImportedRef, currentTimeRef, draggedAssetIdRef,
+    currentTimeRef, draggedAssetIdRef,
     exportAbortControllerRef, exportStartRef, fileInputRef, imageUrlRefs, musicRef, musicUrlRef, pointerAssetDragRef,
     previewCanvasRef, previewShellRef, previewVideoRef, projectFileInputRef, sourceAudioRef,
     sourceAudioUrlRef, suppressAssetClickRef, suppressTimelineClipClickRef,
@@ -320,6 +322,15 @@ export function App() {
   const previewFrameSize = usePreviewFrameSize(previewShellRef, ratio, compactRail);
   const selectedVisualSegment = visualSegments[selectedVisualSegmentIndex] ?? previewVisualSegment ?? null;
   const selectedVisualOverlay = visualOverlaySegments.find((item) => item.id === selectedVisualOverlayId) ?? null;
+  const selectedEffectSegment = selectedTrack === "overlay" && selectedVisualOverlay
+    ? selectedVisualOverlay
+    : selectedVisualSegment;
+  const effectVisionKey = getVisionKey(selectedEffectSegment);
+  const effectVisionRecord = effectVisionKey ? visionRecords[effectVisionKey] ?? null : null;
+  const effectAnalysis = effectVisionRecord?.analysis ?? null;
+  const effectRunning = visionJob.running && visionJob.key === effectVisionKey;
+  const effectProgress = visionJob.key === effectVisionKey ? visionJob.progress : (effectAnalysis?.complete ? 100 : 0);
+  const effectPhase = visionJob.key === effectVisionKey ? visionJob.phase : "";
   const selectedVisualRange = visualTimeline[selectedVisualSegmentIndex] ?? previewVisualRange;
   const [visualAnimationPreview, setVisualAnimationPreview] = useState(null);
   const [visualCanvasEditMode, setVisualCanvasEditMode] = useState("transform");
@@ -337,7 +348,7 @@ export function App() {
       isOverlay: mobilePanelOrigin === "overlay-clip",
       hasVectorEditor: isVector,
     });
-    if (!supportedSections.includes(mobileInspectorSection)) setMobileInspectorSection(supportedSections[0] || "transform");
+    if (mobileInspectorSection !== "effects" && !supportedSections.includes(mobileInspectorSection)) setMobileInspectorSection(supportedSections[0] || "transform");
   }, [
     isMobileViewport,
     mobileInspectorSection,
@@ -374,6 +385,7 @@ export function App() {
       if (Number.isFinite(change.removeKeyframeAt)) return { ...item, keyframes: (item.keyframes ?? []).filter((frame) => Math.abs(frame.time - change.removeKeyframeAt) > 0.04) };
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
+      if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
       if (change.vectorPatch && (item.kind === "vector" || item.vectorBody)) return { ...item, ...change.vectorPatch };
       if (typeof change.enhancementEnabled === "boolean" && item.enhancement) {
         if (["remaster-drunet-full", "nanovsr-644k"].includes(item.enhancement.mode)) {
@@ -428,6 +440,22 @@ export function App() {
       return nextItems;
     });
   };
+  const updateSelectedSubjectEffect = (nextEffect) => {
+    if (!selectedEffectSegment?.id) return void notify(t("effectSelectClip"));
+    const effect = normalizeSubjectEffect(nextEffect);
+    if (selectedTrack === "overlay" && selectedVisualOverlay) {
+      if (trackLocks.overlay) return void notify(t("effectClipLocked"));
+      setVisualOverlaySegments((items) => items.map((item) => item.id === selectedVisualOverlay.id
+        ? { ...item, subjectEffect: effect }
+        : item));
+      return;
+    }
+    updateSelectedVisualEffects({ subjectEffect: effect });
+  };
+  const removeSelectedSubjectEffect = () => {
+    updateSelectedSubjectEffect(DEFAULT_SUBJECT_EFFECT);
+    notify(t("effectRemoved"));
+  };
   const miganRepair = useMiganRepair({
     selectedSegment: selectedVisualSegment,
     imageUrlRefs,
@@ -479,9 +507,35 @@ export function App() {
   });
 
   const analyzeCurrentVisual = useVisionAnalysis({
+    activeTool,
     notify, previewVideoRef, previewVisionKey, previewVisualSegment, previewVisualSrc,
-    previewVisualType, setVisionJob, setVisionRecords, visionAbortControllerRef,
-    visionJob, visionJobGenerationRef, visionObjectUrlsRef,
+    previewVisualType, previewVisualRange, setCurrentTime, setPreviewVideoMediaTime,
+    setVisionJob, setVisionRecords, visionAbortControllerRef,
+    t, visionJob, visionJobGenerationRef, visionObjectUrlsRef,
+  });
+  const analyzeEffectVisual = useVisionAnalysis({
+    activeTool: "effects",
+    notify,
+    previewVideoRef,
+    previewVisionKey: effectVisionKey,
+    previewVisualSegment: selectedEffectSegment,
+    previewVisualSrc: selectedEffectSegment?.src || "",
+    previewVisualType: selectedEffectSegment?.type || "image",
+    previewVisualRange: selectedTrack === "overlay" && selectedVisualOverlay
+      ? {
+          start: selectedVisualOverlay.start || 0,
+          end: (selectedVisualOverlay.start || 0) + (selectedVisualOverlay.duration || 0),
+        }
+      : selectedVisualRange,
+    setCurrentTime,
+    setPreviewVideoMediaTime,
+    setVisionJob,
+    setVisionRecords,
+    t,
+    visionAbortControllerRef,
+    visionJob,
+    visionJobGenerationRef,
+    visionObjectUrlsRef,
   });
 
   const {
@@ -561,7 +615,7 @@ export function App() {
     chooseInterfaceLanguage, clearAllVisionState, selectTool, toggleTrackLock,
     toggleTrackVisibility, useHistoryItem,
   } = createEditorCommandActions({
-    notify, replaceAudio, script, setActiveTool, setAvatarPanelOpen, setCaptionSegments,
+    notify, replaceAudio, script, selectedTrack, setActiveTool, setAvatarPanelOpen, setCaptionSegments,
     setIntroClosing, setScript, setSelectedSegmentId, setSelectedTrack,
     setSelectedVoiceId, setTrackLocks, setTrackVisibility, setUiLanguage,
     setVisionJob, setVisionRecords, setVoiceTab, visionAbortControllerRef,
@@ -709,8 +763,7 @@ export function App() {
 
   useEditorLifecycle({
     activeLanguage, audioSegments, audioUrlRef, autoRatioSourceKeyRef,
-    avatarMotionWorkerRef, avatarRenderWorkerRef, avatarTestAudioImportedRef,
-    avatarTestImportedRef, captionSegments, currentVisualSegment, handleDeleteTrack,
+    avatarMotionWorkerRef, avatarRenderWorkerRef, captionSegments, currentVisualSegment, handleDeleteTrack,
     imageUrlRefs, musicBlob, musicUrlRef, notify, ratioId, replaceAudio,
     replaceVisualTimeline, selectedAudioSegmentId, selectedSegmentId,
     selectedStickerSegmentId, selectedTrack, selectedVisualSegmentId, setCurrentVisualAsset,
@@ -729,7 +782,8 @@ export function App() {
     musicBlob, musicDuration, musicPeaks, musicSegments, musicStart,
     selectedAudioSegmentId, selectedSegmentId, selectedSegmentIndex, selectedStickerSegmentId,
     setAudioSegments, setCaptionSegments, setMusicSegments, setSelectedAudioSegmentId,
-    selectedTrack, stickerSegments, trackLocks, visualSegments,
+    selectedTrack, stickerSegments, t, trackLocks, visualSegments,
+    visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
   });
 
   const { getTimelineTimeFromClientX, handlePlayToggle, pauseTimelineMedia, seekTo, startTimelineSeek } = createPlaybackControls({
@@ -849,6 +903,7 @@ export function App() {
       if (Number.isFinite(change.removeKeyframeAt)) return { ...item, keyframes: (item.keyframes ?? []).filter((frame) => Math.abs(frame.time - change.removeKeyframeAt) > 0.04) };
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
+      if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
       if (change.timing) return { ...item, ...change.timing };
       if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
       return item;
@@ -999,7 +1054,7 @@ export function App() {
 
       <section className={`editor-grid ${compactRail ? "is-compact-rail" : ""}`}>
         <EditorSidebar model={{
-          activeLanguage, activeTool, analyzeCurrentVisual, audioBlob, audioDuration,
+          activeLanguage, activeTool, analyzeCurrentVisual, analyzeEffectVisual, audioBlob, audioDuration,
           builtInAssets, captionPosition, captionSegments, captionSize, captionStyle,
           captionTargetDuration, captionsEnabled, clearMusicTrack, clearSourceAudioTrack,
           clearVisionAnalysis, compactRail, currentSegmentIndex, deleteCaptionSegment,
@@ -1020,7 +1075,8 @@ export function App() {
           selectedAudioToolTarget, separateSelectedAudioVocals, separateSourceVocals, vocalSeparationJob,
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
-          selectedVisualSegment, visualLocalTime, updateSelectedVisualEffects, miganRepair, hdRestoration,
+          selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
+          visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
 
@@ -1043,6 +1099,8 @@ export function App() {
           visualEffects={visualAnimationPreview?.segmentId && visualAnimationPreview.segmentId === previewVisualSegment?.id
             ? { ...previewVisualSegment, animation: visualAnimationPreview.animation }
             : previewVisualSegment}
+          subjectEffect={previewVisualSegment?.subjectEffect}
+          subjectCutoutUrl={previewVisionAnalysis?.cutoutUrl || ""}
           visualLocalTime={visualAnimationPreview?.segmentId && visualAnimationPreview.segmentId === previewVisualSegment?.id
             ? visualAnimationPreview.localTime
             : previewVisualLocalTime}
@@ -1074,7 +1132,7 @@ export function App() {
           visualObjectFit={previewVisualObjectFit}
           visualObjectPosition={previewVisualObjectPosition}
           visionOverlayBoxes={previewVisionOverlayBoxes}
-          showVisionOverlays={previewVisionOptions.showDetections}
+          showVisionOverlays={activeTool !== "effects" && previewVisionOptions.showDetections}
           backgroundRemoved={
             previewVisionOptions.removeBackground &&
             Boolean(previewVisionAnalysis?.cutoutUrl)
@@ -1210,6 +1268,7 @@ export function App() {
           visionProgress={visionJob.key === previewVisionKey ? visionJob.progress : 0}
           visionPhase={visionJob.key === previewVisionKey ? visionJob.phase : ""}
           analyzeCurrentVisual={analyzeCurrentVisual}
+          analyzeEffectVisual={analyzeEffectVisual}
           toggleVisionOption={toggleVisionOption}
           clearVisionAnalysis={clearVisionAnalysis}
           downloadVisionCutout={downloadVisionCutout}
@@ -1252,6 +1311,13 @@ export function App() {
             const preset = getVisualOverlayPreset(id);
             if (preset) updateSelectedVisualOverlay(preset);
           }}
+          effectSegment={selectedEffectSegment}
+          effectAnalysis={effectAnalysis}
+          effectRunning={effectRunning}
+          effectProgress={effectProgress}
+          effectPhase={effectPhase}
+          updateSelectedSubjectEffect={updateSelectedSubjectEffect}
+          removeSelectedSubjectEffect={removeSelectedSubjectEffect}
         />
       </section>
 
@@ -1389,6 +1455,7 @@ export function App() {
             vector: t("vectorProperties", "矢量"),
             timing: t("overlayTiming", "层级与时长"),
             repair: t("repairTab"),
+            effects: t("effects"),
             caption: t("caption"),
             voice: t("aiVoice"),
             audio: t("mobileClipAudio"),

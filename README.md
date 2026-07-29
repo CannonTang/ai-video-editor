@@ -6,11 +6,18 @@
 [![Product Hunt](https://img.shields.io/badge/Product%20Hunt-Aug%2025%20Launch-orange)](https://www.producthunt.com/p/timeline-studio-2)
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 <a href="https://toolindex.net/tools/timeline-studio?ref=badge" target="_blank" rel="noopener">
   <img src="https://toolindex.net/badge/timeline-studio/small.svg?theme=dark" alt="Timeline Studio - Listed on Tool Index" width="130" height="30" />
 </a>
 > Timeline Studio is launching on Product Hunt Aug 25 (PDT).
 > Follow our page to share technical feedback on launch day!
+
+## Project updates
+
+- **July 29, 2026 — Effects workspace:** person outline is in active development; object outline, Optical Flow Tracking, and Sway Motion are planned next.
+- **July 28, 2026 — v0.8.0:** contributor onboarding and release documentation were refreshed.
+- See the public [Roadmap](ROADMAP.md) for planned work, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) for shipped changes, and [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) for focused tasks and bugs.
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -37,7 +44,7 @@ https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
 ### AI Voiceover
 
-[Watch the multilingual AI voiceover demo](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ![Timeline Studio editor](docs/screenshots/editor-timeline.png)
 
@@ -152,7 +159,6 @@ Open the local URL printed by Vite. The first AI run may download model files; l
 ## Validate and build
 
 ```bash
-npm test
 npm run build
 npm run preview
 ```

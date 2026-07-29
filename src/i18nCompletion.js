@@ -28,6 +28,7 @@ export const I18N_COMPLETION_COPY = {
   },
   "ja": {
     "complete": "完了",
+    "effectClipLocked": "エフェクトを編集する前にクリップのロックを解除してください",
     "visualTabsPrevious": "前のプロパティを表示",
     "visualTabsNext": "その他のプロパティを表示",
     "actionGuide": "行動喚起",

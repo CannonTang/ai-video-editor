@@ -3,6 +3,13 @@
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | **Deutsch** | [Português](README.pt-BR.md) | [ไทย](README.th.md) | [Tiếng Việt](README.vi.md) | [Русский](README.ru.md)
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Projektneuigkeiten
+
+- **29. Juli 2026 — Effekte:** Der Personenumriss wird aktiv entwickelt; Objektumriss, Optical-Flow-Tracking und Sway Motion sind als Nächstes geplant.
+- **28. Juli 2026 — v0.8.0:** Einstiegshilfen für Mitwirkende und Release-Dokumentation wurden überarbeitet.
+- Geplante Arbeiten stehen in der [Roadmap](ROADMAP.md), veröffentlichte Änderungen in den [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) und einzelne Aufgaben in den [Issues](https://github.com/MartinDelophy/ai-video-editor/issues).
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -28,7 +35,7 @@ Timeline Studio ist ein lokaler KI-Videoeditor für den Browser. Er verbindet ei
 
 ## KI-Voiceover-Demo
 
-[Mehrsprachige KI-Voiceover-Demo ansehen](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## Agent Skill
 
@@ -52,7 +59,7 @@ Füge `--pin v0.7.1` hinzu, um die geprüfte Version statt der jeweils neuesten 
 
 ## Roadmap
 
-- **Jetzt:** Deterministischen Offline-Export stabilisieren, die Timeline zuverlässiger machen und Browser-End-to-End-Tests ausbauen.
+- **Jetzt:** Deterministischen Offline-Export stabilisieren und die Timeline zuverlässiger machen.
 - **Als Nächstes:** Den versionierten Headless Command Runner für agentengesteuerte Bearbeitung veröffentlichen und wiederverwendbare Projektvorlagen leichter teilbar machen.
 - **Später:** Kollaborative Reviews, eine Plugin-Schnittstelle und weitere lokal verifizierte KI-Modelle ergänzen.
 
@@ -60,7 +67,7 @@ Die Prioritäten werden in [GitHub Discussions](https://github.com/MartinDelophy
 
 ## Hilfe gesucht
 
-Wir suchen Beiträge zu Browser-Medien, WebCodecs, WebGPU/ONNX, Timeline-UX, Lokalisierung, Tests und Dokumentation. Melde reproduzierbare Fehler in [Issues](https://github.com/MartinDelophy/ai-video-editor/issues), teile Ideen in [Discussions](https://github.com/MartinDelophy/ai-video-editor/discussions) oder sende fokussierte Fixes, Tests, Übersetzungen und Beispiele.
+Wir suchen Beiträge zu Browser-Medien, WebCodecs, WebGPU/ONNX, Timeline-UX, Lokalisierung und Dokumentation. Melde reproduzierbare Fehler in [Issues](https://github.com/MartinDelophy/ai-video-editor/issues), teile Ideen in [Discussions](https://github.com/MartinDelophy/ai-video-editor/discussions) oder sende fokussierte Fixes, Übersetzungen und Beispiele.
 
 ## Schnellstart
 
@@ -76,7 +83,6 @@ npm run dev
 ## Prüfung
 
 ```bash
-npm test
 npm run build
 npm run check
 ```
