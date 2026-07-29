@@ -26,6 +26,10 @@ Timeline Studio là trình chỉnh sửa video AI ưu tiên xử lý cục bộ 
 - Xuất MP4/WebM trong trình duyệt bằng WebCodecs và trộn âm thanh.
 - PWA có thể cài đặt, bộ nhớ đệm mô hình cục bộ và dự án `.timeline`.
 
+## Bản demo lồng tiếng AI
+
+[Xem bản demo lồng tiếng AI đa ngôn ngữ](docs/demos/ai-voiceover.mp4)
+
 ## Agent Skill
 
 Kho mã này bao gồm Agent Skill [`edit-timeline-studio`](skills/edit-timeline-studio/SKILL.md) để lập kế hoạch, thực hiện và xác minh các dòng thời gian video có thể tiếp tục chỉnh sửa. Cài đặt bằng GitHub CLI 2.90.0 trở lên.

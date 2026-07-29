@@ -30,6 +30,10 @@ https://github.com/user-attachments/assets/e8327caa-429e-40ff-a7fe-a59e6cf7a464
 
 https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
+### AI 配音
+
+[观看多语言 AI 配音演示](docs/demos/ai-voiceover.mp4)
+
 ![Timeline Studio 编辑器](docs/screenshots/editor-timeline.png)
 
 ## AI 能力

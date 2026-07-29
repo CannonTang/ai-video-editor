@@ -26,6 +26,10 @@ Timeline Studio는 브라우저에서 실행되는 로컬 우선 AI 동영상 �
 - WebCodecs와 오디오 믹싱을 이용한 브라우저 MP4/WebM 내보내기.
 - 설치형 PWA, 로컬 모델 캐시, `.timeline` 프로젝트.
 
+## AI 음성 데모
+
+[다국어 AI 음성 데모 보기](docs/demos/ai-voiceover.mp4)
+
 ## Agent Skill
 
 이 저장소에는 편집 가능한 동영상 타임라인을 계획하고 조작하며 검증하는 [`edit-timeline-studio`](skills/edit-timeline-studio/SKILL.md) Agent Skill이 포함되어 있습니다. GitHub CLI 2.90.0 이상에서 설치할 수 있습니다.

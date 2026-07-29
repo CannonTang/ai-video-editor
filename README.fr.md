@@ -26,6 +26,10 @@ Timeline Studio est un éditeur vidéo IA local qui fonctionne dans le navigateu
 - Export MP4/WebM dans le navigateur avec WebCodecs et mixage audio.
 - PWA installable, cache local des modèles et projets `.timeline`.
 
+## Démo de voix off IA
+
+[Voir la démo de voix off IA multilingue](docs/demos/ai-voiceover.mp4)
+
 ## Agent Skill
 
 Ce dépôt comprend l’Agent Skill [`edit-timeline-studio`](skills/edit-timeline-studio/SKILL.md), conçu pour planifier, exécuter et vérifier des timelines vidéo modifiables. Son installation nécessite GitHub CLI 2.90.0 ou une version ultérieure.
