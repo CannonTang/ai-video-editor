@@ -553,8 +553,18 @@ export function PreviewStage({
                 />
               </div>
             ) : null}
-            {renderedVisualSrc && trackVisibility.image && !replacesBackground ? (
-              <div className={`visual-media-layer ${visualTransformEditable ? "is-transform-editable" : ""}`} style={visualMaskStyle} onPointerDown={(event) => { event.stopPropagation(); onSelectVisual?.(); if (visualTransformEditable) startVisualTransform(event, "move"); }}>
+            {renderedVisualSrc && trackVisibility.image ? (
+              <div
+                className={`visual-media-layer ${visualTransformEditable ? "is-transform-editable" : ""} ${replacesBackground ? "is-subject-sync-source" : ""}`}
+                style={visualMaskStyle}
+                aria-hidden={replacesBackground ? "true" : undefined}
+                onPointerDown={(event) => {
+                  if (replacesBackground) return;
+                  event.stopPropagation();
+                  onSelectVisual?.();
+                  if (visualTransformEditable) startVisualTransform(event, "move");
+                }}
+              >
                 {previewVisualType === "image" ? <img
                   src={renderedVisualSrc}
                   alt={t("currentMediaAlt")}
