@@ -2,6 +2,7 @@ import { normalizeVisualKeyframes, resolveVisualTransform, upsertVisualKeyframe 
 import { createVisualSegment } from "./timeline.js";
 import { normalizeVectorDesign } from "./vectorDesign.js";
 import { normalizeVisualClipAnimation } from "./visualClipAnimations.js";
+import { normalizeSubjectEffect } from "./subjectEffects.js";
 
 export const DEFAULT_OVERLAY_SECONDS = 5;
 
@@ -77,6 +78,9 @@ export function createVisualOverlaySegment(asset, start = 0, options = {}) {
     },
     animation: normalizeVisualClipAnimation(options.animation),
     filterId: typeof options.filterId === "string" ? options.filterId : "none",
+    ...(options.subjectEffect || asset?.subjectEffect ? {
+      subjectEffect: normalizeSubjectEffect(options.subjectEffect || asset.subjectEffect),
+    } : {}),
     ...(asset?.kind === "vector" || asset?.vectorBody ? {
       vectorBody: asset?.vectorBody || "",
       vectorBackground: asset?.vectorBackground || "transparent",
@@ -110,6 +114,7 @@ export function createMainVisualFromOverlay(overlay) {
     mask: overlay.mask,
     animation: overlay.animation,
     filterId: overlay.filterId,
+    ...(overlay.subjectEffect ? { subjectEffect: normalizeSubjectEffect(overlay.subjectEffect) } : {}),
   };
 }
 

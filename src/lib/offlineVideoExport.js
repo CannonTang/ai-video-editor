@@ -32,6 +32,7 @@ import { resolveVisionAnalysisAtTime } from "./vision.js";
 import { getVisualSourceTime } from "./visualEffects.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
 import { getVectorRenderSource } from "./vectorDesign.js";
+import { hasSubjectEffect } from "./subjectEffects.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 let aacFallbackRegistered = false;
@@ -185,9 +186,13 @@ async function prepareComposition(options) {
       ? await loadVideo(segment.src)
       : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight }));
     throwIfExportAborted(options.signal);
-    const cutoutVisual = segment.type === "image" && segment.vision?.options?.removeBackground && segment.vision?.cutoutUrl
+    const subjectMaskNeeded = hasSubjectEffect(segment.subjectEffect);
+    const cutoutVisual = segment.type === "image"
+      && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
+      && segment.vision?.cutoutUrl
       ? await loadImage(segment.vision.cutoutUrl).catch(() => null) : null;
-    const maskUrls = segment.type === "video" && segment.vision?.options?.removeBackground
+    const maskUrls = segment.type === "video"
+      && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
       ? [...new Set((segment.vision.samples || []).map((sample) => sample.cutoutUrl).filter(Boolean))] : [];
     let sequentialFrames = null;
     if (segment.type === "video" && options.framePlan?.length) {
@@ -228,12 +233,26 @@ async function prepareComposition(options) {
     ...(options.sticker?.src ? [options.sticker.src] : []),
   ])];
   const stickerImages = new Map((await Promise.all(stickerSources.map(async (src) => [src, await loadImage(src).catch(() => null)]))).filter(([, image]) => image));
-  const overlayItems = await Promise.all((options.visualOverlaySegments || []).filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => ({
-    segment,
-    visual: segment.type === "video"
-      ? await loadVideo(segment.src)
-      : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight })),
-  })));
+  const overlayItems = await Promise.all((options.visualOverlaySegments || []).filter((segment) => segment.src && segment.hidden !== true).map(async (segment) => {
+    const subjectMaskNeeded = hasSubjectEffect(segment.subjectEffect);
+    const maskUrls = (
+      segment.type === "video"
+      && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
+    ) ? [...new Set((segment.vision?.samples || []).map((sample) => sample.cutoutUrl).filter(Boolean))] : [];
+    const imageMaskUrl = (
+      segment.type === "image"
+      && (segment.vision?.options?.removeBackground || subjectMaskNeeded)
+    ) ? segment.vision?.cutoutUrl : "";
+    const temporalMaskCache = createTemporalMaskCache(imageMaskUrl ? [imageMaskUrl] : maskUrls);
+    if (imageMaskUrl || maskUrls[0]) await temporalMaskCache.prepare(imageMaskUrl || maskUrls[0]);
+    return {
+      segment,
+      visual: segment.type === "video"
+        ? await loadVideo(segment.src)
+        : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight })),
+      temporalMaskCache,
+    };
+  }));
   throwIfExportAborted(options.signal);
   return { segments, timeline, items, stickerImages, overlayItems };
 }
@@ -281,6 +300,24 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
       await seekVideoFrame(overlay.visual, Math.min(Math.max(0, (overlay.visual.duration || 0) - 0.04), Math.max(0, time - overlay.segment.start)));
     }
   }
+  const renderedOverlayItems = await Promise.all(activeOverlayItems.map(async (overlay) => {
+    const sourceTime = overlay.segment.type === "video"
+      ? getVisualSourceTime(overlay.segment, Math.max(0, time - overlay.segment.start))
+      : Math.max(0, time - overlay.segment.start);
+    const vision = resolveVisionAnalysisAtTime(overlay.segment.vision || null, sourceTime);
+    if (vision?.cutoutUrl) await overlay.temporalMaskCache?.prepare(vision.cutoutUrl);
+    return {
+      ...overlay,
+      renderSegment: vision ? {
+        ...overlay.segment,
+        vision: {
+          ...vision,
+          options: overlay.segment.vision?.options || vision.options,
+          maskVisual: overlay.temporalMaskCache?.get(vision.cutoutUrl) || null,
+        },
+      } : overlay.segment,
+    };
+  }));
   drawPreviewFrame(context, frameVisual, canvas, {
     subtitle: caption, fitMode: options.fitMode, filter: options.filter,
     captionsEnabled: options.captionsEnabled, captionPosition: options.captionPosition,
@@ -291,8 +328,8 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
     transitionId: next ? junction.id : "none",
     transitionNext: next ? { visual: next.cutoutVisual || next.visual } : null,
     transitionProgress, vision: frameVision, visualEffects: item.segment, visualTime: localTime,
-    visualOverlays: activeOverlayItems.map((item) => ({ ...item.segment, start: item.segment.start - (range?.start || 0) })),
-    visualOverlaySources: activeOverlayItems.map((item) => item.visual),
+    visualOverlays: renderedOverlayItems.map((item) => ({ ...item.renderSegment, start: item.segment.start - (range?.start || 0) })),
+    visualOverlaySources: renderedOverlayItems.map((item) => item.visual),
   });
 }
 

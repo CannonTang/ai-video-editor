@@ -2,6 +2,7 @@ import {
   ClosedCaptioning,
   ImageSquare,
   MusicNote,
+  MagicWand,
   Scan,
   Sticker,
 } from "@phosphor-icons/react";
@@ -207,6 +208,7 @@ export const TOOL_RAIL = [
   { id: "smart", label: "智能", icon: Scan },
   { id: "audio", label: "音频", icon: MusicNote },
   { id: "stickers", label: "贴纸", icon: Sticker },
+  { id: "effects", label: "特效", icon: MagicWand },
 ];
 
 export const RATIO_OPTIONS = [

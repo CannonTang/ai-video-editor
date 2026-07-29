@@ -22,6 +22,7 @@ export function createEditorCommandActions(d) {
     }
     if (toolId === "media") d.setSelectedTrack("image");
     if (toolId === "caption") d.setSelectedTrack("caption");
+    if (toolId === "effects" && !["image", "overlay"].includes(d.selectedTrack)) d.setSelectedTrack("image");
   }
 
   function chooseInterfaceLanguage(languageId) {

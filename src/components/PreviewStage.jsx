@@ -27,6 +27,8 @@ import { getVisualFitRect } from "../lib/visualGeometry.js";
 import { getOverlayToolbarPosition } from "../lib/overlayToolbarPlacement.js";
 import { FILTER_OPTIONS, RATIO_OPTIONS } from "../config/editor.js";
 import { getVectorDesignAppearance, getVectorRenderSource } from "../lib/vectorDesign.js";
+import { hasSubjectEffect, normalizeSubjectEffect } from "../lib/subjectEffects.js";
+import { SubjectMaterialFilterDefs } from "./SubjectMaterialFilter.jsx";
 
 function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
   const videoRef = useRef(null);
@@ -96,6 +98,8 @@ export function PreviewStage({
   seekTo,
   notify,
   visualEffects,
+  subjectEffect,
+  subjectCutoutUrl = "",
   visualLocalTime = 0,
   visualMaskEditable = false,
   onUpdateVisualMask,
@@ -130,6 +134,14 @@ export function PreviewStage({
   const visualTransform = resolveVisualTransform(visualEffects?.keyframes, visualLocalTime, visualEffects?.baseTransform);
   const visualAnimation = resolveVisualClipAnimation(visualEffects?.animation, visualLocalTime, visualEffects?.duration);
   const visualMask = visualEffects?.mask ?? {};
+  const normalizedSubjectEffect = normalizeSubjectEffect(subjectEffect);
+  const subjectEffectActive = hasSubjectEffect(normalizedSubjectEffect) && Boolean(subjectCutoutUrl);
+  const replacesBackground = subjectEffectActive && (
+    normalizedSubjectEffect.background.visible === false
+    || normalizedSubjectEffect.background.mode !== "original"
+  );
+  const outline = normalizedSubjectEffect.outline;
+  const outlineFilter = outline.enabled ? "url(#subject-outline-filter)" : "none";
   const enhancement = visualEffects?.enhancement ?? null;
   const showRemasterPreview = Boolean(
     enhancement?.enabled !== false && enhancement?.previewUrl &&
@@ -450,6 +462,7 @@ export function PreviewStage({
       aria-modal={isFocusPreviewOpen ? "true" : undefined}
       aria-label={isFocusPreviewOpen ? t("focusPreviewTitle", "大画布编辑") : undefined}
     >
+      <SubjectMaterialFilterDefs effect={normalizedSubjectEffect} />
       {isFocusPreviewOpen ? <header className="focus-preview-header">
         <div><strong>{t("focusPreviewTitle", "大画布编辑")}</strong><span>{t("focusPreviewHint", "点击画面元素进行移动、缩放和旋转")}</span></div>
         <button
@@ -511,7 +524,36 @@ export function PreviewStage({
           >
             <div className="caption-canvas-guide is-vertical" aria-hidden="true" />
             <div className="caption-canvas-guide is-horizontal" aria-hidden="true" />
-            {renderedVisualSrc && trackVisibility.image ? (
+            {renderedVisualSrc && trackVisibility.image && subjectEffectActive ? (
+              <div className={`subject-effect-preview is-background-${normalizedSubjectEffect.background.mode}`} aria-hidden="true">
+                {replacesBackground ? <div
+                  className="subject-effect-background"
+                  style={normalizedSubjectEffect.background.visible === false
+                    ? { background: "#0b1116" }
+                    : normalizedSubjectEffect.background.mode === "color"
+                    ? { background: normalizedSubjectEffect.background.color, opacity: normalizedSubjectEffect.background.opacity }
+                    : undefined}
+                >
+                  {normalizedSubjectEffect.background.visible !== false && normalizedSubjectEffect.background.mode === "blur" ? (
+                    previewVisualType === "video"
+                      ? <video src={previewVisualSrc} muted playsInline autoPlay={isPlaying} style={{ objectFit: "cover", filter: `blur(${normalizedSubjectEffect.background.blur}px) brightness(${1 - normalizedSubjectEffect.background.darken})`, transform: "scale(1.1)" }} />
+                      : <img src={previewVisualSrc} alt="" style={{ objectFit: "cover", filter: `blur(${normalizedSubjectEffect.background.blur}px) brightness(${1 - normalizedSubjectEffect.background.darken})`, transform: "scale(1.1)" }} />
+                  ) : null}
+                </div> : null}
+                <img
+                  className="subject-effect-cutout"
+                  src={subjectCutoutUrl}
+                  alt=""
+                  style={{
+                    ...visualTransformStyle,
+                    objectFit: activeObjectFit,
+                    objectPosition: activeObjectPosition,
+                    filter: `${selectedFilter.css === "none" ? "" : selectedFilter.css} ${outlineFilter}`.trim() || "none",
+                  }}
+                />
+              </div>
+            ) : null}
+            {renderedVisualSrc && trackVisibility.image && !replacesBackground ? (
               <div className={`visual-media-layer ${visualTransformEditable ? "is-transform-editable" : ""}`} style={visualMaskStyle} onPointerDown={(event) => { event.stopPropagation(); onSelectVisual?.(); if (visualTransformEditable) startVisualTransform(event, "move"); }}>
                 {previewVisualType === "image" ? <img
                   src={renderedVisualSrc}
@@ -584,6 +626,14 @@ export function PreviewStage({
               const isVector = overlay.kind === "vector" || Boolean(overlay.vectorBody);
               const containBox = getVisualOverlayPixelBox(overlay, activePreviewFrameSize);
               const overlayFilter = FILTER_OPTIONS.find((option) => option.id === overlay.filterId)?.css || "none";
+              const overlaySubjectEffect = normalizeSubjectEffect(overlay.subjectEffect);
+              const overlayCutoutUrl = overlay.visionAnalysis?.cutoutUrl || "";
+              const overlaySubjectActive = hasSubjectEffect(overlaySubjectEffect) && Boolean(overlayCutoutUrl);
+              const overlaySubjectFilterId = `overlay-subject-${String(overlay.id).replace(/[^a-z0-9_-]/gi, "-")}`;
+              const showOverlayOriginal = !overlaySubjectActive || (
+                overlaySubjectEffect.background.visible !== false
+                && overlaySubjectEffect.background.mode === "original"
+              );
               const overlayMask = overlay.mask ?? { type: "none" };
               const hasOverlayMask = overlayMask.type && overlayMask.type !== "none";
               const overlayMaskUrl = hasOverlayMask
@@ -608,6 +658,7 @@ export function PreviewStage({
                 maskRepeat: overlayMaskUrl ? "no-repeat" : undefined,
               };
               const mediaStyle = { filter: isVector ? vectorAppearance.filter : overlayFilter };
+              const cutoutFilter = `${overlayFilter === "none" ? "" : overlayFilter} url(#${overlaySubjectFilterId})`.trim();
               const overlayRenderSrc = isVector
                 ? getVectorRenderSource(overlay, {
                     targetWidth: containBox.width * animatedTransform.scale,
@@ -630,7 +681,42 @@ export function PreviewStage({
               });
               return <Fragment key={overlay.id}>
                 <div className={`visual-overlay-layer ${selected ? "is-selected" : ""}`} style={{ ...style, zIndex: 3 + (overlay.layer || 1) }} onPointerDown={(event) => startOverlayTransform(event, "move", overlay)}>
-                  <VisualOverlayMedia overlay={overlay} src={overlayRenderSrc} style={mediaStyle} isPlaying={isPlaying} localTime={localTime} />
+                  {overlaySubjectActive ? <SubjectMaterialFilterDefs effect={overlaySubjectEffect} filterId={overlaySubjectFilterId} /> : null}
+                  {overlaySubjectActive
+                    && overlaySubjectEffect.background.visible !== false
+                    && overlaySubjectEffect.background.mode === "color"
+                    ? <span
+                        className="visual-overlay-subject-background"
+                        style={{
+                          background: overlaySubjectEffect.background.color,
+                          opacity: overlaySubjectEffect.background.opacity,
+                        }}
+                      />
+                    : null}
+                  {showOverlayOriginal ? <VisualOverlayMedia overlay={overlay} src={overlayRenderSrc} style={mediaStyle} isPlaying={isPlaying} localTime={localTime} /> : null}
+                  {overlaySubjectActive
+                    && overlaySubjectEffect.background.visible !== false
+                    && overlaySubjectEffect.background.mode === "blur"
+                    ? <span className="visual-overlay-subject-background">
+                        <VisualOverlayMedia
+                          overlay={overlay}
+                          src={overlayRenderSrc}
+                          style={{
+                            filter: `blur(${overlaySubjectEffect.background.blur}px) brightness(${1 - overlaySubjectEffect.background.darken})`,
+                            opacity: overlaySubjectEffect.background.opacity,
+                            transform: "scale(1.08)",
+                          }}
+                          isPlaying={isPlaying}
+                          localTime={localTime}
+                        />
+                      </span>
+                    : null}
+                  {overlaySubjectActive ? <img
+                    className="visual-overlay-subject-cutout"
+                    src={overlayCutoutUrl}
+                    alt=""
+                    style={{ filter: cutoutFilter }}
+                  /> : null}
                   {selected && !isPlaying && hasOverlayMask && visualOverlayMaskEditable ? <div
                     className={`visual-mask-editor is-${overlayMask.type}`}
                     style={{

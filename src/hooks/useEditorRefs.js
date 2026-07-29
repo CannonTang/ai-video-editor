@@ -10,8 +10,6 @@ export function useEditorRefs() {
     avatarMotionCacheRef: useRef({ audioBlob: null, motion: null }),
     avatarMotionWorkerRef: useRef(null),
     avatarRenderWorkerRef: useRef(null),
-    avatarTestAudioImportedRef: useRef(false),
-    avatarTestImportedRef: useRef(false),
     currentTimeRef: useRef(0),
     draggedAssetIdRef: useRef(""),
     exportAbortControllerRef: useRef(null),

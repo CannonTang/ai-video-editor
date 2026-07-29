@@ -6,6 +6,13 @@
 [![GitHub Release](https://img.shields.io/github/v/release/MartinDelophy/ai-video-editor?style=flat-square)](https://github.com/MartinDelophy/ai-video-editor/releases)
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## 项目动态
+
+- **2026 年 7 月 29 日 — 效果工作区：** 人物描边正在开发中；物体描边、光流跟踪和摇摆运动是下一阶段计划。
+- **2026 年 7 月 28 日 — v0.8.0：** 完善贡献者入门与版本文档。
+- 在公开 [Roadmap](ROADMAP.md) 查看计划与 TODO，在 [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) 查看已发布功能，在 [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) 跟踪具体任务和缺陷。
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -32,7 +39,7 @@ https://github.com/user-attachments/assets/aea9f5b4-c720-4b0c-9067-5ec124eef982
 
 ### AI 配音
 
-[观看多语言 AI 配音演示](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ![Timeline Studio 编辑器](docs/screenshots/editor-timeline.png)
 
@@ -104,7 +111,7 @@ gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio
 
 ## 路线图
 
-- **当前：** 加固确定性离线导出、提高时间线编辑可靠性，并扩充浏览器端到端测试。
+- **当前：** 加固确定性离线导出并提高时间线编辑可靠性。
 - **下一步：** 发布供 Agent 驱动剪辑使用的版本化无头命令执行器，并让可复用项目模板更易分享。
 - **未来：** 增加协作审阅流程、插件扩展能力，以及更多经过本地验证的 AI 模型。
 
@@ -112,11 +119,11 @@ gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio
 
 ## 期待你的参与
 
-我们正在寻找对浏览器媒体、WebCodecs、WebGPU/ONNX、时间线交互、本地化、测试或文档感兴趣的贡献者。
+我们正在寻找对浏览器媒体、WebCodecs、WebGPU/ONNX、时间线交互、本地化或文档感兴趣的贡献者。
 
 - 体验[在线编辑器](https://video-editor.ai-creator.top/)，并在 [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) 中提交可复现的问题。
 - 加入 [Discussions](https://github.com/MartinDelophy/ai-video-editor/discussions)，提出功能建议、分享作品或帮助确定路线图优先级。
-- 尤其欢迎聚焦的小型修复、测试、翻译、文档和示例项目贡献。
+- 尤其欢迎聚焦的小型修复、翻译、文档和示例项目贡献。
 
 ## 快速启动
 
@@ -134,7 +141,6 @@ npm run dev
 ## 验证与构建
 
 ```bash
-npm test
 npm run build
 npm run preview
 ```

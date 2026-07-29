@@ -3,6 +3,13 @@
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | [Português](README.pt-BR.md) | [ไทย](README.th.md) | **Tiếng Việt** | [Русский](README.ru.md)
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Cập nhật dự án
+
+- **29 tháng 7, 2026 — Hiệu ứng:** viền người đang được phát triển; viền vật thể, theo dõi luồng quang học và chuyển động đung đưa được lên kế hoạch tiếp theo.
+- **28 tháng 7, 2026 — v0.8.0:** đã cập nhật hướng dẫn cộng tác viên và tài liệu phát hành.
+- Xem [Roadmap](ROADMAP.md) cho công việc dự kiến, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) cho thay đổi đã phát hành và [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) cho nhiệm vụ và lỗi.
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -28,7 +35,7 @@ Timeline Studio là trình chỉnh sửa video AI ưu tiên xử lý cục bộ 
 
 ## Bản demo lồng tiếng AI
 
-[Xem bản demo lồng tiếng AI đa ngôn ngữ](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## Agent Skill
 
@@ -76,7 +83,6 @@ npm run dev
 ## Kiểm tra
 
 ```bash
-npm test
 npm run build
 npm run check
 ```

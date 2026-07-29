@@ -2225,6 +2225,7 @@ export function Timeline({
             if (actionId === "visual-transform") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("transform")}><SlidersHorizontal size={20} /><span>{t("visualTabTransform")}</span></button>;
             if (actionId === "visual-mask") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("mask")}><Crop size={20} /><span>{t("visualTabMask")}</span></button>;
             if (actionId === "visual-filter") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("filters")}><Sparkle size={20} /><span>{t("visualTabEffects")}</span></button>;
+            if (actionId === "visual-effects") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("effects")}><Sparkle size={20} weight="fill" /><span>{t("effects")}</span></button>;
             if (actionId === "visual-animation") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("animation")}><MonitorPlay size={20} /><span>{t("visualTabAnimation")}</span></button>;
             if (actionId === "visual-speed") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("speed")}><ArrowsOutLineHorizontal size={20} /><span>{t("visualTabSpeed")}</span></button>;
             if (actionId === "visual-repair") return <button type="button" key={actionId} onClick={() => openSelectedClipInspector("repair")}><Sparkle size={20} /><span>{t("repairTab")}</span></button>;

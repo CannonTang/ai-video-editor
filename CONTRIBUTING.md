@@ -67,7 +67,6 @@ During development, you can run individual checks:
 ```bash
 npm run lint
 npm run typecheck
-npm test
 npm run build
 ```
 

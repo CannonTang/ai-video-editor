@@ -57,6 +57,7 @@ import {
 } from "../lib/vectorDocument.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
 import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 
 function AutoEditReviewDialog({ t, autoEdit }) {
   const { review, job } = autoEdit || {};
@@ -1087,6 +1088,7 @@ export function VoicePanel({
   visionProgress,
   visionPhase,
   analyzeCurrentVisual,
+  analyzeEffectVisual,
   toggleVisionOption,
   clearVisionAnalysis,
   downloadVisionCutout,
@@ -1129,6 +1131,13 @@ export function VoicePanel({
   alignCaptionToAudio,
   linkCaptionAudio,
   unlinkCaptionAudio,
+  effectSegment,
+  effectAnalysis,
+  effectRunning,
+  effectProgress,
+  effectPhase,
+  updateSelectedSubjectEffect,
+  removeSelectedSubjectEffect,
 }) {
   const [captionPanelTab, setCaptionPanelTab] = useState("caption");
   const panelRef = useRef(null);
@@ -1139,6 +1148,7 @@ export function VoicePanel({
   });
   const isCaptionContext = panelContext === "caption";
   const isSmartContext = panelContext === "smart";
+  const isEffectsContext = panelContext === "effects" || mobileInspectorSection === "effects";
   const isAvatarContext = isSmartContext && smartMode === "avatar" && avatarPanelOpen;
   const isSmartAutoContext = isSmartContext && smartMode === "auto-edit";
   const isSmartFrameContext = isSmartContext && smartMode === "smart-frame";
@@ -1148,7 +1158,7 @@ export function VoicePanel({
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
     || Boolean(audioClipInspectorOpen && ["source", "music"].includes(selectedTrack) && audioPropertySegment)
   );
-  const isVisualContext = panelContext === "visual";
+  const isVisualContext = panelContext === "visual" && !isEffectsContext;
   const isStickerContext = panelContext === "sticker" && Boolean(selectedStickerSegment);
   const isOverlayContext = panelContext === "overlay" && Boolean(selectedVisualOverlay);
   const isVectorOverlay = isOverlayContext && (
@@ -1183,9 +1193,13 @@ export function VoicePanel({
     audio: t("mobileClipAudio"),
     fade: t("mobileClipFade"),
     sticker: t("stickerProperties"),
+    effects: t("effects"),
+    outline: t("effectOutline"),
+    background: t("effectBackground"),
+    edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
-  const title = focusedSectionTitle || (isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
-  const panelStatusText = isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
+  const title = focusedSectionTitle || (isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
+  const panelStatusText = isEffectsContext ? (effectRunning ? `${Math.round(effectProgress || 0)}%` : effectAnalysis?.complete ? t("effectAnalysisComplete") : effectAnalysis ? t("effectAnalysisPartial") : t("effectAnalysisNeeded")) : isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
     ? captionSegments.length
       ? `${captionSegments.length} ${t("captionSegmentsUnit", "条字幕")}`
       : t("noCaptionSegments")
@@ -1227,7 +1241,7 @@ export function VoicePanel({
   }, [activeTool, smartMode]);
 
   return (
-    <aside ref={panelRef} className={`voice-panel ${isCaptionContext ? "is-caption-context" : ""} ${isAvatarContext ? "is-avatar-context" : ""} ${isAudioClipContext ? "is-audio-clip-context" : ""} ${isStickerContext ? "is-sticker-context" : ""} ${isVisualContext ? "is-visual-context" : ""} ${isVectorOverlay ? "is-vector-overlay-context" : ""} ${mobileInspectorSection ? "is-focused-mobile-section" : ""}`}>
+    <aside ref={panelRef} className={`voice-panel ${isCaptionContext ? "is-caption-context" : ""} ${isAvatarContext ? "is-avatar-context" : ""} ${isAudioClipContext ? "is-audio-clip-context" : ""} ${isStickerContext ? "is-sticker-context" : ""} ${isVisualContext ? "is-visual-context" : ""} ${isEffectsContext ? "is-effects-context" : ""} ${isVectorOverlay ? "is-vector-overlay-context" : ""} ${mobileInspectorSection ? "is-focused-mobile-section" : ""}`}>
       {mobileInspectorSection ? <header className="focused-mobile-sheet-header"><strong>{title}</strong><button type="button" aria-label={t("close", "关闭")} onClick={onCloseMobileInspector}>×</button></header> : null}
       <div className="panel-title-row">
         <h1>{title}</h1>
@@ -1236,7 +1250,7 @@ export function VoicePanel({
         </span>
       </div>
 
-      {!isSmartContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext ? (
+      {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext ? (
         <div className="tabs compact">
           {[
             ["synthesis", t("voiceSynthesis")],
@@ -1279,6 +1293,18 @@ export function VoicePanel({
       ) : null}
 
       <div className="voice-tab-body">
+        {isEffectsContext ? <SubjectEffectsInspector
+          t={t}
+          segment={effectSegment}
+          analysis={effectAnalysis}
+          running={effectRunning}
+          progress={effectProgress}
+          phase={effectPhase}
+          onChange={updateSelectedSubjectEffect}
+          onAnalyze={analyzeEffectVisual || analyzeCurrentVisual}
+          onRemove={removeSelectedSubjectEffect}
+          singleSection={mobileInspectorSection}
+        /> : null}
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
         {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}
         {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}
@@ -1409,7 +1435,7 @@ export function VoicePanel({
 
         {isAudioClipContext ? <AudioClipContextPanel t={t} segment={{ ...audioPropertySegment, id: audioPropertySegment.id || audioPropertySegment.segmentId }} updateAudioSegment={selectedTrack === "audio" ? updateAudioSegment : updateSelectedTrackAudioSegment} toggleAudioSegmentReverse={toggleAudioSegmentReverse} deleteAudioSegment={selectedTrack === "audio" ? deleteAudioSegment : deleteSelectedTrackAudioSegment} downloadBlob={downloadBlob} requestedSection={mobileInspectorSection} /> : null}
 
-        {!isSmartContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "synthesis" ? (
+        {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "synthesis" ? (
           <VoiceSynthesisPanel
             script={script}
             updateScript={updateScript}
@@ -1438,7 +1464,7 @@ export function VoicePanel({
           />
         ) : null}
 
-        {!isSmartContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "mine" ? (
+        {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "mine" ? (
           <MyVoicesPanel
             favoriteVoiceIds={favoriteVoiceIds}
             setFavoriteVoiceIds={setFavoriteVoiceIds}
@@ -1456,7 +1482,7 @@ export function VoicePanel({
           />
         ) : null}
 
-        {!isSmartContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "history" ? (
+        {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "history" ? (
           <HistoryPanel
             historyItems={historyItems}
             useHistoryItem={useHistoryItem}

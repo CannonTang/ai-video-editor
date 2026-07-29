@@ -112,18 +112,28 @@ function getVisionWorker() {
 }
 
 /**
- * Return a stable cache key for an imported asset or visual timeline segment.
- * Source URL is included so replacing media invalidates stale AI data. Dimensions
- * are intentionally excluded because they are populated asynchronously after import.
+ * Return a stable cache key for one visual timeline clip.
+ *
+ * A single imported asset may appear in several independently trimmed clips. Those
+ * clips must never share temporal masks: applying or re-analyzing an effect on one
+ * split clip would otherwise make its sibling render the same analysis. Source
+ * mapping is included so trimming or changing playback speed invalidates stale AI
+ * data while asynchronously populated dimensions remain irrelevant.
  */
 export function getVisionKey(segment) {
   if (!segment) {
     return "";
   }
 
-  const identity = segment.assetId ?? segment.id ?? segment.src ?? segment.name ?? "visual";
+  const identity = segment.id ?? segment.assetId ?? segment.src ?? segment.name ?? "visual";
   const source = segment.src ?? "";
-  return `${identity}::${source}`;
+  if (segment.type !== "video") {
+    return `${identity}::${source}`;
+  }
+  const sourceStart = Math.max(0, Number(segment.sourceStart) || 0);
+  const sourceDuration = Math.max(0, Number(segment.sourceDuration) || Number(segment.duration) || 0);
+  const playbackRate = Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
+  return `${identity}::${source}::${sourceStart}:${sourceDuration}:${playbackRate}`;
 }
 
 /**
@@ -139,6 +149,8 @@ export function analyzeVisualSubject(input, legacyOptions = {}) {
     includeMatting = options.removeBackground ?? false,
     threshold = 0.35,
     preferredLabels = ["person"],
+    targetBox = null,
+    skipDetection = false,
     onProgress,
     signal,
   } = options;
@@ -189,6 +201,62 @@ export function analyzeVisualSubject(input, legacyOptions = {}) {
         removeBackground: Boolean(includeMatting),
         threshold: Math.max(0.01, Math.min(0.99, Number(threshold) || 0.35)),
         preferredLabels: Array.isArray(preferredLabels) ? preferredLabels : ["person"],
+        targetBox,
+        skipDetection: Boolean(skipDetection),
+      });
+    } catch (error) {
+      settleVisionRequest(requestId, (request) => request.reject(error));
+    }
+  });
+}
+
+/**
+ * Start the portrait detector and matting sessions before the first anchor is
+ * needed. The worker shares the same model promises with analyzeVisualSubject,
+ * so this never creates duplicate ONNX sessions.
+ */
+export function warmVisualSubjectModels(options = {}) {
+  const {
+    includeDetector = true,
+    includeMatting = true,
+    onProgress,
+    signal,
+  } = options;
+
+  try {
+    throwIfAborted(signal);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+
+  const worker = getVisionWorker();
+  if (!worker) {
+    return Promise.reject(new Error("当前浏览器不支持 Worker 视觉分析。"));
+  }
+
+  const requestId = createRequestId();
+  return new Promise((resolve, reject) => {
+    const handleAbort = () => {
+      if (!pendingVisionRequests.has(requestId)) return;
+      worker.postMessage({ type: "cancel", requestId });
+      settleVisionRequest(requestId, (request) => request.reject(createAbortError()));
+    };
+
+    pendingVisionRequests.set(requestId, {
+      resolve,
+      reject,
+      onProgress,
+      signal,
+      handleAbort,
+    });
+    signal?.addEventListener("abort", handleAbort, { once: true });
+
+    try {
+      worker.postMessage({
+        type: "warm",
+        requestId,
+        includeDetector: Boolean(includeDetector),
+        includeMatting: Boolean(includeMatting),
       });
     } catch (error) {
       settleVisionRequest(requestId, (request) => request.reject(error));
@@ -666,6 +734,7 @@ export async function analyzeVideoVisualTrack(options = {}) {
     preferredLabels = ["person", "cat", "dog", "car", "bottle", "chair"],
     signal,
     onProgress,
+    onSample,
   } = options;
   const source = blob ?? requestedSource;
   if (!source) {
@@ -709,6 +778,7 @@ export async function analyzeVideoVisualTrack(options = {}) {
     context.imageSmoothingQuality = "high";
 
     const samples = [];
+    let trackedTargetBox = options.targetBox ?? null;
     for (let index = 0; index < sampleTimes.length; index += 1) {
       throwIfAborted(signal);
       const time = sampleTimes[index];
@@ -728,6 +798,7 @@ export async function analyzeVideoVisualTrack(options = {}) {
         includeMatting,
         threshold,
         preferredLabels,
+        targetBox: trackedTargetBox,
         signal,
         onProgress: ({ progress, phase }) => {
           const overall = ((index + progress / 100) / sampleTimes.length) * 100;
@@ -737,7 +808,18 @@ export async function analyzeVideoVisualTrack(options = {}) {
           });
         },
       });
-      samples.push({ time, ...result });
+      const sample = { time, ...result };
+      if (result.detectedSubject?.box ?? result.subject?.box) {
+        trackedTargetBox = result.detectedSubject?.box ?? result.subject.box;
+      }
+      samples.push(sample);
+      await onSample?.({
+        sample,
+        index,
+        total: sampleTimes.length,
+        duration,
+        sourceSize: samples[0]?.sourceSize ?? targetSize,
+      });
     }
 
     const firstSubjectSample = samples.find((sample) => sample.subject) ?? samples[0] ?? null;

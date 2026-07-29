@@ -139,6 +139,15 @@ function getCenterAffinity(box) {
   return clamp(1 - distance / Math.SQRT1_2);
 }
 
+function getBoxIoU(left, right) {
+  if (!left || !right) return 0;
+  const intersectionWidth = Math.max(0, Math.min(left.xMax, right.xMax) - Math.max(left.xMin, right.xMin));
+  const intersectionHeight = Math.max(0, Math.min(left.yMax, right.yMax) - Math.max(left.yMin, right.yMin));
+  const intersection = intersectionWidth * intersectionHeight;
+  const union = getBoxArea(left) + getBoxArea(right) - intersection;
+  return union > EPSILON ? intersection / union : 0;
+}
+
 /**
  * Rank detections as editing subjects. Preferred labels (person by default) win,
  * followed by confidence, visible area, and proximity to the frame center.
@@ -150,6 +159,7 @@ export function selectPrimarySubject(detections, options = {}) {
   const preferredRanks = new Map(preferredLabels.map((label, index) => [label, index]));
   const minScore = clamp(options.minScore ?? 0);
   const minArea = Math.max(0, toFiniteNumber(options.minArea, 0));
+  const targetBox = normalizeBoundingBox(options.targetBox);
 
   const ranked = (Array.isArray(detections) ? detections : [])
     .map((detection) => {
@@ -164,8 +174,12 @@ export function selectPrimarySubject(detections, options = {}) {
       const preferredRank = preferredRanks.get(label.toLowerCase());
       const preferredBonus =
         preferredRank === undefined ? 0 : Math.max(0.35, 0.72 - preferredRank * 0.08);
+      const targetCenterAffinity = targetBox
+        ? clamp(1 - Math.hypot(box.centerX - targetBox.centerX, box.centerY - targetBox.centerY) / Math.SQRT2)
+        : 0;
       const rankScore =
-        preferredBonus + score * 0.48 + Math.sqrt(area) * 0.34 + getCenterAffinity(box) * 0.18;
+        preferredBonus + score * 0.48 + Math.sqrt(area) * 0.34 + getCenterAffinity(box) * 0.24
+        + (targetBox ? getBoxIoU(box, targetBox) * 0.9 + targetCenterAffinity * 0.35 : 0);
 
       return {
         detection: {

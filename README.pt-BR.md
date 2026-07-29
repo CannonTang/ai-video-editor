@@ -3,6 +3,13 @@
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Español](README.es.md) | [Français](README.fr.md) | [Deutsch](README.de.md) | **Português** | [ไทย](README.th.md) | [Tiếng Việt](README.vi.md) | [Русский](README.ru.md)
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Novidades do projeto
+
+- **29 de julho de 2026 — Efeitos:** o contorno de pessoa está em desenvolvimento; contorno de objetos, rastreamento por fluxo óptico e movimento de balanço estão planejados.
+- **28 de julho de 2026 — v0.8.0:** a integração de colaboradores e a documentação de versões foram atualizadas.
+- Consulte o [Roadmap](ROADMAP.md) para o trabalho planejado, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) para mudanças publicadas e [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) para tarefas e erros.
 
 <p align="center">
   <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
@@ -28,7 +35,7 @@ O Timeline Studio é um editor de vídeo com IA, local e executado no navegador.
 
 ## Demonstração de voz por IA
 
-[Ver a demonstração de voz por IA multilíngue](docs/demos/ai-voiceover.mp4)
+https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## Agent Skill
 
@@ -76,7 +83,6 @@ npm run dev
 ## Validação
 
 ```bash
-npm test
 npm run build
 npm run check
 ```

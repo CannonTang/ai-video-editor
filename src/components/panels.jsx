@@ -54,6 +54,7 @@ import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTrans
 import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL_CLIP_ANIMATION_OPTIONS } from "../lib/visualClipAnimations.js";
 import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
 import { Popover } from "./ui.jsx";
+import { SubjectEffectsWorkspace } from "./SubjectEffectsPanel.jsx";
 
 export function LanguageIntro({ t, closing, onChoose }) {
   return (
@@ -1006,6 +1007,7 @@ export function ToolPanel(props) {
     visionProgress,
     visionPhase,
     analyzeCurrentVisual,
+    analyzeEffectVisual,
     toggleVisionOption,
     clearVisionAnalysis,
     downloadVisionCutout,
@@ -1027,6 +1029,14 @@ export function ToolPanel(props) {
     trOption,
     miganRepair,
     hdRestoration,
+    selectedEffectSegment,
+    effectAnalysis,
+    effectRunning,
+    effectProgress,
+    effectPhase,
+    updateSelectedSubjectEffect,
+    removeSelectedSubjectEffect,
+    openEffectsInspector,
   } = props;
   const [captionFontStatus, setCaptionFontStatus] = useState("");
   const captionFontOptions = useMemo(
@@ -1375,6 +1385,23 @@ export function ToolPanel(props) {
           setSelectedStickerId(id);
           notify(t("stickerApplied"));
         }}
+      />
+    );
+  }
+
+  if (activeTool === "effects") {
+    return (
+      <SubjectEffectsWorkspace
+        t={t}
+        segment={selectedEffectSegment}
+        analysis={effectAnalysis}
+        running={effectRunning}
+        progress={effectProgress}
+        phase={effectPhase}
+        onChange={updateSelectedSubjectEffect}
+        onAnalyze={analyzeEffectVisual || analyzeCurrentVisual}
+        onOpenInspector={openEffectsInspector}
+        onRemove={removeSelectedSubjectEffect}
       />
     );
   }

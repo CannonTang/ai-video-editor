@@ -84,6 +84,9 @@ async function getDetector(requestId) {
         device: "wasm",
         dtype: "q8",
         revision: YOLOS_TINY_MODEL_REVISION,
+        session_options: {
+          graphOptimizationLevel: "all",
+        },
         progress_callback: createModelLoadProgressCallback(requestId, {
           start: 8,
           end: 48,
@@ -105,10 +108,14 @@ async function getBackgroundRemover(requestId) {
   if (!backgroundRemoverPromise) {
     backgroundRemoverPromise = (async () => {
       const { pipeline } = await getTransformers();
+      const useWebGPU = Boolean(self.navigator?.gpu);
       return pipeline("background-removal", MODNET_MODEL_ID, {
-        device: "wasm",
-        dtype: "q8",
+        device: useWebGPU ? "webgpu" : "wasm",
+        dtype: useWebGPU ? "fp32" : "q8",
         revision: MODNET_MODEL_REVISION,
+        session_options: {
+          graphOptimizationLevel: "all",
+        },
         progress_callback: createModelLoadProgressCallback(requestId, {
           start: 62,
           end: 88,
@@ -203,6 +210,30 @@ function mergePortraitSubject(detectedSubject, matteSubject) {
   };
 }
 
+function restrictCutoutToSubject(cutoutImage, subject, padding = 0.04) {
+  if (!subject?.box || String(subject.label || "").toLowerCase() !== "person") return cutoutImage;
+  const channels = Number(cutoutImage?.channels) || 0;
+  const data = cutoutImage?.data;
+  const width = Number(cutoutImage?.width) || 0;
+  const height = Number(cutoutImage?.height) || 0;
+  if (!data || !width || !height || (channels !== 2 && channels !== 4)) return cutoutImage;
+  const box = subject.box;
+  const boxWidth = Math.max(0, Number(box.xmax) - Number(box.xmin));
+  const boxHeight = Math.max(0, Number(box.ymax) - Number(box.ymin));
+  const xMin = Math.max(0, Math.floor((Number(box.xmin) - boxWidth * padding) * width));
+  const yMin = Math.max(0, Math.floor((Number(box.ymin) - boxHeight * padding) * height));
+  const xMax = Math.min(width, Math.ceil((Number(box.xmax) + boxWidth * padding) * width));
+  const yMax = Math.min(height, Math.ceil((Number(box.ymax) + boxHeight * padding) * height));
+  const alphaOffset = channels - 1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (x >= xMin && x < xMax && y >= yMin && y < yMax) continue;
+      data[(y * width + x) * channels + alphaOffset] = 0;
+    }
+  }
+  return cutoutImage;
+}
+
 async function analyzeVisual(message) {
   const {
     requestId,
@@ -210,6 +241,8 @@ async function analyzeVisual(message) {
     removeBackground = false,
     threshold = 0.35,
     preferredLabels = ["person"],
+    targetBox = null,
+    skipDetection = false,
   } = message;
 
   if (!(imageBlob instanceof Blob) || imageBlob.size <= 0) {
@@ -228,25 +261,41 @@ async function analyzeVisual(message) {
     return;
   }
 
-  const detector = await getDetector(requestId);
-  postProgress(requestId, 52, `使用 ${YOLOS_TINY_MODEL_LABEL} 识别主体`);
-  const rawDetections = await detector(image, {
-    threshold: Math.max(0.01, Math.min(0.99, Number(threshold) || 0.35)),
-    percentage: false,
-  });
-  const detections = normalizeDetections(rawDetections, sourceSize)
-    .map((detection) => ({
-      label: detection.label,
-      score: detection.score,
-      box: {
-        xmin: detection.box.xMin,
-        ymin: detection.box.yMin,
-        xmax: detection.box.xMax,
-        ymax: detection.box.yMax,
-      },
-    }))
-    .sort((left, right) => right.score - left.score);
-  const rankedSubject = selectPrimarySubject(detections, { preferredLabels });
+  let detections = [];
+  if (!skipDetection || !targetBox) {
+    const detector = await getDetector(requestId);
+    postProgress(requestId, 52, `使用 ${YOLOS_TINY_MODEL_LABEL} 识别主体`);
+    const rawDetections = await detector(image, {
+      threshold: Math.max(0.01, Math.min(0.99, Number(threshold) || 0.35)),
+      percentage: false,
+    });
+    detections = normalizeDetections(rawDetections, sourceSize)
+      .map((detection) => ({
+        label: detection.label,
+        score: detection.score,
+        box: {
+          xmin: detection.box.xMin,
+          ymin: detection.box.yMin,
+          xmax: detection.box.xMax,
+          ymax: detection.box.yMax,
+        },
+      }))
+      .sort((left, right) => right.score - left.score);
+  } else {
+    postProgress(requestId, 52, "复用已锁定人物区域");
+  }
+  const rankedSubject = skipDetection && targetBox
+    ? {
+        label: "person",
+        score: 1,
+        box: {
+          xMin: Math.max(0, Math.min(1, Number(targetBox.xmin) || 0)),
+          yMin: Math.max(0, Math.min(1, Number(targetBox.ymin) || 0)),
+          xMax: Math.max(0, Math.min(1, Number(targetBox.xmax) || 1)),
+          yMax: Math.max(0, Math.min(1, Number(targetBox.ymax) || 1)),
+        },
+      }
+    : selectPrimarySubject(detections, { preferredLabels, targetBox });
   let subject = rankedSubject
     ? {
         label: rankedSubject.label,
@@ -257,6 +306,12 @@ async function analyzeVisual(message) {
           xmax: rankedSubject.box.xMax,
           ymax: rankedSubject.box.yMax,
         },
+      }
+    : null;
+  const detectedSubject = subject
+    ? {
+        ...subject,
+        box: { ...subject.box },
       }
     : null;
   postProgress(
@@ -275,7 +330,8 @@ async function analyzeVisual(message) {
     const backgroundRemover = await getBackgroundRemover(requestId);
     postProgress(requestId, 90, `使用 ${MODNET_MODEL_LABEL} 生成透明抠图`);
     const cutoutImages = await backgroundRemover(image);
-    const cutoutImage = Array.isArray(cutoutImages) ? cutoutImages[0] : cutoutImages;
+    const rawCutoutImage = Array.isArray(cutoutImages) ? cutoutImages[0] : cutoutImages;
+    const cutoutImage = restrictCutoutToSubject(rawCutoutImage, subject);
     if (!cutoutImage) {
       throw new Error(`${MODNET_MODEL_LABEL} 没有返回有效抠图。`);
     }
@@ -303,6 +359,7 @@ async function analyzeVisual(message) {
       sourceSize,
       detections,
       subject,
+      detectedSubject,
       matteSubject,
       cutoutBlob,
       modelIds: {
@@ -313,6 +370,30 @@ async function analyzeVisual(message) {
         detector: YOLOS_TINY_MODEL_REVISION,
         matting: removeBackground ? MODNET_MODEL_REVISION : null,
       },
+    },
+  });
+}
+
+async function warmVisualModels(message) {
+  const {
+    requestId,
+    includeDetector = true,
+    includeMatting = true,
+  } = message;
+  postProgress(requestId, 1, "并行准备人物识别模型");
+  const jobs = [];
+  if (includeDetector) jobs.push(getDetector(requestId));
+  if (includeMatting) jobs.push(getBackgroundRemover(requestId));
+  await Promise.all(jobs);
+  if (isCanceled(requestId)) return;
+  postProgress(requestId, 100, "人物识别模型已就绪");
+  self.postMessage({
+    type: "result",
+    requestId,
+    result: {
+      warmed: true,
+      detector: Boolean(includeDetector),
+      matting: Boolean(includeMatting),
     },
   });
 }
@@ -348,5 +429,20 @@ self.addEventListener("message", (event) => {
 
   if (message?.type === "analyze" && message.requestId) {
     enqueueAnalysis(message);
+    return;
+  }
+
+  if (message?.type === "warm" && message.requestId) {
+    warmVisualModels(message).catch((error) => {
+      if (!isCanceled(message.requestId)) {
+        self.postMessage({
+          type: "error",
+          requestId: message.requestId,
+          error: getErrorMessage(error),
+        });
+      }
+    }).finally(() => {
+      canceledRequests.delete(message.requestId);
+    });
   }
 });
