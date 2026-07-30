@@ -144,7 +144,7 @@ function chooseMask(masks, scores, box, positivePoint, negativePoints) {
   };
 }
 
-async function segment(requestId, blob, normalizedBox, normalizedNegativePoints = []) {
+async function segment(requestId, blob, normalizedBox, normalizedPoint = null, normalizedNegativePoints = []) {
   const totalStarted = performance.now();
   const [model, processor] = await loadRuntime(requestId);
   postStatus(requestId, "SlimSAM 解码人物帧");
@@ -156,11 +156,14 @@ async function segment(requestId, blob, normalizedBox, normalizedNegativePoints 
     clamp(point?.x, 0, 1) * width,
     clamp(point?.y, 0, 1) * height,
   ]);
+  const promptedPoint = Number.isFinite(normalizedPoint?.x) && Number.isFinite(normalizedPoint?.y)
+    ? [clamp(normalizedPoint.x, 0, 1) * width, clamp(normalizedPoint.y, 0, 1) * height]
+    : null;
   const promptPositions = negativePoints.length ? [0.3, 0.55, 0.78] : [0.38];
-  const positivePoints = promptPositions.map((verticalPosition) => [
-    (box[0] + box[2]) / 2,
-    box[1] + (box[3] - box[1]) * verticalPosition,
-  ]);
+  const positivePoints = promptedPoint ? [promptedPoint] : promptPositions.map((verticalPosition) => [
+      (box[0] + box[2]) / 2,
+      box[1] + (box[3] - box[1]) * verticalPosition,
+    ]);
   const positivePoint = positivePoints[Math.floor(positivePoints.length / 2)];
   postStatus(requestId, "SlimSAM 生成人物蒙版");
   const inputs = await processor(image, {
@@ -197,10 +200,10 @@ async function segment(requestId, blob, normalizedBox, normalizedNegativePoints 
 }
 
 self.addEventListener("message", async (event) => {
-  const { requestId, type, blob, box, negativePoints } = event.data ?? {};
+  const { requestId, type, blob, box, point, negativePoints } = event.data ?? {};
   if (!requestId || type !== "segment") return;
   try {
-    const result = await segment(requestId, blob, box, negativePoints);
+    const result = await segment(requestId, blob, box, point, negativePoints);
     self.postMessage(
       { requestId, type: "result", result: { ...result, mask: result.mask.buffer } },
       [result.mask.buffer],

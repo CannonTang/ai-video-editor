@@ -32,6 +32,7 @@ import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js
 import { emitMediaBackendDiagnostic, getMediaFileExtension, isLibavCompatibilityEnabled, MEDIA_BACKENDS } from "./mediaCompatibility.js";
 import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
+import { resolveSubjectMaterialShadow } from "./subjectMaterialRendering.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -681,12 +682,13 @@ function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = nul
           const shadowLayer = getVisualEffectsLayers(canvas).shadow;
           const shadowContext = shadowLayer.getContext("2d");
           const shadowDepth = subjectEffect.material.shadowDepth;
+          const materialShadow = resolveSubjectMaterialShadow(width, shadowDepth);
           shadowContext.clearRect(0, 0, shadowLayer.width, shadowLayer.height);
           shadowContext.save();
-          shadowContext.shadowColor = `rgba(2, 4, 6, ${shadowDepth * 0.9})`;
-          shadowContext.shadowBlur = 1 + width * 0.32 * shadowDepth;
-          shadowContext.shadowOffsetX = 0.8 + width * 0.08 * shadowDepth;
-          shadowContext.shadowOffsetY = 1.2 + width * 0.12 * shadowDepth;
+          shadowContext.shadowColor = `rgba(2, 4, 6, ${materialShadow.opacity})`;
+          shadowContext.shadowBlur = materialShadow.blur;
+          shadowContext.shadowOffsetX = materialShadow.offsetX;
+          shadowContext.shadowOffsetY = materialShadow.offsetY;
           offsets.forEach(([x, y]) => shadowContext.drawImage(outlineLayer, x, y));
           shadowContext.restore();
           shadowContext.save();

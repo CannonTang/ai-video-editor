@@ -1,5 +1,6 @@
 import { memo } from "react";
 
+import { resolveSubjectMaterialShadow } from "../lib/subjectMaterialRendering.js";
 import { normalizeSubjectEffect } from "../lib/subjectEffects.js";
 
 export const SUBJECT_MATERIALS = Object.freeze([
@@ -95,6 +96,7 @@ export const SubjectMaterialFilterDefs = memo(function SubjectMaterialFilterDefs
     Number(outline.softness || 0) / 2 + (material.id === "frosted" ? material.diffusion * 3.2 : material.id === "ink" ? material.diffusion * 1.6 : 0),
   );
   const secondRadius = width + material.ringGap;
+  const materialShadow = resolveSubjectMaterialShadow(width, material.shadowDepth);
 
   return (
     <svg className="subject-effect-filter-defs" width="0" height="0" aria-hidden="true">
@@ -131,11 +133,11 @@ export const SubjectMaterialFilterDefs = memo(function SubjectMaterialFilterDefs
           {material.shadowDepth > 0 ? <>
             <feDropShadow
               in="texturedRing"
-              dx={0.8 + width * 0.08 * material.shadowDepth}
-              dy={1.2 + width * 0.12 * material.shadowDepth}
-              stdDeviation={0.8 + width * 0.12 * material.shadowDepth}
+              dx={materialShadow.offsetX}
+              dy={materialShadow.offsetY}
+              stdDeviation={materialShadow.blur}
               floodColor="#020406"
-              floodOpacity={material.shadowDepth * 0.9}
+              floodOpacity={materialShadow.opacity}
               result="materialShadow"
             />
             <feMerge result="ringWithDepth"><feMergeNode in="materialShadow" /><feMergeNode in="texturedRing" /></feMerge>

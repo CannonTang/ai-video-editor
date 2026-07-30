@@ -54,6 +54,7 @@ export const SUBJECT_EFFECT_PRESETS = Object.freeze([
 export const DEFAULT_SUBJECT_EFFECT = Object.freeze({
   enabled: false,
   presetId: "",
+  targetKind: "person",
   analysisQuality: "balanced",
   outline: {
     enabled: false,
@@ -108,6 +109,7 @@ export function normalizeSubjectEffect(value) {
     ...DEFAULT_SUBJECT_EFFECT,
     ...effect,
     enabled: effect.enabled === true,
+    targetKind: effect.targetKind === "object" ? "object" : "person",
     analysisQuality: ["fast", "balanced", "quality"].includes(effect.analysisQuality)
       ? effect.analysisQuality
       : DEFAULT_SUBJECT_EFFECT.analysisQuality,
