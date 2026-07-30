@@ -12,6 +12,13 @@ import {
   getMediaPipePersonSegmenter,
   segmentMediaPipePersonRoi,
 } from "./mediapipePersonSegmentation.js";
+import {
+  detectObjectsWithNanoDet,
+  disposeObjectSegmentationModels,
+  prepareObjectSegmenter,
+  segmentObjectWithMagicTouch,
+  selectPrimaryObject,
+} from "./objectSegmentation.js";
 
 const SLIMSAM_MODEL_ID = "Xenova/slimsam-77-uniform";
 const SLIMSAM_MODEL_REVISION = "5850ab45f587c112167512ffef949107115e26a0";
@@ -139,7 +146,7 @@ function getFlowWorker() {
   return { worker: flowWorker, ready: flowReadyPromise };
 }
 
-function requestSlimSam({ blob, box, negativePoints, signal, onProgress }) {
+function requestSlimSam({ blob, box, point = null, negativePoints, signal, onProgress }) {
   throwIfAborted(signal);
   const worker = getSlimSamWorker();
   const requestId = createRequestId("slimsam");
@@ -152,7 +159,7 @@ function requestSlimSam({ blob, box, negativePoints, signal, onProgress }) {
       resolve, reject, signal, onProgress, handleAbort,
     });
     signal?.addEventListener("abort", handleAbort, { once: true });
-    worker.postMessage({ requestId, type: "segment", blob, box, negativePoints });
+    worker.postMessage({ requestId, type: "segment", blob, box, point, negativePoints });
   });
 }
 
@@ -438,6 +445,68 @@ export function selectPersonMask(mask, width, height, detectionBox, previousBox 
     || (selected.widthRatio > 1.08 && selected.lowerSideSpillRatio > 0.22)
     || selected.overflowRatio > 0.62
     || (previousBox && selected.previousIou < 0.015 && selected.centerDistance > 0.42)) {
+    return null;
+  }
+  const cleaned = new Uint8ClampedArray(width * height);
+  selected.pixels.forEach((index) => { cleaned[index] = mask[index]; });
+  return { alpha: cleaned, box: selected.box, metrics: selected };
+}
+
+export function selectObjectMask(mask, width, height, detectionBox, point, previousBox = null) {
+  const detected = toPixelBox(detectionBox, width, height);
+  if (!detected || !(mask instanceof Uint8Array || mask instanceof Uint8ClampedArray)) return null;
+  const detectedWidth = Math.max(1, detected.xmax - detected.xmin);
+  const detectedHeight = Math.max(1, detected.ymax - detected.ymin);
+  const detectedArea = detectedWidth * detectedHeight;
+  const pointX = Math.max(0, Math.min(width - 1, Math.round((Number(point?.x) || 0.5) * width)));
+  const pointY = Math.max(0, Math.min(height - 1, Math.round((Number(point?.y) || 0.5) * height)));
+  const detectedCenterX = (detected.xmin + detected.xmax) / 2;
+  const detectedCenterY = (detected.ymin + detected.ymax) / 2;
+  const components = getMaskComponents(mask, width, height)
+    .filter((component) => component.area >= Math.max(24, detectedArea * 0.025))
+    .map((component) => {
+      const containsPoint = pointX >= component.box.xmin && pointX < component.box.xmax
+        && pointY >= component.box.ymin && pointY < component.box.ymax
+        && mask[pointY * width + pointX] >= 96;
+      const centerDistance = Math.hypot(
+        (component.centerX - detectedCenterX) / detectedWidth,
+        (component.centerY - detectedCenterY) / detectedHeight,
+      );
+      const detectionIou = boxIoU(component.box, detected);
+      const previousIou = previousBox ? boxIoU(component.box, previousBox) : 0;
+      const areaRatio = component.area / detectedArea;
+      const overflowX = Math.max(0, detected.xmin - component.box.xmin)
+        + Math.max(0, component.box.xmax - detected.xmax);
+      const overflowY = Math.max(0, detected.ymin - component.box.ymin)
+        + Math.max(0, component.box.ymax - detected.ymax);
+      const overflowRatio = overflowX / detectedWidth + overflowY / detectedHeight;
+      const score = (containsPoint ? 1.4 : -0.8)
+        + detectionIou * 0.8
+        + previousIou * 0.65
+        + Math.max(0, 1 - centerDistance) * 0.35
+        - Math.max(0, areaRatio - 1.7) * 0.45
+        - overflowRatio * 0.28;
+      return {
+        ...component,
+        containsPoint,
+        centerDistance,
+        detectionIou,
+        previousIou,
+        areaRatio,
+        overflowRatio,
+        score,
+      };
+    })
+    .sort((left, right) => right.score - left.score);
+  const selected = components[0];
+  if (!selected
+    || !selected.containsPoint
+    || selected.centerDistance > 0.95
+    || selected.detectionIou < 0.025
+    || selected.areaRatio < 0.04
+    || selected.areaRatio > 2.4
+    || selected.overflowRatio > 1.25
+    || (previousBox && selected.previousIou < 0.01 && selected.centerDistance > 0.5)) {
     return null;
   }
   const cleaned = new Uint8ClampedArray(width * height);
@@ -1117,8 +1186,478 @@ export async function analyzePersonOutlineVideo(options = {}) {
   }
 }
 
+function objectPromptPoint(subject) {
+  return {
+    x: (Number(subject?.box?.xmin) + Number(subject?.box?.xmax)) / 2,
+    y: (Number(subject?.box?.ymin) + Number(subject?.box?.ymax)) / 2,
+  };
+}
+
+async function analyzeObjectAnchor({
+  canvas,
+  frameBlob,
+  targetSize,
+  previousSubject,
+  previousMaskBox,
+  reuseTrackedSubject = false,
+  signal,
+  onProgress,
+}) {
+  const segmenterWarmup = prepareObjectSegmenter({ signal });
+  let detection = null;
+  let detectedSubject = reuseTrackedSubject && previousSubject && previousMaskBox
+    ? {
+        ...previousSubject,
+        box: normalizeSubjectBox(previousMaskBox, targetSize.width, targetSize.height),
+      }
+    : null;
+  if (!detectedSubject) {
+    detection = await detectObjectsWithNanoDet({
+      blob: frameBlob,
+      signal,
+      scoreThreshold: 0.22,
+      onProgress,
+    });
+    detectedSubject = selectPrimaryObject(detection.detections, previousSubject);
+  }
+  if (!detectedSubject?.box) {
+    await segmenterWarmup.catch(() => null);
+    return {
+      alpha: null,
+      box: null,
+      subject: null,
+      detections: detection?.detections || [],
+      source: "object-lost",
+      detector: detection,
+      segmenter: null,
+    };
+  }
+  let point = objectPromptPoint(detectedSubject);
+  let selected = null;
+  let segmenter = null;
+  let source = reuseTrackedSubject ? "magic-touch-track-refresh" : "magic-touch";
+  const runMagicTouch = async () => {
+    try {
+      onProgress?.({ progress: 58, phase: "MagicTouch 快速分割实物" });
+      await segmenterWarmup;
+      segmenter = await segmentObjectWithMagicTouch(canvas, point, {
+        signal,
+        threshold: 0.48,
+      });
+      selected = selectObjectMask(
+        segmenter.alpha,
+        targetSize.width,
+        targetSize.height,
+        detectedSubject.box,
+        point,
+        previousMaskBox,
+      );
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      console.warn("MagicTouch 实物蒙版不可用，准备重新检测或使用 SlimSAM。", error);
+    }
+  };
+  await runMagicTouch();
+  if (!selected && reuseTrackedSubject) {
+    onProgress?.({ progress: 68, phase: "跟踪框刷新失败，NanoDet 重新识别实物" });
+    detection = await detectObjectsWithNanoDet({
+      blob: frameBlob,
+      signal,
+      scoreThreshold: 0.22,
+      onProgress,
+    });
+    detectedSubject = selectPrimaryObject(detection.detections, previousSubject);
+    if (detectedSubject?.box) {
+      point = objectPromptPoint(detectedSubject);
+      source = "magic-touch-redetect";
+      await runMagicTouch();
+    }
+  }
+  if (!selected) {
+    onProgress?.({ progress: 76, phase: "MagicTouch 质量不足，SlimSAM 精修实物" });
+    const segmented = await requestSlimSam({
+      blob: frameBlob,
+      box: detectedSubject.box,
+      point,
+      negativePoints: (detection?.detections || [])
+        .filter((item) => item !== detectedSubject && boxIoU(
+          toPixelBox(item.box, targetSize.width, targetSize.height),
+          toPixelBox(detectedSubject.box, targetSize.width, targetSize.height),
+        ) < 0.55)
+        .map((item) => objectPromptPoint(item))
+        .slice(0, 4),
+      signal,
+      onProgress,
+    });
+    segmenter = segmented;
+    selected = selectObjectMask(
+      segmented.mask,
+      segmented.width,
+      segmented.height,
+      detectedSubject.box,
+      point,
+      previousMaskBox,
+    );
+    source = selected ? "slimsam-object-fallback" : "quality-rejected";
+  }
+  return {
+    alpha: selected?.alpha || null,
+    box: selected?.box || null,
+    subject: detectedSubject,
+    detections: detection?.detections || [],
+    source,
+    detector: detection,
+    segmenter,
+    point,
+  };
+}
+
+export async function analyzeObjectOutlineImage(options = {}) {
+  const {
+    blob,
+    signal,
+    onProgress,
+  } = options;
+  if (!(blob instanceof Blob) || !blob.size) throw new TypeError("实物描边需要有效图片。");
+  throwIfAborted(signal);
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  const context = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
+  context.drawImage(bitmap, 0, 0);
+  bitmap.close();
+  const targetSize = { width: canvas.width, height: canvas.height };
+  const frameBlob = await canvasToBlob(canvas, "image/jpeg", 0.9);
+  const anchor = await analyzeObjectAnchor({
+    canvas,
+    frameBlob,
+    targetSize,
+    previousSubject: null,
+    previousMaskBox: null,
+    signal,
+    onProgress,
+  });
+  if (!anchor.alpha || !anchor.box || !anchor.subject) {
+    throw new Error("没有找到边界清晰的实物，请选择实物更突出、遮挡更少的画面。");
+  }
+  const rgba = context.getImageData(0, 0, targetSize.width, targetSize.height).data;
+  const cutoutCanvas = document.createElement("canvas");
+  cutoutCanvas.width = targetSize.width;
+  cutoutCanvas.height = targetSize.height;
+  const cutoutBlob = await makeCutoutBlob(
+    rgba,
+    anchor.alpha,
+    targetSize.width,
+    targetSize.height,
+    cutoutCanvas,
+    cutoutCanvas.getContext("2d", { alpha: true }),
+  );
+  const subject = {
+    label: anchor.subject.label,
+    score: anchor.subject.score,
+    box: normalizeSubjectBox(anchor.box, targetSize.width, targetSize.height),
+  };
+  onProgress?.({ progress: 100, phase: "实物 Alpha 已生成" });
+  return {
+    kind: "image",
+    pipeline: "object-nanodet-magic-touch-slimsam",
+    sourceSize: targetSize,
+    subject,
+    detectedSubject: anchor.subject,
+    detections: anchor.detections,
+    cutoutBlob,
+    complete: true,
+    tracking: { source: anchor.source, acceptedAnchor: true },
+    modelIds: {
+      detector: anchor.detector?.modelId || "NanoDet-Plus-m-320",
+      segmentation: anchor.segmenter?.modelId || "MediaPipe MagicTouch 512",
+      fallbackSegmentation: anchor.source.includes("slimsam") ? SLIMSAM_MODEL_ID : null,
+    },
+  };
+}
+
+/**
+ * Browser-local object outline analysis. NanoDet proposes a concrete object,
+ * MagicTouch commits the fast anchor, SlimSAM loads only when that mask fails
+ * the object quality gate, and the existing ROI flow worker fills intermediate
+ * 8 fps samples.
+ */
+export async function analyzeObjectOutlineVideo(options = {}) {
+  const {
+    src,
+    duration: requestedDuration,
+    maxDimension = 360,
+    flowFps = FLOW_FPS,
+    anchorFps = 1 / 3.5,
+    maxSamples = 360,
+    signal,
+    onProgress,
+    onSample,
+  } = options;
+  if (!src) throw new TypeError("实物描边分析需要视频源。");
+  throwIfAborted(signal);
+  const flowWarmup = Promise.resolve().then(() => getFlowWorker().ready);
+  const objectUrl = src instanceof Blob ? URL.createObjectURL(src) : "";
+  const video = document.createElement("video");
+  video.crossOrigin = "anonymous";
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = objectUrl || String(src);
+  await ensureVideoReady(video, signal);
+  const scale = Math.min(1, maxDimension / Math.max(video.videoWidth, video.videoHeight));
+  const targetSize = {
+    width: Math.max(2, Math.round(video.videoWidth * scale)),
+    height: Math.max(2, Math.round(video.videoHeight * scale)),
+  };
+  const duration = Math.max(
+    0.05,
+    Math.min(Number(video.duration) || requestedDuration || 0.05, Number(requestedDuration) || video.duration || 0.05),
+  );
+  const sampleTimes = getPersonOutlineSampleTimes(duration, flowFps, maxSamples);
+  const anchorEvery = Math.max(1, Math.round(flowFps / Math.max(0.1, anchorFps)));
+  const canvas = document.createElement("canvas");
+  canvas.width = targetSize.width;
+  canvas.height = targetSize.height;
+  const context = canvas.getContext("2d", { alpha: false, willReadFrequently: true });
+  const cutoutCanvas = document.createElement("canvas");
+  cutoutCanvas.width = targetSize.width;
+  cutoutCanvas.height = targetSize.height;
+  const cutoutContext = cutoutCanvas.getContext("2d", { alpha: true });
+  const samples = [];
+  let sequentialFrameReader = null;
+  let currentAlpha = null;
+  let trackedMaskBox = null;
+  let trackedMaskArea = 0;
+  let trackedSubject = null;
+  let flowInitialized = false;
+  let lastAnchorIndex = -anchorEvery;
+  let pendingSampleCommit = null;
+  const startedAt = performance.now();
+  const timings = {
+    decodeMs: 0,
+    pixelReadMs: 0,
+    flowMs: 0,
+    anchorMs: 0,
+    cutoutEncodeMs: 0,
+    callbackMs: 0,
+    magicTouchAnchors: 0,
+    slimSamFallbacks: 0,
+  };
+  try {
+    onProgress?.({ progress: 1, phase: "准备 NanoDet、MagicTouch 与实物光流" });
+    await flowWarmup;
+    sequentialFrameReader = await createSequentialFrameReader(src, sampleTimes, signal);
+    for (let index = 0; index < sampleTimes.length; index += 1) {
+      throwIfAborted(signal);
+      const time = sampleTimes[index];
+      const decodeStartedAt = performance.now();
+      const decodedCanvas = sequentialFrameReader ? await sequentialFrameReader.next() : null;
+      if (!decodedCanvas) {
+        await seekVideo(video, time, signal);
+      }
+      context.fillStyle = "#000";
+      context.fillRect(0, 0, targetSize.width, targetSize.height);
+      context.drawImage(decodedCanvas || video, 0, 0, targetSize.width, targetSize.height);
+      timings.decodeMs += performance.now() - decodeStartedAt;
+      const pixelReadStartedAt = performance.now();
+      let frameRgba = new Uint8ClampedArray(
+        context.getImageData(0, 0, targetSize.width, targetSize.height).data,
+      );
+      timings.pixelReadMs += performance.now() - pixelReadStartedAt;
+      let source = "flow";
+      let acceptedAnchor = false;
+      let detections = [];
+      let flowDurationMs = 0;
+      let meanMotion = null;
+
+      if (flowInitialized && index > 0) {
+        const flowStartedAt = performance.now();
+        const propagated = await requestFlow("step", { rgba: frameRgba.buffer }, signal);
+        timings.flowMs += performance.now() - flowStartedAt;
+        frameRgba = propagated.rgba || frameRgba;
+        currentAlpha = propagated.alpha;
+        meanMotion = Number.isFinite(Number(propagated.meanMotion)) ? Number(propagated.meanMotion) : null;
+        flowDurationMs = Number(propagated.durationMs) || 0;
+        const nextBox = getAlphaBox(currentAlpha, targetSize.width, targetSize.height);
+        const nextArea = nextBox
+          ? (nextBox.xmax - nextBox.xmin) * (nextBox.ymax - nextBox.ymin)
+          : 0;
+        const areaRatio = trackedMaskArea > 0 ? nextArea / trackedMaskArea : 1;
+        if (!nextBox || areaRatio < 0.35 || areaRatio > 2.8) {
+          currentAlpha = null;
+          trackedMaskBox = null;
+          trackedMaskArea = 0;
+          source = "flow-rejected";
+        } else {
+          trackedMaskBox = nextBox;
+          trackedMaskArea = nextArea;
+        }
+      }
+
+      const needsAnchor = index === 0
+        || index - lastAnchorIndex >= anchorEvery
+        || !trackedMaskBox;
+      if (needsAnchor) {
+        lastAnchorIndex = index;
+        const anchorStartedAt = performance.now();
+        const frameBlob = await canvasToBlob(canvas, "image/jpeg", 0.88);
+        const anchor = await analyzeObjectAnchor({
+          canvas,
+          frameBlob,
+          targetSize,
+          previousSubject: trackedSubject,
+          previousMaskBox: trackedMaskBox,
+          reuseTrackedSubject: index > 0 && Boolean(trackedSubject && trackedMaskBox),
+          signal,
+          onProgress: ({ progress, phase }) => onProgress?.({
+            progress: Math.max((index / sampleTimes.length) * 100, progress * 0.08),
+            phase: `帧 ${index + 1}/${sampleTimes.length} · ${phase}`,
+          }),
+        });
+        detections = anchor.detections;
+        trackedSubject = anchor.subject || trackedSubject;
+        if (anchor.alpha && anchor.box && anchor.subject) {
+          currentAlpha = anchor.alpha;
+          trackedMaskBox = anchor.box;
+          trackedMaskArea = anchor.box
+            ? (anchor.box.xmax - anchor.box.xmin) * (anchor.box.ymax - anchor.box.ymin)
+            : 0;
+          source = anchor.source;
+          acceptedAnchor = true;
+          if (source.includes("magic-touch")) timings.magicTouchAnchors += 1;
+          if (source.includes("slimsam")) timings.slimSamFallbacks += 1;
+        } else if (!currentAlpha || !trackedMaskBox) {
+          currentAlpha = new Uint8ClampedArray(targetSize.width * targetSize.height);
+          trackedMaskBox = null;
+          trackedMaskArea = 0;
+          source = "object-lost";
+        }
+        timings.anchorMs += performance.now() - anchorStartedAt;
+      }
+
+      currentAlpha ??= new Uint8ClampedArray(targetSize.width * targetSize.height);
+      if (!flowInitialized) {
+        const initialized = await requestFlow("init", {
+          width: targetSize.width,
+          height: targetSize.height,
+          rgba: frameRgba.buffer,
+          alpha: currentAlpha.slice().buffer,
+        }, signal);
+        frameRgba = initialized.rgba || frameRgba;
+        flowInitialized = true;
+      } else if (needsAnchor) {
+        await requestFlow("resetAlpha", { alpha: currentAlpha.slice().buffer }, signal);
+      }
+
+      const visible = Boolean(trackedMaskBox && currentAlpha.some((value) => value >= 96));
+      const subject = visible && trackedSubject ? {
+        label: trackedSubject.label,
+        score: Number(trackedSubject.score) || 1,
+        box: normalizeSubjectBox(trackedMaskBox, targetSize.width, targetSize.height),
+      } : null;
+      await pendingSampleCommit;
+      const cutoutStartedAt = performance.now();
+      const cutoutPromise = visible
+        ? makeCutoutBlob(
+            frameRgba,
+            currentAlpha,
+            targetSize.width,
+            targetSize.height,
+            cutoutCanvas,
+            cutoutContext,
+          )
+        : null;
+      const sampleBase = {
+        time,
+        sourceSize: targetSize,
+        detections,
+        detectedSubject: trackedSubject,
+        subject,
+        tracking: {
+          source,
+          acceptedAnchor,
+          flowDurationMs,
+          meanMotion,
+        },
+      };
+      pendingSampleCommit = (async () => {
+        const cutoutBlob = await cutoutPromise;
+        timings.cutoutEncodeMs += performance.now() - cutoutStartedAt;
+        const sample = { ...sampleBase, cutoutBlob };
+        samples.push(sample);
+        const callbackStartedAt = performance.now();
+        await onSample?.({ sample, index, total: sampleTimes.length, duration, sourceSize: targetSize });
+        timings.callbackMs += performance.now() - callbackStartedAt;
+        onProgress?.({
+          progress: ((index + 1) / sampleTimes.length) * 100,
+          phase: `逐帧描边 ${index + 1}/${sampleTimes.length} · ${subject ? "实物稳定" : "跳过不可靠帧"}`,
+        });
+      })();
+    }
+    await pendingSampleCommit;
+    if (!samples.some((sample) => sample.subject)) {
+      throw new Error("没有找到可稳定锁定的实物，请选择主体更明显的片段。");
+    }
+    const firstSubjectSample = samples.find((sample) => sample.subject);
+    const elapsedMs = performance.now() - startedAt;
+    const performanceSummary = {
+      ...timings,
+      elapsedMs,
+      frameCount: samples.length,
+      millisecondsPerFrame: elapsedMs / Math.max(1, samples.length),
+      realtimeFactor: elapsedMs / Math.max(1, duration * 1000),
+      decodeMode: sequentialFrameReader?.mode || "precise-seek",
+      flowFps,
+      anchorFps,
+    };
+    console.info("[Object Outline][Performance]", JSON.stringify(performanceSummary));
+    return {
+      kind: "video-timeline",
+      pipeline: "object-nanodet-magic-touch-slimsam-flow",
+      targetKind: "object",
+      duration,
+      sourceSize: targetSize,
+      samples,
+      subject: firstSubjectSample.subject,
+      detections: firstSubjectSample.detections,
+      complete: true,
+      coverage: {
+        start: samples[0]?.time || 0,
+        end: samples.at(-1)?.time || 0,
+        duration,
+        sampleCount: samples.length,
+        maxGap: samples.reduce((maximum, sample, index) => index
+          ? Math.max(maximum, sample.time - samples[index - 1].time)
+          : maximum, 0),
+      },
+      performance: performanceSummary,
+      modelIds: {
+        detector: "NanoDet-Plus-m-320",
+        segmentation: "MediaPipe MagicTouch 512",
+        fallbackSegmentation: timings.slimSamFallbacks ? SLIMSAM_MODEL_ID : null,
+        propagation: "OpenCV Farneback ROI",
+      },
+    };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      resetSlimSamWorker();
+      resetFlowWorker();
+    }
+    throw error;
+  } finally {
+    await sequentialFrameReader?.dispose?.();
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export function disposePersonOutlineWorkers() {
   resetSlimSamWorker(new Error("SlimSAM Worker 已释放。"));
   resetFlowWorker(new Error("人物光流 Worker 已释放。"));
   void disposeMediaPipePersonSegmenter();
+  void disposeObjectSegmentationModels();
 }

@@ -1199,7 +1199,13 @@ export function VoicePanel({
     edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
   const title = focusedSectionTitle || (isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
-  const panelStatusText = isEffectsContext ? (effectRunning ? `${Math.round(effectProgress || 0)}%` : effectAnalysis?.complete ? t("effectAnalysisComplete") : effectAnalysis ? t("effectAnalysisPartial") : t("effectAnalysisNeeded")) : isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
+  const panelStatusText = isEffectsContext ? (effectRunning
+    ? `${Math.round(effectProgress || 0)}%`
+    : effectAnalysis?.complete
+      ? t(effectAnalysis?.targetKind === "object" ? "effectObjectAnalysisComplete" : "effectAnalysisComplete")
+      : effectAnalysis
+        ? t("effectAnalysisPartial")
+        : t(effectAnalysis?.targetKind === "object" ? "effectObjectAnalysisNeeded" : "effectAnalysisNeeded")) : isAiMusicContext ? (aiMusic?.job?.state === "running" ? `${Math.round((aiMusic.job.progress || 0) * 100)}%` : aiMusic?.job?.state === "complete" ? t("complete") : t("modelReady")) : isSmartAutoContext ? t(`autoEditStatus_${autoEdit?.support?.availability || "unknown"}`) : isSmartFrameContext ? (hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")) : isCaptionContext
     ? captionSegments.length
       ? `${captionSegments.length} ${t("captionSegmentsUnit", "条字幕")}`
       : t("noCaptionSegments")

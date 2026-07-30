@@ -3670,6 +3670,7 @@ button:disabled {
 .subject-analysis-progress { height: 5px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.075); }
 .subject-analysis-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#42a6ff,#35ead9); transition: width 100ms linear; }
 .subject-analysis-status footer { display: flex; justify-content: space-between; color: #6f7f89; font-size: 9px; font-variant-numeric: tabular-nums; }
+.subject-analysis-performance { color: #6f7f89; font-size: 8px; font-variant-numeric: tabular-nums; line-height: 1.4; }
 .subject-analysis-status.is-compact { margin-bottom: 2px; }
 .subject-effects-analysis-actions { display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap: 7px; }
 .subject-effects-analysis-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; }

@@ -2,6 +2,7 @@ import {
   CaretRight,
   Check,
   CircleNotch,
+  Cube,
   ImageSquare,
   MagicWand,
   Pause,
@@ -36,28 +37,59 @@ function EffectRange({ label, value, min, max, step = 1, suffix = "", lowLabel =
   );
 }
 
-function AnalysisStatus({ t, analysis, running, progress, phase, compact = false }) {
+function AnalysisStatus({ t, analysis, running, progress, phase, compact = false, targetKind = "person" }) {
   const samples = Array.isArray(analysis?.samples) ? analysis.samples : [];
   const complete = analysis?.complete === true;
+  const isObject = targetKind === "object";
   const percent = running ? Math.round(progress || 0) : complete ? 100 : samples.length ? Math.round(progress || 0) : 0;
+  const performance = analysis?.performance;
+  const performanceLabel = performance
+    ? t("effectAnalysisPerformance")
+      .replace("{ms}", String(Math.round(performance.millisecondsPerFrame || 0)))
+      .replace("{factor}", Number(performance.realtimeFactor || 0).toFixed(1))
+      .replace("{anchors}", String(Math.round((performance.anchorMs || 0) / 100) / 10))
+      .replace("{flow}", String(Math.round((performance.flowMs || 0) / 100) / 10))
+      .replace("{decode}", String(Math.round(((performance.decodeMs || 0) + (performance.pixelReadMs || 0)) / 100) / 10))
+      .replace("{compose}", String(Math.round(((performance.cutoutEncodeMs || 0) + (performance.callbackMs || 0)) / 100) / 10))
+      .replace("{fallbacks}", String(performance.slimSamFallbacks || 0))
+    : "";
   return (
     <section className={`subject-analysis-status ${running ? "is-running" : ""} ${complete ? "is-complete" : ""} ${compact ? "is-compact" : ""}`}>
       <header>
         <span className="subject-analysis-icon">
-          {running ? <CircleNotch size={18} className="spin" /> : complete ? <Check size={17} weight="bold" /> : <PersonSimpleRun size={18} />}
+          {running ? <CircleNotch size={18} className="spin" /> : complete ? <Check size={17} weight="bold" /> : isObject ? <Cube size={18} /> : <PersonSimpleRun size={18} />}
         </span>
         <div>
-          <strong>{complete ? t("effectAnalysisComplete") : running ? t("effectAnalysisRunning") : samples.length ? t("effectAnalysisPartial") : t("effectAnalysisNeeded")}</strong>
-          <span>{phase || (complete ? t("effectAnalysisReusable") : t("effectAnalysisHint"))}</span>
+          <strong>{running
+            ? t("effectAnalysisRunning")
+            : complete
+              ? isObject ? t("effectObjectAnalysisComplete") : t("effectAnalysisComplete")
+              : samples.length
+                ? t("effectAnalysisPartial")
+                : isObject ? t("effectObjectAnalysisNeeded") : t("effectAnalysisNeeded")}</strong>
+          <span>{running
+            ? phase || t("effectAnalysisRunning")
+            : complete
+              ? isObject ? t("effectObjectAnalysisReusable") : t("effectAnalysisReusable")
+              : phase || t("effectAnalysisHint")}</span>
         </div>
         <b>{percent}%</b>
       </header>
       {(running || samples.length) ? <>
-        <div className="subject-analysis-progress" aria-label={t("effectAnalysisProgress")} aria-valuenow={percent} role="progressbar"><span style={{ width: `${percent}%` }} /></div>
+        <div className="subject-analysis-progress" aria-label={t(isObject ? "effectObjectAnalysisProgress" : "effectAnalysisProgress")} aria-valuenow={percent} role="progressbar"><span style={{ width: `${percent}%` }} /></div>
         <footer>
           <span>{samples.length} {t("effectFramesProcessed")}</span>
           {analysis?.coverage?.end != null ? <time>{formatTime(analysis.coverage.end)} / {formatTime(analysis.duration || analysis.coverage.end)}</time> : null}
         </footer>
+        {performanceLabel ? (
+          <small
+            className="subject-analysis-performance"
+            data-magic-touch-anchors={performance.magicTouchAnchors || 0}
+            data-slim-sam-fallbacks={performance.slimSamFallbacks || 0}
+          >
+            {performanceLabel}
+          </small>
+        ) : null}
       </> : null}
     </section>
   );
@@ -78,13 +110,9 @@ function MaterialCard({ t, material, active, onClick }) {
 
 const OUTLINE_PREVIEW_STILL = "/assets/effects/previews/person-outline-paper.webp";
 const OUTLINE_PREVIEW_GIF = "/assets/effects/previews/person-outline-paper-hover.webp";
+const OBJECT_OUTLINE_PREVIEW_STILL = "/assets/effects/previews/object-outline-still.webp";
+const OBJECT_OUTLINE_PREVIEW_GIF = "/assets/effects/previews/object-outline-hover.webp";
 const COMING_EFFECTS = Object.freeze([
-  {
-    id: "object-outline",
-    titleKey: "effectObjectOutline",
-    hintKey: "effectObjectOutlineHint",
-    image: "/assets/effects/previews/object-outline-coming-soon.webp",
-  },
   {
     id: "vector-tracking",
     titleKey: "effectVectorTracking",
@@ -99,6 +127,57 @@ const COMING_EFFECTS = Object.freeze([
     image: "/assets/effects/previews/sway-motion-coming-soon.webp",
   },
 ]);
+
+function ObjectOutlineCard({ t, active, running, progress, analysis, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [hoverless, setHoverless] = useState(false);
+  const previewing = hovered || hoverless;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(hover: none)");
+    const update = () => setHoverless(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return (
+    <button
+      className={`subject-outline-entry subject-object-outline-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span className="subject-outline-entry-preview">
+        <img
+          key={previewing ? "animated" : "still"}
+          src={previewing ? OBJECT_OUTLINE_PREVIEW_GIF : OBJECT_OUTLINE_PREVIEW_STILL}
+          alt=""
+        />
+        <span className="subject-outline-entry-preview-state">
+          <Cube size={13} weight="fill" />
+          {previewing ? t("effectPreviewPlaying") : t("effectPreviewHover")}
+        </span>
+        {running ? <span className="subject-outline-entry-progress"><i style={{ width: `${Math.round(progress || 0)}%` }} /></span> : null}
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy">
+          <strong>{t("effectObjectOutline")}</strong>
+          <small>{t("effectObjectOutlineHint")}</small>
+        </span>
+        <span className="subject-outline-entry-state">
+          {running ? `${Math.round(progress || 0)}%` : analysis?.complete ? <Check size={16} weight="bold" /> : <CaretRight size={17} />}
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function OutlinePreviewCard({ t, active, running, progress, analysis, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -450,16 +529,30 @@ export function SubjectEffectsWorkspace({
   progress,
   phase,
   onChange,
-  onAnalyze,
   onOpenInspector,
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
   const hasVideo = segment?.type === "video";
+  const analysisTargetKind = analysis?.targetKind
+    || (String(analysis?.pipeline || "").startsWith("object-") ? "object" : "person");
+  const personAnalysis = analysisTargetKind === "person" ? analysis : null;
+  const objectAnalysis = analysisTargetKind === "object" ? analysis : null;
   const selectOutline = () => {
     onChange?.(updateSubjectEffect(effect, {
       enabled: true,
       presetId: "",
+      targetKind: "person",
+      outline: { enabled: true, color: "#f3efe4", width: 14 },
+      material: { id: "paper" },
+    }));
+    onOpenInspector?.();
+  };
+  const selectObjectOutline = () => {
+    onChange?.(updateSubjectEffect(effect, {
+      enabled: true,
+      presetId: "",
+      targetKind: "object",
       outline: { enabled: true, color: "#f3efe4", width: 14 },
       material: { id: "paper" },
     }));
@@ -483,11 +576,19 @@ export function SubjectEffectsWorkspace({
       <div className="subject-effect-capability-grid">
         <OutlinePreviewCard
           t={t}
-          active={effect.enabled && effect.outline.enabled}
-          running={running}
+          active={effect.enabled && effect.outline.enabled && effect.targetKind === "person"}
+          running={running && effect.targetKind === "person"}
           progress={progress}
-          analysis={analysis}
+          analysis={personAnalysis}
           onClick={selectOutline}
+        />
+        <ObjectOutlineCard
+          t={t}
+          active={effect.enabled && effect.outline.enabled && effect.targetKind === "object"}
+          running={running && effect.targetKind === "object"}
+          progress={progress}
+          analysis={objectAnalysis}
+          onClick={selectObjectOutline}
         />
         {COMING_EFFECTS.map((comingEffect) => (
           <ComingEffectCard key={comingEffect.id} t={t} effect={comingEffect} />
@@ -514,15 +615,20 @@ export function SubjectEffectsInspector({
     return <div className="visual-context-empty"><ImageSquare size={30} weight="duotone" /><strong>{t("effectSelectClip")}</strong><span>{t("effectSelectClipHint")}</span></div>;
   }
   const effect = normalizeSubjectEffect(segment.subjectEffect);
+  const isObject = effect.targetKind === "object";
+  const matchingAnalysis = analysis && (
+    (analysis.targetKind || (String(analysis.pipeline || "").startsWith("object-") ? "object" : "person"))
+    === effect.targetKind
+  ) ? analysis : null;
   const patch = (next) => onChange?.(updateSubjectEffect(effect, next));
   const show = (section) => !singleSection || singleSection === "effects" || singleSection === section;
   return (
     <div className="subject-effects-inspector">
-      {show("effects") ? <AnalysisStatus t={t} analysis={analysis} running={running} progress={progress} phase={phase} compact /> : null}
+      {show("effects") ? <AnalysisStatus t={t} analysis={matchingAnalysis} running={running} progress={progress} phase={phase} compact targetKind={effect.targetKind} /> : null}
 
       {show("effects") ? <section className="subject-inspector-actions">
-        <label className="switch-row"><input type="checkbox" checked={effect.enabled && effect.outline.enabled} onChange={(event) => patch({ enabled: event.target.checked, outline: { enabled: event.target.checked } })} />{t("effectOutlineEnabled")}</label>
-        <button className="panel-secondary" type="button" onClick={onAnalyze}>{running ? t("effectCancelAnalysis") : analysis ? t("effectReanalyze") : t("effectAnalyzePerson")}</button>
+        <label className="switch-row"><input type="checkbox" checked={effect.enabled && effect.outline.enabled} onChange={(event) => patch({ enabled: event.target.checked, outline: { enabled: event.target.checked } })} />{isObject ? t("effectObjectOutlineEnabled") : t("effectOutlineEnabled")}</label>
+        <button className="panel-secondary" type="button" onClick={() => onAnalyze?.({ targetKind: effect.targetKind })}>{running ? t("effectCancelAnalysis") : matchingAnalysis ? t("effectReanalyze") : isObject ? t("effectAnalyzeObject") : t("effectAnalyzePerson")}</button>
       </section> : null}
 
       {show("outline") || show("effects") ? <section className="subject-material-section">
@@ -542,7 +648,7 @@ export function SubjectEffectsInspector({
       {materialEditor ? <MaterialEditorDialog
         t={t}
         segment={segment}
-        analysis={analysis}
+        analysis={matchingAnalysis}
         effect={effect}
         materialId={materialEditor}
         onCancel={() => setMaterialEditor("")}
