@@ -241,6 +241,10 @@ function normalizePlacement(placement) {
   };
 }
 
+export function resolveCaptionSegmentPlacement(segment, fallbackPlacement = "bottom") {
+  return segment?.placement ?? fallbackPlacement;
+}
+
 export function positionCaptionLayout(layout, placement) {
   const point = normalizePlacement(placement);
   return {

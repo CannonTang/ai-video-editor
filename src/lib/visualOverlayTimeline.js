@@ -60,6 +60,10 @@ export function createVisualOverlaySegment(asset, start = 0, options = {}) {
     width: Number(asset?.width) || 0,
     height: Number(asset?.height) || 0,
     trackFrames: Array.isArray(asset?.trackFrames) ? asset.trackFrames : [],
+    trackFrameDuration: Math.max(
+      0,
+      Number(asset?.trackFrameDuration ?? asset?.sourceDuration ?? asset?.duration) || 0,
+    ),
     sourceStart: Math.max(0, Number(asset?.sourceStart) || 0),
     sourceDuration: Math.max(0, Number(asset?.sourceDuration) || Number(asset?.duration) || 0),
     playbackRate: Math.max(0.25, Math.min(4, Number(options.playbackRate ?? asset?.playbackRate) || 1)),

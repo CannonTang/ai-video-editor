@@ -7,6 +7,7 @@ import {
   getNearestRatioIdForSize,
   revokeVisionObjectUrls,
 } from "../lib/editorRuntime.js";
+import { ensureUniqueVisualSegmentIds } from "../lib/timeline.js";
 
 export function useEditorLifecycle(d) {
   useEffect(() => {
@@ -43,7 +44,7 @@ export function useEditorLifecycle(d) {
       d.setSelectedSegmentId("");
       return;
     }
-    if (!d.captionSegments.some((segment) => segment.id === d.selectedSegmentId)) {
+    if (d.selectedSegmentId && !d.captionSegments.some((segment) => segment.id === d.selectedSegmentId)) {
       d.setSelectedSegmentId(d.captionSegments[0].id);
     }
   }, [d.captionSegments, d.selectedSegmentId]);
@@ -53,10 +54,15 @@ export function useEditorLifecycle(d) {
       d.setSelectedVisualSegmentId("");
       return;
     }
-    if (!d.visualSegments.some((segment) => segment.id === d.selectedVisualSegmentId)) {
+    if (d.selectedVisualSegmentId && !d.visualSegments.some((segment) => segment.id === d.selectedVisualSegmentId)) {
       d.setSelectedVisualSegmentId(d.visualSegments[0].id);
     }
   }, [d.selectedVisualSegmentId, d.visualSegments]);
+
+  useEffect(() => {
+    const normalized = ensureUniqueVisualSegmentIds(d.visualSegments);
+    if (normalized.changed) d.setVisualSegments(normalized.segments);
+  }, [d.visualSegments]);
 
   useEffect(() => {
     if (d.currentVisualSegment?.src) d.setCurrentVisualAsset(d.currentVisualSegment);

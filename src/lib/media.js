@@ -15,6 +15,7 @@ import {
   drawCaptionLayout,
   getCaptionTextLayout,
   positionCaptionLayout,
+  resolveCaptionSegmentPlacement,
 } from "./captionLayout.js";
 import { resolveCaptionStyleForSegment } from "./captionFonts.js";
 import { resolveVisionAnalysisAtTime } from "./vision.js";
@@ -85,8 +86,10 @@ export function getVideoTrackSampleCount(duration, maxFrames = VIDEO_TRACK_FRAME
   const targetStep =
     safeDuration <= 20
       ? 0.2
+      : safeDuration <= 45
+        ? 0.5
       : safeDuration <= 120
-        ? 1.25
+        ? 0.75
         : safeDuration <= 600
           ? 3
           : 10;
@@ -1489,7 +1492,7 @@ export async function exportBrowserVideo({
       filter,
       captionsEnabled,
       captionPosition,
-      captionPlacement,
+      captionPlacement: resolveCaptionSegmentPlacement(activeCaptionSegment, captionPlacement),
       captionSize,
       captionStyle: resolveCaptionStyleForSegment(captionStyle, activeCaptionSegment),
       captionReferenceSize,
@@ -1566,7 +1569,7 @@ export async function exportBrowserVideo({
       filter,
       captionsEnabled,
       captionPosition,
-      captionPlacement,
+      captionPlacement: resolveCaptionSegmentPlacement(finalCaptionSegment, captionPlacement),
       captionSize,
       captionStyle: resolveCaptionStyleForSegment(captionStyle, finalCaptionSegment),
       captionReferenceSize,

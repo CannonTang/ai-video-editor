@@ -43,12 +43,15 @@ export function createTimelineMoveControls(d) {
     d.pauseForTimelineEdit?.();
     const segment = d.audioSegments.find((item) => item.id === id); if (!segment) return;
     if (d.trackLocks.audio) return void d.notify(d.t("audioTrackLockedMove"));
+    const captions = d.captionSegments.filter((caption) => caption.audioSegmentId === segment.id);
+    if (captions.length && d.trackLocks.caption) {
+      return void d.notify("关联字幕轨已锁定，无法移动这个配音片段");
+    }
     const rect = d.trackScrollRef.current?.getBoundingClientRect(); const duration = d.timelineDurationRef.current || 10;
     if (!rect) return;
     event.stopPropagation(); d.setSelectedTrack("audio"); d.setSelectedAudioSegmentId(segment.id);
     const startX = event.clientX; const start = segment.start || 0;
     const snapPoints = collectTimelineSnapPoints(d, { track: "audio", id: segment.id });
-    const captions = d.captionSegments.filter((caption) => caption.audioSegmentId === segment.id);
     let moved = false; let latest = start; let cancelledByPinch = false;
     const move = (e) => {
       if (cancelledByPinch || d.trackScrollRef.current?.classList.contains("is-pinching")) return;

@@ -41,11 +41,18 @@ export function getMobileTrimReleaseScrollLeft(scrollLeft, trackWidth) {
   return width > 0 ? Math.min(current, width) : current;
 }
 
-export function getTimelineEdgeAutoScrollStep(clientX, rect, { threshold = 48, forwardMaxStep = 14, backwardMaxStep = 6 } = {}) {
+export function getTimelineEdgeAutoScrollStep(clientX, rect, {
+  threshold = 48,
+  forwardMaxStep = 14,
+  backwardMaxStep = 6,
+  minStep = 0.35,
+  curvePower = 2,
+} = {}) {
   if (!rect || !Number.isFinite(clientX) || rect.width <= 0) return 0;
   const getStep = (distanceFromEdge, maxStep) => {
     const strength = Math.min(1, Math.max(0, (threshold - Math.max(0, distanceFromEdge)) / threshold));
-    return Math.max(0.35, strength ** 2 * maxStep);
+    if (strength <= 0) return 0;
+    return Math.max(0, minStep, strength ** curvePower * maxStep);
   };
   if (clientX < rect.left + threshold) {
     return -getStep(clientX - rect.left, backwardMaxStep);
@@ -56,16 +63,26 @@ export function getTimelineEdgeAutoScrollStep(clientX, rect, { threshold = 48, f
   return 0;
 }
 
-export function createTimelineEdgeAutoScroller({ trackElement, pointerType, timelineDuration = 0, onScrollFrame, win = globalThis.window } = {}) {
+export function createTimelineEdgeAutoScroller({
+  trackElement,
+  pointerType,
+  timelineDuration = 0,
+  onScrollFrame,
+  manageTrimScale = true,
+  edgeScrollOptions,
+  win = globalThis.window,
+} = {}) {
   const scrollElement = trackElement?.parentElement;
   const isMobile = Boolean(win?.matchMedia?.(MOBILE_TIMELINE_QUERY).matches);
   const enabled = Boolean(scrollElement) && (
     (pointerType === "touch" && isMobile)
     || (["mouse", "pen"].includes(pointerType) && !isMobile)
   );
-  const usesDesktopTrailingSpacer = enabled && !isMobile;
-  const rulerElement = enabled ? trackElement.closest?.(".timeline-board")?.querySelector?.(".timeline-ruler-canvas") : null;
-  if (enabled) {
+  const usesDesktopTrailingSpacer = enabled && !isMobile && manageTrimScale;
+  const rulerElement = enabled && manageTrimScale
+    ? trackElement.closest?.(".timeline-board")?.querySelector?.(".timeline-ruler-canvas")
+    : null;
+  if (enabled && manageTrimScale) {
     trackElement.classList?.add("is-trimming");
     rulerElement?.classList?.add("is-trimming");
     const contentWidth = trackElement.getBoundingClientRect?.().width || trackElement.clientWidth || 0;
@@ -121,7 +138,7 @@ export function createTimelineEdgeAutoScroller({ trackElement, pointerType, time
     if (!enabled) return;
     syncContentWidth();
     const rect = scrollElement.getBoundingClientRect();
-    const step = getTimelineEdgeAutoScrollStep(latestClientX, rect);
+    const step = getTimelineEdgeAutoScrollStep(latestClientX, rect, edgeScrollOptions);
     if (!step) return;
     const before = scrollElement.scrollLeft;
     const requestedScrollDelta = step < 0 ? Math.max(-before, step) : step;
@@ -154,11 +171,13 @@ export function createTimelineEdgeAutoScroller({ trackElement, pointerType, time
     stop() {
       if (frameId) win.cancelAnimationFrame(frameId);
       frameId = 0;
-      if (enabled && win?.dispatchEvent && win?.CustomEvent) {
+      if (enabled && manageTrimScale && win?.dispatchEvent && win?.CustomEvent) {
         flushSync(() => win.dispatchEvent(new win.CustomEvent(TIMELINE_TRIM_SCALE_END_EVENT)));
       }
-      trackElement?.classList?.remove("is-trimming");
-      rulerElement?.classList?.remove("is-trimming");
+      if (manageTrimScale) {
+        trackElement?.classList?.remove("is-trimming");
+        rulerElement?.classList?.remove("is-trimming");
+      }
       syncContentWidth();
       if (isMobile) {
         scrollElement.scrollLeft = getMobileTrimReleaseScrollLeft(scrollElement.scrollLeft, previousContentWidth);

@@ -33,6 +33,7 @@ import { useAutoEdit } from "./hooks/useAutoEdit.js";
 import { useSourceAudioExtraction } from "./hooks/useSourceAudioExtraction.js";
 import { useVocalSeparation } from "./hooks/useVocalSeparation.js";
 import { useAvatarGeneration } from "./hooks/useAvatarGeneration.js";
+import { useFaceSwapGeneration } from "./hooks/useFaceSwapGeneration.js";
 import { useCaptionState } from "./hooks/useCaptionState.js";
 import { useAudioTrackState } from "./hooks/useAudioTrackState.js";
 import { useVisualTrackState } from "./hooks/useVisualTrackState.js";
@@ -91,6 +92,7 @@ export function App() {
   const mobilePanelTimerRef = useRef(null);
   const [mobilePanelOrigin, setMobilePanelOrigin] = useState("");
   const [mobileInspectorSection, setMobileInspectorSection] = useState("");
+  const [effectsPanelMode, setEffectsPanelMode] = useState("outline");
   const [isMobileViewport, setIsMobileViewport] = useState(() => (
     typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches
   ));
@@ -673,6 +675,11 @@ export function App() {
     previewVisualSrc, previewVisualType, replaceVisualTimeline, setAvatarJob,
     setAvatarPanelOpen, setCurrentTime, setUserAssets, t,
   });
+  const faceSwap = useFaceSwapGeneration({
+    downloadBlob, imageDuration, imageUrlRefs, notify, previewVisualSegment, previewVisualSrc,
+    previewVisualType, setActiveTool, setMediaTab, setSelectedLibraryAssetId,
+    setUserAssets, t,
+  });
 
   const { startVoiceRecording, stopVoiceRecording, useRecordedVoice } = useVoiceRecorder({
     notify, recordingState, replaceAudio, setActiveTool, setProgress,
@@ -755,7 +762,7 @@ export function App() {
     notify, selectedAudioSegment, selectedAudioSegmentId, selectedSegmentId,
     selectedSegmentIndex, selectedStickerSegmentId, selectedTrack,
     selectedVisualSegmentId, selectedVisualSegmentIndex, setAudioSegments,
-    setCaptionSegments, setSelectedAudioSegmentId, setUserAssets, sourceAudioBlob,
+    setCaptionSegments, setSelectedAudioSegmentId, sourceAudioBlob,
     sourceAudioLinked, sourceAudioName, selectedSourceAudioSegmentId, linkedSourceAudioSegments,
     setSelectedSourceAudioSegmentId, stickerSegments, t, trackLocks, visualSegments, visualType,
     visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
@@ -769,14 +776,14 @@ export function App() {
     selectedStickerSegmentId, selectedTrack, selectedVisualSegmentId, setCurrentVisualAsset,
     selectedVisualOverlayId, visualOverlaySegments,
     setFitMode, setRatioId, setSelectedSegmentId, setSelectedVisualSegmentId,
-    setUserAssets, sourceAudioBlob, sourceAudioUrlRef, stickerSegments,
+    setUserAssets, setVisualSegments, sourceAudioBlob, sourceAudioUrlRef, stickerSegments,
     setSelectedVisualOverlayId,
     visionAbortControllerRef, visionObjectUrlsRef, visualSegments,
     voiceRecorderStreamRef, voiceRecorderTimerRef,
   });
 
   const { handleCutTrack } = createTimelineCutActions({
-    audioSegments, captionSegments, commitCaptionSegments, commitStickerSegments, commitVisualSegments,
+    audioSegments, captionSegments, captionTargetDuration, commitCaptionSegments, commitStickerSegments, commitVisualSegments,
     currentStickerSegmentIndex, currentTime, focusedSegmentIndex,
     getCurrentVisualAssetSnapshot, imageDuration, imageSrc, notify,
     musicBlob, musicDuration, musicPeaks, musicSegments, musicStart,
@@ -792,7 +799,7 @@ export function App() {
     linkedSourceAudioSegments, previewVideoRef, previewVisualType, setCurrentTime, setIsPlaying, sourceAudioDuration,
     sourceAudioLinked,
     sourceAudioRef, sourceAudioStart, sourceAudioUrl, timelineDuration,
-    timelineDurationRef, trackScrollRef, trackVisibility, visualSegments, visualTimeline,
+    timelineDurationRef, trackScrollRef, trackVisibility, visualSegments, visualTimeline, previewVisualSegment,
   });
   const pauseForTimelineEdit = () => {
     if (!isPlaying) return;
@@ -804,6 +811,7 @@ export function App() {
     audioRef, audioSegmentRefs, audioSegments, currentTime, currentTimeRef, estimatedDuration,
     isPlaying, musicDuration, musicSegments, musicRef, musicStart, musicUrl, musicVolume, pauseTimelineMedia, previewVideoRef,
     previewVisualSegment, previewVisualSourceTime, previewVisualSrc, previewVisualType,
+    previewVisualRange,
     linkedSourceAudioSegments, setCurrentTime, setIsPlaying, setPreviewVideoMediaTime, sourceAudioDuration,
     sourceAudioLinked,
     sourceAudioRef, sourceAudioStart, sourceAudioUrl, sourceAudioVolume, timelineDuration,
@@ -1076,6 +1084,7 @@ export function App() {
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
           selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
+          effectsPanelMode, setEffectsPanelMode,
           visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
@@ -1277,6 +1286,7 @@ export function App() {
           audioDuration={audioDuration}
           avatarJob={avatarJob}
           generateAvatarAcceptanceFrame={generateAvatarAcceptanceFrame}
+          faceSwap={faceSwap}
           selectedTrack={selectedTrack}
           selectedAudioSegment={selectedAudioSegment}
           selectedTrackAudioSegment={selectedAudioToolTarget}
@@ -1316,6 +1326,7 @@ export function App() {
           effectRunning={effectRunning}
           effectProgress={effectProgress}
           effectPhase={effectPhase}
+          effectsPanelMode={effectsPanelMode}
           updateSelectedSubjectEffect={updateSelectedSubjectEffect}
           removeSelectedSubjectEffect={removeSelectedSubjectEffect}
         />
@@ -1330,8 +1341,6 @@ export function App() {
         handleDeleteTrack={handleDeleteTrack}
         handleDuplicateTrack={handleDuplicateTrack}
         handleCutTrack={handleCutTrack}
-        fitMode={fitMode}
-        setFitMode={setFitModeFromUser}
         canPreview={canPreview}
         handlePlayToggle={handlePlayToggle}
         isPlaying={isPlaying}
@@ -1379,6 +1388,7 @@ export function App() {
         activeTimelineClipDrag={activeTimelineClipDrag}
         showStickerTrack={showStickerTrack}
         stickerSegments={stickerSegments}
+        setStickerSegments={setStickerSegments}
         currentStickerSegment={currentStickerSegment}
         selectedStickerSegmentId={selectedStickerSegmentId}
         setSelectedStickerSegmentId={setSelectedStickerSegmentId}
@@ -1411,6 +1421,7 @@ export function App() {
         startStickerSegmentResize={startStickerSegmentResize}
         displayedCaptionSegments={displayedCaptionSegments}
         displayedCaptionTimeline={displayedCaptionTimeline}
+        setCaptionSegments={setCaptionSegments}
         currentCaptionSegment={currentCaptionSegment}
         selectedSegmentId={selectedSegmentId}
         setSelectedSegmentId={setSelectedSegmentId}
@@ -1423,6 +1434,7 @@ export function App() {
         sourceAudioClipPercent={sourceAudioClipPercent}
         sourceAudioStartPercent={sourceAudioStartPercent}
         sourceAudioDuration={sourceAudioDuration}
+        setSourceAudioStart={setSourceAudioStart}
         selectedSourceAudioSegmentId={selectedSourceAudioSegmentId}
         setSelectedSourceAudioSegmentId={setSelectedSourceAudioSegmentId}
         audioBlob={audioBlob}
@@ -1430,12 +1442,15 @@ export function App() {
         audioClipPercent={audioClipPercent}
         audioDuration={audioDuration}
         audioSegments={audioSegments}
+        setAudioSegments={setAudioSegments}
         selectedAudioSegmentId={selectedAudioSegmentId}
         setSelectedAudioSegmentId={setSelectedAudioSegmentId}
         startAudioSegmentMove={startAudioSegmentMove}
         startSourceAudioMove={startSourceAudioMove}
         musicBlob={musicBlob}
         musicSegments={musicSegments}
+        setMusicSegments={setMusicSegments}
+        setMusicStart={setMusicStart}
         selectedMusicSegmentId={selectedMusicSegmentId}
         setSelectedMusicSegmentId={setSelectedMusicSegmentId}
         musicPeaks={musicPeaks}

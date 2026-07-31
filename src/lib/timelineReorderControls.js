@@ -3,6 +3,14 @@ import { collectTimelineSnapPoints, findClosestTimelineSnap, snapTimelineRange }
 import { createVisualOverlaySegment } from "./visualOverlayTimeline.js";
 import { createTimelineEdgeAutoScroller, getTimelineDragTimeDelta } from "./timelineEdgeAutoScroll.js";
 
+export function getStableTimelineReorderIndex(slotCenters, pointerX, fallbackIndex = 0) {
+  if (!Array.isArray(slotCenters) || !slotCenters.length || !Number.isFinite(pointerX)) {
+    return Math.max(0, fallbackIndex);
+  }
+  const index = slotCenters.findIndex((center) => pointerX < center);
+  return index >= 0 ? index : slotCenters.length - 1;
+}
+
 export function createTimelineReorderControls(d) {
   const getTimelineReorderIndex = (track, x, y) => {
     const element = document.querySelector(`[data-timeline-reorder-track="${track}"]`);
@@ -73,26 +81,81 @@ export function createTimelineReorderControls(d) {
     const imageTrackElement = track === "image" ? document.querySelector('[data-timeline-reorder-track="image"]') : null;
     const imageTrackRect = imageTrackElement?.getBoundingClientRect();
     const draggedVisual = track === "image" ? d.renderedVisualSegments[index] : null;
-    const initial = { track, mode: "reorder", segmentId, fromIndex: index, overIndex: index, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, dragging: false };
+    const stableSlotCenters = Array.from(
+      document.querySelectorAll(`[data-timeline-segment-track="${track}"]`),
+      (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left + rect.width / 2;
+      },
+    );
+    const dragTarget = event.currentTarget;
+    const pointerId = event.pointerId;
+    try { dragTarget?.setPointerCapture?.(pointerId); } catch { /* Pointer capture is optional. */ }
+    const initial = {
+      track, mode: "reorder", segmentId, fromIndex: index, overIndex: index,
+      startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY,
+      stableSlotCenters, dragging: false,
+    };
     d.timelineClipDragRef.current = initial; d.setTimelineClipDrag(initial);
-    const move = (e) => {
+    const autoScroller = createTimelineEdgeAutoScroller({
+      trackElement: d.trackScrollRef?.current,
+      pointerType: event.pointerType,
+      timelineDuration: d.timelineDuration,
+      manageTrimScale: false,
+      edgeScrollOptions: {
+        threshold: 120,
+        forwardMaxStep: 14,
+        backwardMaxStep: 14,
+        minStep: 0,
+        curvePower: 1.35,
+      },
+      onScrollFrame: (clientX, scrollOffset) => move({
+        clientX,
+        clientY: d.timelineClipDragRef.current?.y ?? event.clientY,
+      }, scrollOffset),
+    });
+    const move = (e, scrollOffset = autoScroller.getScrollOffset()) => {
       const state = d.timelineClipDragRef.current; if (!state || state.segmentId !== segmentId) return;
+      if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       if (!state.dragging && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return;
-      const wantsOverlay = track === "image" && imageTrackRect && e.clientY > imageTrackRect.bottom + 8;
+      autoScroller.update(e.clientX);
+      const pointerContentX = e.clientX + scrollOffset;
+      const wantsOverlay = track === "image"
+        && !d.trackLocks.overlay
+        && imageTrackRect
+        && e.clientY > imageTrackRect.bottom + 8;
       const overIndex = wantsOverlay
         ? state.overIndex
-        : Math.max(0, Math.min(count - 1, getTimelineReorderIndex(track, e.clientX, e.clientY)));
+        : Math.max(0, Math.min(
+            count - 1,
+            getStableTimelineReorderIndex(state.stableSlotCenters, pointerContentX, state.overIndex),
+          ));
       const overlayStart = wantsOverlay
         ? Math.max(0, Math.min(
             Math.max(0, d.timelineDuration - (draggedVisual?.duration || 0)),
-            ((e.clientX - imageTrackRect.left) / Math.max(1, imageTrackRect.width)) * d.timelineDuration,
+            ((pointerContentX - imageTrackRect.left) / Math.max(1, imageTrackRect.width)) * d.timelineDuration,
           ))
         : state.overlayStart;
       const next = { ...state, mode: wantsOverlay ? "overlay" : "reorder", overIndex, overlayStart, x: e.clientX, y: e.clientY, dragging: true };
       d.timelineClipDragRef.current = next; d.setTimelineClipDrag(next);
     };
-    const up = () => {
-      removeEventListener("pointermove", move); removeEventListener("pointerup", up);
+    const cleanup = () => {
+      autoScroller.stop();
+      removeEventListener("pointermove", move, true);
+      removeEventListener("pointerup", up, true);
+      removeEventListener("pointercancel", cancel, true);
+      try {
+        if (dragTarget?.hasPointerCapture?.(pointerId)) dragTarget.releasePointerCapture(pointerId);
+      } catch { /* The pointer may already be released by the browser. */ }
+    };
+    const cancel = () => {
+      cleanup();
+      d.timelineClipDragRef.current = null;
+      d.setTimelineClipDrag(null);
+    };
+    const up = (upEvent) => {
+      if (upEvent?.pointerId !== undefined && pointerId !== undefined && upEvent.pointerId !== pointerId) return;
+      cleanup();
       const state = d.timelineClipDragRef.current; d.timelineClipDragRef.current = null; d.setTimelineClipDrag(null);
       if (!state?.dragging) return;
       d.suppressTimelineClipClickRef.current = segmentId;
@@ -115,7 +178,9 @@ export function createTimelineReorderControls(d) {
       }
       commitTimelineClipReorder(track, state.fromIndex, state.overIndex);
     };
-    addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true });
+    addEventListener("pointermove", move, true);
+    addEventListener("pointerup", up, { capture: true, once: true });
+    addEventListener("pointercancel", cancel, { capture: true, once: true });
   };
   const startCaptionResize = (event, segmentId, index, edge) => {
     if (event.button !== 0) return;

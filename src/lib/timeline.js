@@ -14,6 +14,44 @@ export function makeId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+export function ensureUniqueVisualSegmentIds(segments = []) {
+  const seen = new Set();
+  let changed = false;
+  const normalized = segments.map((segment) => {
+    let id = typeof segment?.id === "string" ? segment.id.trim() : "";
+    if (!id || seen.has(id)) {
+      id = makeId("visual");
+      changed = true;
+    }
+    seen.add(id);
+    return id === segment.id ? segment : { ...segment, id };
+  });
+  return { changed, segments: normalized };
+}
+
+function cloneVisualSegmentValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(cloneVisualSegmentValue);
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [key, cloneVisualSegmentValue(nestedValue)]),
+  );
+}
+
+export function cloneVisualSegment(segment, overrides = {}) {
+  return {
+    ...cloneVisualSegmentValue(segment),
+    ...cloneVisualSegmentValue(overrides),
+  };
+}
+
 export function getImageThumbnailCount(duration) {
   return Math.min(
     MAX_IMAGE_THUMBNAILS,
@@ -42,6 +80,10 @@ export function getVisualAssetPayload(asset) {
     sourceDuration: Math.max(0, Number(asset.sourceDuration ?? asset.duration) || 0),
     playbackRate: Math.max(0.25, Math.min(4, Number(asset.playbackRate) || 1)),
     trackFrames: Array.isArray(asset.trackFrames) ? asset.trackFrames : [],
+    trackFrameDuration: Math.max(
+      0,
+      Number(asset.trackFrameDuration ?? asset.sourceDuration ?? asset.duration) || 0,
+    ),
     kind: asset.kind ?? "",
     vectorBody: asset.vectorBody ?? "",
     vectorBackground: asset.vectorBackground ?? "",

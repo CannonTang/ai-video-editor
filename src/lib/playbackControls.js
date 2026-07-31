@@ -28,9 +28,34 @@ export function createPlaybackControls(deps) {
     deps.audioSegmentRefs.current.forEach((audio) => audio.pause()); deps.sourceAudioRef.current?.pause();
     deps.musicRef.current?.pause(); deps.previewVideoRef.current?.pause();
   };
+  const syncPreviewVideoTime = (timelineTime) => {
+    const video = deps.previewVideoRef.current;
+    if (!video || deps.previewVisualType !== "video") return;
+    const index = getVisualSegmentIndexAtTime(deps.visualSegments, timelineTime);
+    if (index < 0) return;
+    const segment = deps.visualSegments[index];
+    // When a seek crosses into another clip React will replace/update the
+    // preview element on the next render. Do not apply the new clip's source
+    // time to the element that still belongs to the previous clip.
+    if (deps.previewVisualSegment?.id && segment?.id !== deps.previewVisualSegment.id) return;
+    const range = deps.visualTimeline[index];
+    const localTime = range ? Math.max(0, timelineTime - range.start) : timelineTime;
+    const sourceTime = getVisualSourceTime(segment, localTime);
+    const duration = Number(video.duration);
+    const maxTime = Number.isFinite(duration) && duration > 0
+      ? Math.max(0, duration - 0.001)
+      : sourceTime;
+    const targetTime = Math.max(0, Math.min(sourceTime, maxTime));
+    video.playbackRate = normalizeVisualPlaybackRate(segment?.playbackRate);
+    if ("preservesPitch" in video) video.preservesPitch = true;
+    if (Number.isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.01) {
+      video.currentTime = targetTime;
+    }
+  };
   const seekTo = (time) => {
     const clamped = Math.max(0, Math.min(deps.timelineDurationRef.current || MAX_TIMELINE_DURATION_SECONDS, time));
     deps.currentTimeRef.current = clamped; deps.setCurrentTime(clamped);
+    syncPreviewVideoTime(clamped);
     deps.audioSegments.forEach((segment) => {
       const audio = deps.audioSegmentRefs.current.get(segment.id);
       if (audio) audio.currentTime = Math.max(0, Number(segment.sourceStart) || 0) + getTimelineTrackLocalTime(clamped, segment.start, segment.duration) * Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
@@ -82,14 +107,8 @@ export function createPlaybackControls(deps) {
     }
     if (music && deps.musicUrl) { const state = getMusicState(timelineTime); music.currentTime = state.sourceTime; music.playbackRate = state.playbackRate; if ("preservesPitch" in music) music.preservesPitch = true; playIf(music, state.active); }
     if (video && deps.previewVisualType === "video") {
-      const index = getVisualSegmentIndexAtTime(deps.visualSegments, timelineTime);
-      const range = deps.visualTimeline[Math.max(0, index)] ?? deps.currentVisualRange;
-      const local = range ? Math.max(0, timelineTime - range.start) : timelineTime;
-      const segment = deps.visualSegments[Math.max(0, index)];
-      video.playbackRate = normalizeVisualPlaybackRate(segment?.playbackRate);
-      if ("preservesPitch" in video) video.preservesPitch = true;
-      const sourceTime = getVisualSourceTime(segment, local);
-      video.currentTime = Math.min(sourceTime, video.duration || sourceTime); playIf(video, true);
+      syncPreviewVideoTime(timelineTime);
+      playIf(video, true);
     }
     deps.setIsPlaying(true);
   };

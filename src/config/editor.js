@@ -207,8 +207,8 @@ export const TOOL_RAIL = [
   { id: "caption", label: "字幕", icon: ClosedCaptioning },
   { id: "smart", label: "智能", icon: Scan },
   { id: "audio", label: "音频", icon: MusicNote },
-  { id: "stickers", label: "贴纸", icon: Sticker },
   { id: "effects", label: "特效", icon: MagicWand },
+  { id: "stickers", label: "贴纸", icon: Sticker },
 ];
 
 export const RATIO_OPTIONS = [

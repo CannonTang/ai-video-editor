@@ -15,7 +15,7 @@
 
 ## Project updates
 
-- **July 29, 2026 — Effects workspace:** person outline is in active development; object outline, Optical Flow Tracking, and Sway Motion are planned next.
+- **July 31, 2026 — Face swap:** replace the identity in a selected visual clip with browser-local face detection, tracking, and preview.
 - **July 28, 2026 — v0.8.0:** contributor onboarding and release documentation were refreshed.
 - See the public [Roadmap](ROADMAP.md) for planned work, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) for shipped changes, and [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) for focused tasks and bugs.
 
