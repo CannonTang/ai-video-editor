@@ -4,6 +4,19 @@
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Utilisation responsable de la synthèse profonde
+
+Cet outil repose sur une technologie de synthèse profonde et est destiné exclusivement à la recherche technique et à l’apprentissage.
+
+Les utilisateurs doivent veiller à :
+
+- utiliser uniquement des images ou vidéos de leur propre visage, ou celles de personnes ayant donné une autorisation légale ;
+- ne créer ni diffuser aucun contenu illégal, contrefaisant, faux ou trompeur ;
+- ne pas présenter le contenu généré comme une séquence authentique et ne pas usurper l’identité d’une autre personne sans son consentement.
+
+L’utilisateur assume seul toute responsabilité juridique découlant du non-respect de ces exigences.
+
 ## Actualités du projet
 
 - **29 juillet 2026 — Effets :** le contour de personne est en cours de développement ; le contour d’objet, le suivi par flux optique et le mouvement de balancement sont planifiés.

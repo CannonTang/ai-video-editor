@@ -7,6 +7,19 @@
 [![MIT License](https://img.shields.io/github/license/MartinDelophy/ai-video-editor?style=flat-square)](LICENSE)
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## 深度合成使用声明
+
+本工具基于深度合成技术，仅用于技术研究与学习。
+
+使用者应确保：
+
+- 仅使用本人或已取得合法授权的人脸图像/视频；
+- 不制作、不传播任何违法、侵权、虚假或误导性内容；
+- 不将生成内容冒充为真实影像，不在未经同意的情况下冒用他人身份。
+
+因违反上述要求导致的任何法律责任，由使用者自行承担。
+
 ## 项目动态
 
 - **2026 年 7 月 29 日 — 效果工作区：** 人物描边正在开发中；物体描边、光流跟踪和摇摆运动是下一阶段计划。
@@ -167,4 +180,6 @@ npx netlify-cli deploy --prod --dir=dist
 
 ## License
 
-[MIT](LICENSE)
+Timeline Studio 的原创源代码采用 [MIT License](LICENSE)。
+
+本仓库的 MIT License **不自动适用于**第三方模型、模型权重、数据集、字体、图库媒体或其他随仓库提供及运行时远程下载的资源。无论这些资源存放在哪里，也无论项目通过下载脚本、缓存、镜像或集成方式使用它们，均应继续遵守各自的上游许可证和使用条款。重新分发或商业使用前，请查阅 [MODEL_LICENSES.md](MODEL_LICENSES.md)。

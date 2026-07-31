@@ -13,6 +13,18 @@
 > Timeline Studio is launching on Product Hunt Aug 25 (PDT).
 > Follow our page to share technical feedback on launch day!
 
+## Responsible use of deep synthesis
+
+This tool uses deep-synthesis technology and is intended solely for technical research and learning.
+
+Users must ensure that they:
+
+- use only facial images or videos of themselves or people who have provided lawful authorization;
+- do not create or distribute any illegal, infringing, false, or misleading content;
+- do not present generated content as authentic footage or impersonate another person without their consent.
+
+Users are solely responsible for any legal liability arising from violations of these requirements.
+
 ## Project updates
 
 - **July 31, 2026 — Face swap:** replace the identity in a selected visual clip with browser-local face detection, tracking, and preview.
@@ -186,4 +198,11 @@ Join our [Discord community](https://discord.gg/uq2uvUTBr) to ask questions, sha
 
 ## License
 
-[MIT](LICENSE)
+Timeline Studio's original source code is licensed under the [MIT License](LICENSE).
+
+The MIT License does **not** automatically apply to third-party models, model
+weights, datasets, fonts, stock media, or other bundled or remotely downloaded
+assets. Those materials remain subject to their respective upstream licenses
+and terms, regardless of where they are hosted or how they are downloaded or
+integrated. Review [MODEL_LICENSES.md](MODEL_LICENSES.md) before redistribution
+or commercial use.

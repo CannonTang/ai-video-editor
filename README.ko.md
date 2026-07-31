@@ -4,6 +4,19 @@
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## 딥 신세시스 기술의 책임 있는 사용
+
+이 도구는 딥 신세시스 기술을 기반으로 하며 기술 연구와 학습 목적으로만 제공됩니다.
+
+사용자는 다음 사항을 반드시 준수해야 합니다.
+
+- 본인 또는 적법한 사용 허가를 받은 사람의 얼굴 이미지나 동영상만 사용할 것
+- 불법적이거나 권리를 침해하거나 허위 또는 오해를 유발하는 콘텐츠를 제작하거나 배포하지 않을 것
+- 생성된 콘텐츠를 실제 영상으로 가장하지 않고, 당사자의 동의 없이 다른 사람의 신원을 도용하지 않을 것
+
+위 요구 사항을 위반하여 발생하는 모든 법적 책임은 사용자 본인에게 있습니다.
+
 ## 프로젝트 업데이트
 
 - **2026년 7월 29일 — 효과 작업공간:** 인물 외곽선을 개발 중이며, 개체 외곽선, 옵티컬 플로 추적, 스웨이 모션을 다음 단계로 계획하고 있습니다.

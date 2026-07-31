@@ -4,6 +4,19 @@
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Sử dụng công nghệ tổng hợp sâu có trách nhiệm
+
+Công cụ này sử dụng công nghệ tổng hợp sâu và chỉ dành cho mục đích nghiên cứu kỹ thuật và học tập.
+
+Người dùng phải bảo đảm rằng:
+
+- chỉ sử dụng hình ảnh hoặc video khuôn mặt của chính mình, hoặc của người đã cấp phép hợp pháp;
+- không tạo hoặc phát tán nội dung bất hợp pháp, xâm phạm quyền, sai sự thật hoặc gây hiểu lầm;
+- không trình bày nội dung được tạo ra như hình ảnh có thật và không mạo danh người khác khi chưa có sự đồng ý.
+
+Người dùng tự chịu mọi trách nhiệm pháp lý phát sinh từ việc vi phạm các yêu cầu này.
+
 ## Cập nhật dự án
 
 - **29 tháng 7, 2026 — Hiệu ứng:** viền người đang được phát triển; viền vật thể, theo dõi luồng quang học và chuyển động đung đưa được lên kế hoạch tiếp theo.
