@@ -4,6 +4,19 @@
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Verantwortungsvolle Nutzung von Deep-Synthesis-Technologie
+
+Dieses Tool basiert auf Deep-Synthesis-Technologie und ist ausschließlich für technische Forschung und Lernzwecke bestimmt.
+
+Nutzer müssen sicherstellen, dass sie:
+
+- nur eigene Gesichtsaufnahmen oder Bilder und Videos von Personen verwenden, deren rechtsgültige Einwilligung vorliegt;
+- keine rechtswidrigen, rechtsverletzenden, falschen oder irreführenden Inhalte erstellen oder verbreiten;
+- generierte Inhalte nicht als echte Aufnahmen ausgeben und sich ohne Einwilligung nicht als eine andere Person ausgeben.
+
+Für sämtliche rechtlichen Folgen eines Verstoßes gegen diese Anforderungen ist allein der Nutzer verantwortlich.
+
 ## Projektneuigkeiten
 
 - **29. Juli 2026 — Effekte:** Der Personenumriss wird aktiv entwickelt; Objektumriss, Optical-Flow-Tracking und Sway Motion sind als Nächstes geplant.

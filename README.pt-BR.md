@@ -4,6 +4,19 @@
 
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
+
+## Uso responsável de síntese profunda
+
+Esta ferramenta utiliza tecnologia de síntese profunda e destina-se exclusivamente à pesquisa técnica e ao aprendizado.
+
+Os usuários devem garantir que:
+
+- utilizem somente imagens ou vídeos do próprio rosto ou de pessoas que tenham concedido autorização legal;
+- não criem nem divulguem conteúdo ilegal, infrator, falso ou enganoso;
+- não apresentem conteúdo gerado como imagens reais nem se façam passar por outra pessoa sem o consentimento dela.
+
+O usuário é o único responsável por quaisquer consequências legais decorrentes da violação destes requisitos.
+
 ## Novidades do projeto
 
 - **29 de julho de 2026 — Efeitos:** o contorno de pessoa está em desenvolvimento; contorno de objetos, rastreamento por fluxo óptico e movimento de balanço estão planejados.
