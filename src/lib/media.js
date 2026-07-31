@@ -165,6 +165,51 @@ export async function extractVideoTrackFrames(src, options = {}) {
   }
 }
 
+export async function createVideoTrackFramesFromBlobs(blobs, options = {}) {
+  const sourceFrames = Array.isArray(blobs) ? blobs.filter((blob) => blob instanceof Blob) : [];
+  if (!sourceFrames.length) return [];
+  const {
+    duration,
+    width,
+    height,
+    maxFrames = VIDEO_TRACK_FRAME_MAX,
+    quality = 0.72,
+    signal,
+  } = options;
+  const frameCount = Math.min(
+    sourceFrames.length,
+    getVideoTrackSampleCount(Math.max(0, Number(duration) || 0), maxFrames),
+  );
+  if (!frameCount) return [];
+  const naturalWidth = Math.max(1, Number(width) || 16);
+  const naturalHeight = Math.max(1, Number(height) || 9);
+  const canvas = document.createElement("canvas");
+  canvas.height = VIDEO_TRACK_FRAME_HEIGHT;
+  canvas.width = Math.max(36, Math.min(180, Math.round(canvas.height * naturalWidth / naturalHeight)));
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) return [];
+
+  const frames = [];
+  for (let index = 0; index < frameCount; index += 1) {
+    if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    const sourceIndex = Math.max(
+      0,
+      Math.min(
+        sourceFrames.length - 1,
+        Math.round(((index + 0.5) / frameCount) * sourceFrames.length - 0.5),
+      ),
+    );
+    const bitmap = await createImageBitmap(sourceFrames[sourceIndex]);
+    try {
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      frames.push(canvas.toDataURL("image/jpeg", quality));
+    } finally {
+      bitmap.close();
+    }
+  }
+  return frames;
+}
+
 export async function decodeWaveform(blob, barCount = 118) {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {

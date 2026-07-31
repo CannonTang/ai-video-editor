@@ -9,6 +9,7 @@ import {
   createGeneratedMediaMetadata,
   embedGeneratedMediaMetadata,
 } from "../lib/generatedMediaMetadata.js";
+import { createVideoTrackFramesFromBlobs } from "../lib/media.js";
 
 function createWorker() {
   return new Worker(new URL("../workers/face-swap.worker.js", import.meta.url), { type: "module" });
@@ -149,7 +150,18 @@ export function useFaceSwapGeneration(d) {
       }
       const contentId = crypto.randomUUID();
       const generationMetadata = createGeneratedMediaMetadata({ contentId });
-      blob = await embedGeneratedMediaMetadata(blob, generationMetadata);
+      const [embeddedBlob, trackFrames] = await Promise.all([
+        embedGeneratedMediaMetadata(blob, generationMetadata),
+        result.type === "video-frames"
+          ? createVideoTrackFramesFromBlobs(result.blobs, {
+              duration: result.duration,
+              width: result.width,
+              height: result.height,
+              signal: controller.signal,
+            })
+          : [],
+      ]);
+      blob = embeddedBlob;
       const url = URL.createObjectURL(blob);
       d.imageUrlRefs.current.add(url);
       const extension = result.type === "image" ? "png" : "webm";
@@ -164,7 +176,8 @@ export function useFaceSwapGeneration(d) {
         duration: result.duration,
         width: result.width,
         height: result.height,
-        trackFrames: [],
+        trackFrames,
+        trackFrameDuration: result.type === "video-frames" ? result.duration : 0,
         generatedBy: "mobilefaceswap-224",
         generationMetadata,
         diagnostics: {
@@ -174,6 +187,7 @@ export function useFaceSwapGeneration(d) {
           inferenceMs: result.inferenceMs || 0,
           model: result.model || "mobilefaceswap-224",
           totalFrames: result.totalFrames || 1,
+          timelineFrames: trackFrames.length,
         },
       };
       console.info("[Face Swap][Performance]", JSON.stringify(asset.diagnostics));
