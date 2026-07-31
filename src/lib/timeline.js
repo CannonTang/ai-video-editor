@@ -84,6 +84,8 @@ export function getVisualAssetPayload(asset) {
       0,
       Number(asset.trackFrameDuration ?? asset.sourceDuration ?? asset.duration) || 0,
     ),
+    generatedBy: asset.generatedBy ?? "",
+    generationMetadata: asset.generationMetadata ? { ...asset.generationMetadata } : undefined,
     kind: asset.kind ?? "",
     vectorBody: asset.vectorBody ?? "",
     vectorBackground: asset.vectorBackground ?? "",

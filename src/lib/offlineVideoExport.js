@@ -34,6 +34,7 @@ import { getVisualSourceTime } from "./visualEffects.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
 import { getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect } from "./subjectEffects.js";
+import { getGeneratedMediaTags } from "./generatedMediaMetadata.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 let aacFallbackRegistered = false;
@@ -360,11 +361,13 @@ export async function exportOfflineVideo(options) {
   throwIfExportAborted(options.signal);
   const target = new BufferTarget();
   const outputFormat = codec.extension === "mp4"
-    ? new Mp4OutputFormat({ fastStart: "in-memory" })
+    ? new Mp4OutputFormat({ fastStart: "in-memory", metadataFormat: "mdta" })
     : codec.extension === "mov"
-      ? new MovOutputFormat({ fastStart: "in-memory" })
+      ? new MovOutputFormat({ fastStart: "in-memory", metadataFormat: "mdta" })
       : new WebMOutputFormat();
   const output = new Output({ format: outputFormat, target });
+  const metadataTags = getGeneratedMediaTags(options.generationMetadata);
+  if (metadataTags) output.setMetadataTags(metadataTags);
   let encoderConfig = null;
   const videoSource = new CanvasSource(canvas, {
     codec: codec.video,

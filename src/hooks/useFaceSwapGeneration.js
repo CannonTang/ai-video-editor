@@ -5,6 +5,10 @@ import {
   generateFaceSwapMedia,
   prepareFaceSwapSource,
 } from "../lib/faceSwap.js";
+import {
+  createGeneratedMediaMetadata,
+  embedGeneratedMediaMetadata,
+} from "../lib/generatedMediaMetadata.js";
 
 function createWorker() {
   return new Worker(new URL("../workers/face-swap.worker.js", import.meta.url), { type: "module" });
@@ -143,12 +147,15 @@ export function useFaceSwapGeneration(d) {
         );
         encodingMs = performance.now() - encodingStartedAt;
       }
+      const contentId = crypto.randomUUID();
+      const generationMetadata = createGeneratedMediaMetadata({ contentId });
+      blob = await embedGeneratedMediaMetadata(blob, generationMetadata);
       const url = URL.createObjectURL(blob);
       d.imageUrlRefs.current.add(url);
       const extension = result.type === "image" ? "png" : "webm";
       const filename = `mobilefaceswap-${new Date().toISOString().replaceAll(":", "-").replace(/\..+$/, "")}.${extension}`;
       const asset = {
-        id: crypto.randomUUID(),
+        id: contentId,
         type: result.type === "image" ? "image" : "video",
         src: url,
         name: filename,
@@ -159,6 +166,7 @@ export function useFaceSwapGeneration(d) {
         height: result.height,
         trackFrames: [],
         generatedBy: "mobilefaceswap-224",
+        generationMetadata,
         diagnostics: {
           frameProcessingMs,
           encodingMs,

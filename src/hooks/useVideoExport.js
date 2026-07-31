@@ -14,6 +14,10 @@ import { exportOfflineVideo } from "../lib/offlineVideoExport.js";
 import { serializeSrt } from "../lib/subtitles.js";
 import { getVisionKey } from "../lib/vision.js";
 import { prepareEmbeddedVideoAudio } from "../lib/embeddedVideoAudioExport.js";
+import {
+  createGeneratedExportMetadata,
+  embedGeneratedMediaMetadata,
+} from "../lib/generatedMediaMetadata.js";
 
 export function useVideoExport(d) {
   return useCallback(async (options = {}) => {
@@ -103,13 +107,37 @@ export function useVideoExport(d) {
       const exportSourceAudioSegments = d.sourceAudioBlob
         ? d.sourceAudioLinked ? d.linkedSourceAudioSegments : []
         : embeddedVideoAudio.segments;
+      const exportedVisualSegments = d.renderedVisualSegments.map((segment) => {
+        const record = d.visionRecords[getVisionKey(segment)];
+        return record ? { ...segment, vision: { ...record.analysis, options: record.options } } : segment;
+      });
+      const exportedOverlaySegments = d.trackVisibility.overlay === false
+        ? []
+        : d.visualOverlaySegments
+            .filter((segment) => segment.hidden !== true)
+            .map((segment) => {
+              const record = d.visionRecords[getVisionKey(segment)];
+              return record ? {
+                ...segment,
+                vision: { ...record.analysis, options: record.options },
+              } : segment;
+            });
+      const generationMetadata = createGeneratedExportMetadata({
+        visualSegments: exportedVisualSegments,
+        visualOverlaySegments: exportedOverlaySegments,
+      });
+      const voiceAudioSegments = exportAudio && d.trackVisibility.audio ? d.audioSegments : [];
+      const visibleVoiceSegments = voiceAudioSegments.filter((segment) => (
+        Math.max(0, Number(segment.start) || 0) < exportRange.end
+        && Math.max(0, Number(segment.start) || 0) + Math.max(0, Number(segment.duration) || 0) > exportRange.start
+      ));
+      if (visibleVoiceSegments.some((segment) => !(segment.blob instanceof Blob))) {
+        throw new Error("配音片段的音频媒体已丢失，请重新生成或重新添加后再导出。");
+      }
       const exportOptions = {
         imageSrc: d.imageSrc, visualType: d.visualType,
-        visualSegments: d.renderedVisualSegments.map((segment) => {
-          const record = d.visionRecords[getVisionKey(segment)];
-          return record ? { ...segment, vision: { ...record.analysis, options: record.options } } : segment;
-        }),
-        audioBlob: null, voiceAudioSegments: exportAudio && d.trackVisibility.audio ? d.audioSegments : [], voiceVolume: d.volume,
+        visualSegments: exportedVisualSegments,
+        audioBlob: null, voiceAudioSegments, voiceVolume: d.volume,
         sourceAudioBlob: exportSourceAudioBlob, sourceAudioVolume: d.sourceAudioBlob ? d.sourceAudioVolume : 1,
         sourceAudioSegments: exportSourceAudioSegments,
         sourceAudioStart: d.sourceAudioStart, musicBlob: exportAudio && d.trackVisibility.music ? d.musicBlob : null,
@@ -126,17 +154,8 @@ export function useVideoExport(d) {
         // Stickers are timeline clips; a selected library item is not export content.
         sticker: null,
         stickerSegments: d.trackVisibility.sticker ? d.stickerSegments : [],
-        visualOverlaySegments: d.trackVisibility.overlay === false
-          ? []
-          : d.visualOverlaySegments
-              .filter((segment) => segment.hidden !== true)
-              .map((segment) => {
-                const record = d.visionRecords[getVisionKey(segment)];
-                return record ? {
-                  ...segment,
-                  vision: { ...record.analysis, options: record.options },
-                } : segment;
-              }),
+        visualOverlaySegments: exportedOverlaySegments,
+        generationMetadata,
         transitionId: "none", exportSettings, onProgress: progress, signal,
       };
       let video;
@@ -163,7 +182,22 @@ export function useVideoExport(d) {
         video = await exportBrowserVideo(exportOptions);
         actualPipeline = "compatible";
       }
+      if (
+        visibleVoiceSegments.length
+        && (
+          (actualPipeline === "deterministic" && !video.diagnostics?.audioBitrate)
+          || (actualPipeline === "compatible" && !video.diagnostics?.audioTrackCount)
+        )
+      ) {
+        throw new Error("导出器未能创建配音音轨，已停止保存无声视频，请重试或切换导出管线。");
+      }
       if (exportSettings.codec !== "h264") {
+        if (generationMetadata && video.extension === "webm" && actualPipeline === "compatible") {
+          video = {
+            ...video,
+            blob: await embedGeneratedMediaMetadata(video.blob, generationMetadata),
+          };
+        }
         progress({ progress: 99, phaseKey: "exportSaveFile", phaseParams: { format: video.label } });
         downloadArtifacts(video.blob, video.extension);
         d.setStatus("done"); d.setStatusText(localize("exportComplete")); await finish(localize("exportComplete"));
@@ -171,6 +205,16 @@ export function useVideoExport(d) {
         return { status: "success", extension: video.extension, byteSize: video.blob.size, actualPipeline };
       }
       if (video.nativeMp4) {
+        if (generationMetadata && actualPipeline === "compatible") {
+          video = {
+            ...video,
+            blob: await transcodeWebmToMp4(video.blob, {
+              signal,
+              generationMetadata,
+              copyStreams: true,
+            }),
+          };
+        }
         progress({ progress: 98, phaseKey: "exportSaveFile", phaseParams: { format: "MP4" } }); downloadArtifacts(video.blob, "mp4");
         d.setStatus("done"); d.setStatusText(localize("exportComplete")); await finish(localize("exportComplete")); notify(localize(srt ? "exportVideoAndSrtComplete" : "exportComplete", { format: "MP4" }));
         return { status: "success", extension: "mp4", byteSize: video.blob.size, actualPipeline };
@@ -178,7 +222,7 @@ export function useVideoExport(d) {
       d.setStatusText(localize("exportFfmpegLoading")); progress({ progress: 95, phaseKey: "exportFfmpegLoading" });
       try {
         d.setStatusText(localize("exportFfmpegTranscoding")); progress({ progress: 96, phaseKey: "exportFfmpegTranscoding" });
-        const mp4 = await transcodeWebmToMp4(video.blob, { signal }); progress({ progress: 99, phaseKey: "exportSaveFile", phaseParams: { format: "MP4" } });
+        const mp4 = await transcodeWebmToMp4(video.blob, { signal, generationMetadata }); progress({ progress: 99, phaseKey: "exportSaveFile", phaseParams: { format: "MP4" } });
         downloadArtifacts(mp4, "mp4"); d.setStatus("done"); d.setStatusText(localize("exportComplete")); await finish(localize("exportComplete")); notify(localize(srt ? "exportVideoAndSrtComplete" : "exportComplete", { format: "MP4" }));
         return { status: "success", extension: "mp4", byteSize: mp4.size, actualPipeline };
       } catch (error) {

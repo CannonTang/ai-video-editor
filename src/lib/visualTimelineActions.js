@@ -39,6 +39,8 @@ export function createVisualTimelineActions(d) {
       sourceDuration: Math.max(0, Number(d.previewVisualSegment?.sourceDuration) || 0),
       playbackRate: Math.max(0.25, Math.min(4, Number(d.previewVisualSegment?.playbackRate) || 1)),
       trackFrames: d.previewVisualSegment?.trackFrames || [],
+      generatedBy: d.previewVisualSegment?.generatedBy || "",
+      generationMetadata: d.previewVisualSegment?.generationMetadata,
     };
   }
 

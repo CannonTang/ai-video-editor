@@ -1595,6 +1595,10 @@ export async function exportBrowserVideo({
       label: recordingFormat.label,
       mimeType: blobType,
       nativeMp4: recordingFormat.extension === "mp4",
+      diagnostics: {
+        audioInputCount: audioInputs.length,
+        audioTrackCount: outputStream.getAudioTracks().length,
+      },
     };
   } finally {
     cancelAnimationFrame(animationFrame);
@@ -1757,7 +1761,11 @@ export async function encodePngFrameSequence({
   });
 }
 
-export async function transcodeWebmToMp4(webmBlob, { signal } = {}) {
+export async function transcodeWebmToMp4(webmBlob, {
+  signal,
+  generationMetadata = null,
+  copyStreams = false,
+} = {}) {
   return runFfmpegTask(async () => {
     if (signal?.aborted) throw createAbortError("Export canceled");
     let ffmpeg = null;
@@ -1777,25 +1785,48 @@ export async function transcodeWebmToMp4(webmBlob, { signal } = {}) {
       if (signal?.aborted) throw createAbortError("Export canceled");
       await ffmpeg.writeFile(inputName, await fetchFile(webmBlob));
       try {
-        await ffmpeg.exec([
-          "-i",
-          inputName,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-pix_fmt",
-          "yuv420p",
-          "-c:a",
-          "aac",
-          "-movflags",
-          "faststart",
+        const metadataArgs = generationMetadata ? [
+          "-metadata", `AIGC_GENERATION_TYPE=${generationMetadata.generationType || ""}`,
+          "-metadata", `AIGC_TOOL=${generationMetadata.toolName || ""}`,
+          "-metadata", `AIGC_CREATED_AT=${generationMetadata.createdAt || ""}`,
+          "-metadata", `AIGC_CONTENT_ID=${generationMetadata.contentId || ""}`,
+          "-metadata", `AIGC_GENERATOR=${generationMetadata.generator || ""}`,
+          "-metadata", `AIGC_DISCLOSURE=${generationMetadata.disclosure || ""}`,
+          "-metadata", `AIGC_METADATA=${JSON.stringify(generationMetadata)}`,
+        ] : [];
+        await ffmpeg.exec(copyStreams ? [
+          "-i", inputName,
+          "-map", "0",
+          "-c", "copy",
+          ...metadataArgs,
+          "-movflags", generationMetadata ? "faststart+use_metadata_tags" : "faststart",
+          outputName,
+        ] : [
+          "-i", inputName,
+          "-c:v", "libx264",
+          "-preset", "veryfast",
+          "-pix_fmt", "yuv420p",
+          "-c:a", "aac",
+          ...metadataArgs,
+          "-movflags", generationMetadata ? "faststart+use_metadata_tags" : "faststart",
           outputName,
         ]);
       } catch {
         if (signal?.aborted) throw createAbortError("Export canceled");
         await ffmpeg.deleteFile(outputName).catch(() => {});
-        await ffmpeg.exec(["-i", inputName, "-movflags", "faststart", outputName]);
+        await ffmpeg.exec([
+          "-i", inputName,
+          ...(generationMetadata ? [
+            "-metadata", `AIGC_GENERATION_TYPE=${generationMetadata.generationType || ""}`,
+            "-metadata", `AIGC_TOOL=${generationMetadata.toolName || ""}`,
+            "-metadata", `AIGC_CREATED_AT=${generationMetadata.createdAt || ""}`,
+            "-metadata", `AIGC_CONTENT_ID=${generationMetadata.contentId || ""}`,
+            "-metadata", `AIGC_GENERATOR=${generationMetadata.generator || ""}`,
+            "-metadata", `AIGC_DISCLOSURE=${generationMetadata.disclosure || ""}`,
+            "-metadata", `AIGC_METADATA=${JSON.stringify(generationMetadata)}`,
+          ] : []),
+          "-movflags", generationMetadata ? "faststart+use_metadata_tags" : "faststart", outputName,
+        ]);
       }
       if (signal?.aborted) throw createAbortError("Export canceled");
       const data = await ffmpeg.readFile(outputName);
