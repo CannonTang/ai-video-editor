@@ -79,6 +79,7 @@ export function useFileUpload(deps) {
             const backendLabel = compatibility?.backends?.probe ? ` · ${compatibility.backends.probe}` : "";
             const patch = { meta: `${width || "?"} x ${height || "?"} · ${formatClock(duration)}${backendLabel}`,
               duration, width, height, type: "video", src: sourceAsset.src, blob: sourceAsset.blob,
+              trackFrameDuration: duration,
               compatibilityAudioBlob: sourceAsset.compatibilityAudioBlob ?? null, mediaCompatibility: compatibility };
             update(asset.id, patch); deps.updateVisualAssetInTimeline(asset.id, patch);
             extractVideoTrackFrames(sourceAsset.src, { duration, width, height }).then((trackFrames) => {

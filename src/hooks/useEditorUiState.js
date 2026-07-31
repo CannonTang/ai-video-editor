@@ -5,7 +5,7 @@ const DEFAULT_TRACK_VISIBILITY = {
 };
 
 const DEFAULT_TRACK_LOCKS = {
-  image: false, caption: false, sticker: false, source: false, audio: false, music: false,
+  image: false, overlay: false, caption: false, sticker: false, source: false, audio: false, music: false,
 };
 
 export function useEditorUiState() {

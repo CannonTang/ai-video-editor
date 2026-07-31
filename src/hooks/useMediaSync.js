@@ -1,6 +1,7 @@
-import { startTransition, useEffect } from "react";
+import { useEffect } from "react";
 import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, shouldCorrectPreviewMediaTime } from "../lib/editorRuntime.js";
 import { getLinkedSourceAudioState } from "../lib/sourceAudioSync.js";
+import { normalizeVisualPlaybackRate } from "../lib/visualEffects.js";
 
 export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTime, playbackRate = 1 }) {
   if (!media) return;
@@ -94,26 +95,56 @@ export function useMediaSync(d) {
   }, [d.isPlaying, d.previewVisualSegment?.id, d.previewVisualSourceTime, d.previewVisualSrc, d.previewVisualType]);
   useEffect(() => {
     const v = d.previewVideoRef.current; if (!v || d.previewVisualType !== "video") return;
-    if (!d.isPlaying || d.trackVisibility?.image === false) v.pause(); else v.play().catch(() => {});
-  }, [d.isPlaying, d.previewVisualSrc, d.previewVisualType, d.trackVisibility.image]);
+    if (!d.isPlaying || d.trackVisibility?.image === false) v.pause(); else requestTimelineMediaPlay(v);
+  }, [d.isPlaying, d.previewVisualSegment?.id, d.previewVisualSrc, d.previewVisualType, d.trackVisibility.image]);
   useEffect(() => {
     if (!d.isPlaying || d.estimatedDuration <= 0) return undefined;
     const start = d.currentTimeRef.current >= d.estimatedDuration - 0.02 ? 0 : Math.max(0, d.currentTimeRef.current);
     if (start !== d.currentTimeRef.current) { d.setCurrentTime(start); d.currentTimeRef.current = start; }
     d.visualPlaybackStartTimeRef.current = start; d.visualPlaybackStartedAtRef.current = performance.now(); d.visualPlaybackLastUpdateRef.current = 0;
     const tick = (now) => {
-      const next = Math.min(d.estimatedDuration, d.visualPlaybackStartTimeRef.current + (now - d.visualPlaybackStartedAtRef.current) / 1000);
+      const wallClockTime = Math.min(
+        d.estimatedDuration,
+        d.visualPlaybackStartTimeRef.current + (now - d.visualPlaybackStartedAtRef.current) / 1000,
+      );
+      const video = d.previewVideoRef.current;
+      const visualRange = d.previewVisualRange;
+      const visualSegment = d.previewVisualSegment;
+      const sourceStart = Math.max(0, Number(visualSegment?.sourceStart) || 0);
+      const playbackRate = normalizeVisualPlaybackRate(visualSegment?.playbackRate);
+      const mediaTimelineTime = video && visualRange && d.previewVisualType === "video"
+        ? visualRange.start + (Math.max(sourceStart, Number(video.currentTime) || 0) - sourceStart) / playbackRate
+        : Number.NaN;
+      const useVideoClock = Boolean(
+        video &&
+        visualRange &&
+        d.previewVisualType === "video" &&
+        !video.paused &&
+        !video.ended &&
+        wallClockTime >= visualRange.start &&
+        wallClockTime < visualRange.end &&
+        Number.isFinite(mediaTimelineTime),
+      );
+      const next = useVideoClock
+        ? Math.min(d.estimatedDuration, visualRange.end, Math.max(visualRange.start, mediaTimelineTime))
+        : wallClockTime;
+      if (useVideoClock) {
+        // Rebase the fallback clock continuously so a decode stall or segment
+        // boundary resumes from the frame the user actually saw.
+        d.visualPlaybackStartTimeRef.current = next;
+        d.visualPlaybackStartedAtRef.current = now;
+      }
       d.currentTimeRef.current = next;
       if (now - d.visualPlaybackLastUpdateRef.current > PLAYBACK_UI_FRAME_MS || next >= d.estimatedDuration) {
         d.visualPlaybackLastUpdateRef.current = now;
-        startTransition(() => d.setCurrentTime(next));
+        d.setCurrentTime(next);
       }
       if (next >= d.estimatedDuration) { d.pauseTimelineMedia(); d.setIsPlaying(false); d.visualPlaybackFrameRef.current = 0; return; }
       d.visualPlaybackFrameRef.current = requestAnimationFrame(tick);
     };
     d.visualPlaybackFrameRef.current = requestAnimationFrame(tick);
     return () => { if (d.visualPlaybackFrameRef.current) { cancelAnimationFrame(d.visualPlaybackFrameRef.current); d.visualPlaybackFrameRef.current = 0; } };
-  }, [d.estimatedDuration, d.isPlaying]);
+  }, [d.estimatedDuration, d.isPlaying, d.previewVisualRange, d.previewVisualSegment, d.previewVisualType]);
   useEffect(() => { d.setCurrentTime((time) => {
     const clamped = Math.min(time, d.timelineDuration);
     if (d.audioRef.current && clamped !== time) d.audioRef.current.currentTime = clamped;

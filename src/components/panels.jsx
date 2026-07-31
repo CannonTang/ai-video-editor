@@ -48,6 +48,7 @@ import {
   generateVectorWithGeminiNano,
 } from "../lib/geminiNanoVector.js";
 import { getRemoteAssetBlob } from "../lib/remoteAssetCache.js";
+import { downloadBlob as downloadMediaBlob } from "../lib/media.js";
 import { formatClock, formatTime, getSegmentStartTime } from "../lib/timeline.js";
 import { VECTOR_CATEGORIES } from "../lib/vectorAssets.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
@@ -866,7 +867,16 @@ function AssetPreviewDialog({ asset, t, onClose }) {
             <img src={mediaSrc} alt={assetDisplayName} crossOrigin="anonymous" />
           )}
         </div>
-        {assetMeta ? <footer>{assetMeta}</footer> : null}
+        {assetMeta || asset.blob ? (
+          <footer className="asset-preview-footer">
+            {assetMeta ? <span>{assetMeta}</span> : <span />}
+            {asset.blob ? (
+              <button type="button" onClick={() => downloadMediaBlob(asset.blob, asset.name || "asset")}>
+                <DownloadSimple size={14} />{t("download", "下载")}
+              </button>
+            ) : null}
+          </footer>
+        ) : null}
       </section>
     </div>
   );
@@ -1037,6 +1047,8 @@ export function ToolPanel(props) {
     updateSelectedSubjectEffect,
     removeSelectedSubjectEffect,
     openEffectsInspector,
+    openFaceSwapInspector,
+    effectsPanelMode,
   } = props;
   const [captionFontStatus, setCaptionFontStatus] = useState("");
   const captionFontOptions = useMemo(
@@ -1401,6 +1413,8 @@ export function ToolPanel(props) {
         onChange={updateSelectedSubjectEffect}
         onAnalyze={analyzeEffectVisual || analyzeCurrentVisual}
         onOpenInspector={openEffectsInspector}
+        onOpenFaceSwap={openFaceSwapInspector}
+        faceSwapActive={effectsPanelMode === "face-swap"}
         onRemove={removeSelectedSubjectEffect}
       />
     );

@@ -112,6 +112,8 @@ const OUTLINE_PREVIEW_STILL = "/assets/effects/previews/person-outline-paper.web
 const OUTLINE_PREVIEW_GIF = "/assets/effects/previews/person-outline-paper-hover.webp";
 const OBJECT_OUTLINE_PREVIEW_STILL = "/assets/effects/previews/object-outline-still.webp";
 const OBJECT_OUTLINE_PREVIEW_GIF = "/assets/effects/previews/object-outline-hover.webp";
+const FACE_SWAP_PREVIEW_STILL = "/assets/sample-portrait.png";
+const FACE_SWAP_PREVIEW_GIF = "/assets/effects/previews/face-swap-hover.gif";
 const COMING_EFFECTS = Object.freeze([
   {
     id: "vector-tracking",
@@ -266,6 +268,54 @@ function ComingEffectCard({ t, effect }) {
         <small>{t(effect.hintKey)}</small>
       </span>
     </article>
+  );
+}
+
+function FaceSwapEffectCard({ t, active, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [hoverless, setHoverless] = useState(false);
+  const previewing = hovered || hoverless;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(hover: none)");
+    const update = () => setHoverless(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return (
+    <button
+      className={`subject-outline-entry subject-face-swap-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span className="subject-outline-entry-preview">
+        <img
+          key={previewing ? "animated" : "still"}
+          src={previewing ? FACE_SWAP_PREVIEW_GIF : FACE_SWAP_PREVIEW_STILL}
+          alt=""
+        />
+        <span className="subject-outline-entry-preview-state">
+          <PersonSimpleRun size={13} weight="fill" />
+          {previewing ? t("effectPreviewPlaying") : "MobileFaceSwap"}
+        </span>
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy">
+          <strong>{t("faceSwapTitle")}</strong>
+          <small>{t("faceSwapDescription")}</small>
+        </span>
+        <span className="subject-outline-entry-state"><CaretRight size={17} /></span>
+      </span>
+    </button>
   );
 }
 
@@ -530,6 +580,8 @@ export function SubjectEffectsWorkspace({
   phase,
   onChange,
   onOpenInspector,
+  onOpenFaceSwap,
+  faceSwapActive = false,
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
@@ -590,6 +642,7 @@ export function SubjectEffectsWorkspace({
           analysis={objectAnalysis}
           onClick={selectObjectOutline}
         />
+        <FaceSwapEffectCard t={t} active={faceSwapActive} onClick={onOpenFaceSwap} />
         {COMING_EFFECTS.map((comingEffect) => (
           <ComingEffectCard key={comingEffect.id} t={t} effect={comingEffect} />
         ))}

@@ -19,6 +19,7 @@ import { getVisualMaskInsets, getVisualMaskSvgDataUrl, resolveVisualTransform, s
 import { resolveVisualClipAnimation } from "../lib/visualClipAnimations.js";
 import { getStickerBaseSize } from "../lib/stickerGeometry.js";
 import { resolveCaptionStyleForSegment } from "../lib/captionFonts.js";
+import { resolveCaptionSegmentPlacement } from "../lib/captionLayout.js";
 import { CaptionOverlay } from "./CaptionOverlay.jsx";
 import { IconButton } from "./ui.jsx";
 import { getVisualOverlayPixelBox, resolveVisualOverlayTransform, snapVisualOverlayTransform } from "../lib/visualOverlayTimeline.js";
@@ -791,7 +792,7 @@ export function PreviewStage({
             {captionsEnabled && trackVisibility.caption
               ? (Array.isArray(currentCaptions) ? currentCaptions : currentCaption ? [{ id: "current", text: currentCaption }] : [])
                 .map((caption, index, visibleCaptions) => {
-                  const basePlacement = caption.placement || captionPlacement;
+                  const basePlacement = resolveCaptionSegmentPlacement(caption, captionPlacement);
                   return (
                     <CaptionOverlay
                       key={caption.id}

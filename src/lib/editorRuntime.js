@@ -1,6 +1,14 @@
 import { RATIO_OPTIONS } from "../config/editor.js";
+import {
+  BufferTarget,
+  CanvasSource,
+  Output,
+  WebMOutputFormat,
+} from "mediabunny";
 
-export const PLAYBACK_UI_FRAME_MS = 80;
+// Update on each ordinary display frame so the visible playhead stays attached
+// to the media clock. The previous 80 ms cadence visibly lagged behind video.
+export const PLAYBACK_UI_FRAME_MS = 15;
 export const DEFAULT_VISION_OPTIONS = Object.freeze({ showDetections: true, removeBackground: false, avoidCaptions: true, smartCrop: true });
 export const EMPTY_VISION_OPTIONS = Object.freeze({ showDetections: false, removeBackground: false, avoidCaptions: false, smartCrop: false });
 
@@ -59,39 +67,54 @@ export function formatAvatarProgress(t, progress) {
   return Object.entries(progress.phaseParams || {}).reduce((text, [key, value]) => text.replaceAll(`{${key}}`, String(value)), template);
 }
 
-export async function encodeAvatarFrames(blobs, width, height, fps, keyframeTimes = [], duration = blobs.length / fps) {
+export async function encodeAvatarFrames(blobs, width, height, fps, keyframeTimes = [], duration = blobs.length / fps, options = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = width; canvas.height = height;
   const context = canvas.getContext("2d", { alpha: false });
-  const stream = canvas.captureStream(fps);
-  const mimeType = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"].find((type) => MediaRecorder.isTypeSupported(type));
-  const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-  const chunks = [];
-  recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data); };
-  const stopped = new Promise((resolve, reject) => {
-    recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
-    recorder.onerror = () => reject(recorder.error || new Error("数字人视频编码失败"));
-  });
-  recorder.start();
+  if (!context) throw new Error("无法创建视频编码画布");
+  if (typeof VideoEncoder === "undefined") throw new Error("当前浏览器不支持 WebCodecs 视频编码");
   const bitmaps = await Promise.all(blobs.map((blob) => createImageBitmap(blob)));
   const totalFrames = Math.max(1, Math.ceil(duration * fps));
-  for (let frame = 0; frame < totalFrames; frame += 1) {
-    const frameTime = frame / fps;
-    let nearestIndex = 0; let nearestDistance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < bitmaps.length; index += 1) {
-      const time = keyframeTimes[index] ?? (index * duration) / Math.max(1, bitmaps.length - 1);
-      const distance = Math.abs(time - frameTime);
-      if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
+  const target = new BufferTarget();
+  const output = new Output({ format: new WebMOutputFormat(), target });
+  const videoSource = new CanvasSource(canvas, {
+    codec: "vp8",
+    bitrate: Math.max(1_000_000, Math.round(width * height * Math.max(8, fps) * 0.55)),
+    latencyMode: "realtime",
+  });
+  output.addVideoTrack(videoSource, { frameRate: fps });
+  const abortOutput = () => { output.cancel().catch(() => {}); };
+  options.signal?.addEventListener("abort", abortOutput, { once: true });
+  try {
+    await output.start();
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      if (options.signal?.aborted) {
+        const error = new Error("视频编码已取消");
+        error.name = "AbortError";
+        throw error;
+      }
+      const frameTime = frame / fps;
+      let nearestIndex = 0; let nearestDistance = Number.POSITIVE_INFINITY;
+      for (let index = 0; index < bitmaps.length; index += 1) {
+        const time = keyframeTimes[index] ?? (index * duration) / Math.max(1, bitmaps.length - 1);
+        const distance = Math.abs(time - frameTime);
+        if (distance < nearestDistance) { nearestDistance = distance; nearestIndex = index; }
+      }
+      context.drawImage(bitmaps[nearestIndex], 0, 0, width, height);
+      await videoSource.add(frameTime, 1 / fps, { keyFrame: frame === 0 });
+      options.onProgress?.((frame + 1) / totalFrames);
     }
-    context.drawImage(bitmaps[nearestIndex], 0, 0, width, height);
-    await new Promise((resolve) => window.setTimeout(resolve, 1000 / fps));
+    await output.finalize();
+  } catch (error) {
+    await output.cancel().catch(() => {});
+    throw error;
+  } finally {
+    options.signal?.removeEventListener("abort", abortOutput);
+    bitmaps.forEach((bitmap) => bitmap.close());
   }
-  bitmaps.forEach((bitmap) => bitmap.close());
-  recorder.stop();
-  const output = await stopped;
-  stream.getTracks().forEach((track) => track.stop());
-  if (!output.size) throw new Error("数字人视频编码结果为空");
-  return output;
+  const result = new Blob([target.buffer], { type: "video/webm" });
+  if (!result.size) throw new Error("数字人视频编码结果为空");
+  return result;
 }
 
 export function getNearestRatioIdForSize(width, height) {

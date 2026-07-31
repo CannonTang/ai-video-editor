@@ -4,6 +4,7 @@ import {
 } from "../config/editor.js";
 import {
   createVisualSegment,
+  ensureUniqueVisualSegmentIds,
   estimateDuration,
   getImageThumbnailCount,
   getVisualSegmentsTotal,
@@ -49,7 +50,7 @@ export function createVisualTimelineActions(d) {
   }
 
   function commitVisualSegments(nextSegments, message, selectedIndex = 0) {
-    const normalizedSegments = nextSegments
+    const normalizedSegments = ensureUniqueVisualSegmentIds(nextSegments
       .filter((segment) => segment.duration > 0.05)
       .map((segment) => ({
         ...segment,
@@ -57,7 +58,7 @@ export function createVisualTimelineActions(d) {
           MIN_VISUAL_SEGMENT_SECONDS,
           Math.min(MAX_TIMELINE_DURATION_SECONDS, segment.duration),
         ),
-      }));
+      }))).segments;
     const nextDuration = Math.min(
       MAX_TIMELINE_DURATION_SECONDS,
       getVisualSegmentsTotal(normalizedSegments),
@@ -120,23 +121,40 @@ export function createVisualTimelineActions(d) {
   function updateVisualAssetInTimeline(assetId, updates) {
     if (!assetId) return;
     d.setVisualSegments((segments) => {
-      const nextSegments = segments.map((segment) =>
-        segment.assetId === assetId || (updates.src && segment.src === updates.src)
-          ? {
-              ...segment,
-              ...updates,
-              sourceDuration: updates.duration && segment.type === "video"
-                ? Math.max(0, Number(updates.duration) || 0)
-                : segment.sourceDuration,
-              duration: updates.duration
-                ? Math.max(
-                    MIN_VISUAL_SEGMENT_SECONDS,
-                    Math.min(MAX_TIMELINE_DURATION_SECONDS, updates.duration / Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1))),
-                  )
-                : segment.duration,
-            }
-          : segment,
-      );
+      const {
+        id: _assetRecordId,
+        assetId: _updatedAssetId,
+        duration: updatedMediaDuration,
+        sourceStart: _updatedSourceStart,
+        sourceDuration: _updatedSourceDuration,
+        ...mediaUpdates
+      } = updates;
+      const nextSegments = ensureUniqueVisualSegmentIds(segments.map((segment) => {
+        if (segment.assetId !== assetId && !(updates.src && segment.src === updates.src)) return segment;
+        const shouldAdoptMediaDuration = Boolean(
+          updatedMediaDuration && (
+            segment.preparing ||
+            (segment.type === "video" && !Number(segment.sourceDuration) && !Number(segment.sourceStart))
+          ),
+        );
+        const playbackRate = Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
+        return {
+          ...segment,
+          ...mediaUpdates,
+          id: segment.id,
+          assetId: segment.assetId || assetId,
+          sourceStart: Math.max(0, Number(segment.sourceStart) || 0),
+          sourceDuration: shouldAdoptMediaDuration
+            ? Math.max(0, Number(updatedMediaDuration) || 0)
+            : segment.sourceDuration,
+          duration: shouldAdoptMediaDuration
+            ? Math.max(
+                MIN_VISUAL_SEGMENT_SECONDS,
+                Math.min(MAX_TIMELINE_DURATION_SECONDS, updatedMediaDuration / playbackRate),
+              )
+            : segment.duration,
+        };
+      })).segments;
       const nextDuration = getVisualSegmentsTotal(nextSegments);
       d.setImageDuration(nextDuration);
       d.setImageClipCount(getImageThumbnailCount(nextDuration));

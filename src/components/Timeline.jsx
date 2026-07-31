@@ -4,8 +4,11 @@ import {
   ArrowClockwise,
   ArrowCounterClockwise,
   ArrowLeft,
+  ArrowLineLeft,
+  ArrowLineRight,
   ArrowsInLineHorizontal,
   ArrowsOutLineHorizontal,
+  CaretDown,
   CopySimple,
   Crop,
   CircleNotch,
@@ -25,6 +28,7 @@ import {
   PictureInPicture,
   PlusCircle,
   Scissors,
+  CursorClick,
   Sparkle,
   SpeakerHigh,
   SpeakerSlash,
@@ -34,7 +38,7 @@ import {
   Waveform,
 } from "@phosphor-icons/react";
 
-import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, TRANSITIONS } from "../config/editor.js";
+import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, MAX_TIMELINE_DURATION_SECONDS, TRANSITIONS } from "../config/editor.js";
 import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
 import { createMainVisualFromOverlay } from "../lib/visualOverlayTimeline.js";
@@ -75,19 +79,41 @@ const TIMELINE_WHEEL_ZOOM_CONTENT_SELECTOR = [
   ".audio-clip",
 ].join(", ");
 
-function getSampledVideoFrames(frames, count) {
+function getSampledVideoFrames(frames, count, segment = null) {
   if (!Array.isArray(frames) || !frames.length) {
     return [];
   }
 
   const safeCount = Math.max(VIDEO_FRAME_MIN_COUNT, count);
-  if (safeCount === frames.length) {
-    return frames;
+  const sourceStart = Math.max(0, Number(segment?.sourceStart) || 0);
+  const playbackRate = Math.max(0.25, Math.min(4, Number(segment?.playbackRate) || 1));
+  const sourceSpan = Math.max(
+    0.001,
+    Number(segment?.sourceDuration) || Math.max(0.001, Number(segment?.duration) || 0) * playbackRate,
+  );
+  const frameDuration = Math.max(
+    sourceStart + sourceSpan,
+    Number(segment?.trackFrameDuration) || 0,
+  );
+
+  if (segment && frameDuration > 0) {
+    return Array.from({ length: safeCount }, (_, index) => {
+      const sourceTime = Math.min(
+        frameDuration,
+        sourceStart + ((index + 0.5) / safeCount) * sourceSpan,
+      );
+      // Extracted frames represent the center of equally sized source-time
+      // buckets. Pick the bucket nearest to this clip-local source time.
+      const frameIndex = Math.max(
+        0,
+        Math.min(frames.length - 1, Math.round((sourceTime / frameDuration) * frames.length - 0.5)),
+      );
+      return frames[frameIndex];
+    });
   }
 
-  if (safeCount === 1) {
-    return [frames[Math.floor(frames.length / 2)]];
-  }
+  if (safeCount === frames.length) return frames;
+  if (safeCount === 1) return [frames[Math.floor(frames.length / 2)]];
 
   return Array.from({ length: safeCount }, (_, index) => {
     const frameIndex = Math.round((index / (safeCount - 1)) * (frames.length - 1));
@@ -133,8 +159,6 @@ export function Timeline({
   handleDeleteTrack,
   handleDuplicateTrack,
   handleCutTrack,
-  fitMode,
-  setFitMode,
   canPreview,
   handlePlayToggle,
   isPlaying,
@@ -178,6 +202,7 @@ export function Timeline({
   activeTimelineClipDrag,
   showStickerTrack,
   stickerSegments,
+  setStickerSegments,
   currentStickerSegment,
   selectedStickerSegmentId,
   setSelectedStickerSegmentId,
@@ -189,7 +214,6 @@ export function Timeline({
   visualType,
   currentVisualSegment,
   selectedVisualSegmentId,
-  currentVisualSegmentIndex,
   visualOverlaySegments = [],
   selectedVisualOverlayId = "",
   setSelectedVisualOverlayId,
@@ -210,6 +234,7 @@ export function Timeline({
   startStickerSegmentResize,
   displayedCaptionSegments,
   displayedCaptionTimeline,
+  setCaptionSegments,
   currentCaptionSegment,
   selectedSegmentId,
   setSelectedSegmentId,
@@ -222,6 +247,7 @@ export function Timeline({
   sourceAudioClipPercent,
   sourceAudioStartPercent,
   sourceAudioDuration,
+  setSourceAudioStart,
   selectedSourceAudioSegmentId,
   setSelectedSourceAudioSegmentId,
   audioBlob,
@@ -229,12 +255,15 @@ export function Timeline({
   audioClipPercent,
   audioDuration,
   audioSegments,
+  setAudioSegments,
   selectedAudioSegmentId,
   setSelectedAudioSegmentId,
   startAudioSegmentMove,
   startSourceAudioMove,
   musicBlob,
   musicSegments = [],
+  setMusicSegments,
+  setMusicStart,
   selectedMusicSegmentId,
   setSelectedMusicSegmentId,
   musicPeaks,
@@ -247,6 +276,258 @@ export function Timeline({
   const [sourceAudioExtractionPendingId, setSourceAudioExtractionPendingId] = useState("");
   const [mobileClipActionsVisible, setMobileClipActionsVisible] = useState(false);
   const [mobileClipActionTrack, setMobileClipActionTrack] = useState("");
+  const [timelineSelectionMode, setTimelineSelectionMode] = useState("select");
+  const [timelineSelectionMenuOpen, setTimelineSelectionMenuOpen] = useState(false);
+  const [timelineRangeSelection, setTimelineRangeSelection] = useState(() => new Set());
+  const [timelineRangeDrag, setTimelineRangeDrag] = useState(null);
+  const timelineSelectionTriggerRef = useRef(null);
+  const timelineRangeDragClickGuardRef = useRef("");
+
+  const timelineSelectableClips = useMemo(() => {
+    const clips = [];
+    displayedVisualSegments.forEach((segment, index) => {
+      const range = renderedVisualTimeline[index];
+      clips.push({
+        track: "image",
+        id: segment.id,
+        start: range?.start ?? getVisualSegmentStartTime(displayedVisualSegments, index),
+        end: range?.end ?? (getVisualSegmentStartTime(displayedVisualSegments, index) + (segment.duration || 0)),
+      });
+    });
+    visualOverlaySegments.forEach((segment) => clips.push({ track: "overlay", id: segment.id, start: segment.start || 0, end: (segment.start || 0) + (segment.duration || 0) }));
+    stickerSegments.forEach((segment) => clips.push({ track: "sticker", id: segment.id, start: segment.start || 0, end: (segment.start || 0) + (segment.duration || 0) }));
+    displayedCaptionSegments.forEach((segment, index) => clips.push({
+      track: "caption",
+      id: segment.id,
+      start: displayedCaptionTimeline[index]?.start ?? getSegmentStartTime(displayedCaptionSegments, index, captionTargetDuration),
+      end: displayedCaptionTimeline[index]?.end ?? (
+        getSegmentStartTime(displayedCaptionSegments, index, captionTargetDuration)
+        + (displayedCaptionTimeline[index]?.duration || captionTargetDuration)
+      ),
+    }));
+    if (sourceAudioBlob) {
+      if (sourceAudioLinked && linkedSourceAudioSegments.length) {
+        linkedSourceAudioSegments.forEach((segment) => clips.push({ track: "source", id: segment.id, start: segment.start || 0, end: (segment.start || 0) + (segment.duration || 0) }));
+      } else {
+        const sourceStart = sourceAudioStartPercent / 100 * timelineDuration;
+        clips.push({ track: "source", id: "source-audio", start: sourceStart, end: sourceStart + sourceAudioDuration });
+      }
+    }
+    audioSegments.forEach((segment) => clips.push({ track: "audio", id: segment.id, start: segment.start || 0, end: (segment.start || 0) + (segment.duration || 0) }));
+    if (musicBlob) {
+      (musicSegments.length
+        ? musicSegments
+        : [{ id: "music-audio", start: musicStartPercent / 100 * timelineDuration, duration: musicDuration }]
+      ).forEach((segment) => clips.push({ track: "music", id: segment.id, start: segment.start || 0, end: (segment.start || 0) + (segment.duration || 0) }));
+    }
+    return clips;
+  }, [
+    audioSegments,
+    captionTargetDuration,
+    displayedCaptionSegments,
+    displayedCaptionTimeline,
+    displayedVisualSegments,
+    linkedSourceAudioSegments,
+    musicBlob,
+    musicSegments,
+    musicStartPercent,
+    musicDuration,
+    renderedVisualTimeline,
+    sourceAudioBlob,
+    sourceAudioLinked,
+    sourceAudioStartPercent,
+    sourceAudioDuration,
+    stickerSegments,
+    timelineDuration,
+    visualOverlaySegments,
+  ]);
+  const timelineSelectionKey = (track, id) => `${track}:${id}`;
+  const isRangeSelected = (track, id) => timelineRangeSelection.has(timelineSelectionKey(track, id));
+  const isTimelineClipVisible = (track, id) => {
+    if (typeof document === "undefined") return true;
+    const clip = Array.from(document.querySelectorAll(`[data-timeline-segment-track="${track}"]`))
+      .find((element) => element.dataset.timelineSegmentId === String(id));
+    return Boolean(clip && !clip.closest(".is-track-disabled"));
+  };
+  const selectTimelineRangeFromClip = (track, id) => {
+    if (!isTimelineClipVisible(track, id)) return;
+    if (trackLocks[track]) return;
+    const anchor = timelineSelectableClips.find((clip) => clip.track === track && clip.id === id);
+    if (!anchor) return;
+    const next = new Set(
+      timelineSelectableClips
+        .filter((clip) => !trackLocks[clip.track])
+        .filter((clip) => isTimelineClipVisible(clip.track, clip.id))
+        .filter((clip) => timelineSelectionMode === "left" ? clip.start <= anchor.start : clip.start >= anchor.start)
+        .map((clip) => timelineSelectionKey(clip.track, clip.id)),
+    );
+    clearClipSelections();
+    setSelectedTrack(track);
+    setTimelineRangeSelection(next);
+    notify(t(
+      timelineSelectionMode === "left" ? "timelineSelectedLeft" : "timelineSelectedRight",
+      timelineSelectionMode === "left"
+        ? `已向左选择 ${next.size} 个片段`
+        : `已向右选择 ${next.size} 个片段`,
+    ).replace("{count}", next.size));
+  };
+  const toggleTimelineClipInSelection = (track, id) => {
+    if (!isTimelineClipVisible(track, id)) return;
+    if (trackLocks[track]) {
+      notify(t("timelineLockedSelectionSkipped", "锁定轨道中的片段不能加入多选"));
+      return;
+    }
+    const key = timelineSelectionKey(track, id);
+    const focusedKeys = [
+      selectedVisualSegmentId && timelineSelectionKey("image", selectedVisualSegmentId),
+      selectedVisualOverlayId && timelineSelectionKey("overlay", selectedVisualOverlayId),
+      selectedStickerSegmentId && timelineSelectionKey("sticker", selectedStickerSegmentId),
+      selectedSegmentId && timelineSelectionKey("caption", selectedSegmentId),
+      selectedAudioSegmentId && timelineSelectionKey("audio", selectedAudioSegmentId),
+      selectedSourceAudioSegmentId && timelineSelectionKey("source", selectedSourceAudioSegmentId),
+      selectedMusicSegmentId && timelineSelectionKey("music", selectedMusicSegmentId),
+    ].filter(Boolean);
+    setTimelineRangeSelection((current) => {
+      const next = new Set(current);
+      focusedKeys.forEach((focusedKey) => next.add(focusedKey));
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    clearClipSelections();
+    setSelectedTrack(track);
+  };
+  const startTimelineRangeDrag = (event, track, id, { toggleOnClick = false } = {}) => {
+    if (!isTimelineClipVisible(track, id)) return false;
+    if (trackLocks[track]) return false;
+    if (event.button !== 0 || timelineSelectionMode !== "select" || timelineRangeSelection.size < 2) return false;
+    const pressedKey = timelineSelectionKey(track, id);
+    if (!timelineRangeSelection.has(pressedKey)) return false;
+    const selectedClips = timelineSelectableClips.filter((clip) =>
+      timelineRangeSelection.has(timelineSelectionKey(clip.track, clip.id))
+      && !trackLocks[clip.track]
+      && isTimelineClipVisible(clip.track, clip.id));
+    if (selectedClips.length < 2) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    if (isPlaying) handlePlayToggle();
+    const trackCanvas = event.target.closest(".track-scroll") || document.querySelector(".track-scroll");
+    const contentWidth = Math.max(1, trackCanvas?.getBoundingClientRect().width || 1);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const pointerId = event.pointerId;
+    const minimumStart = Math.min(...selectedClips.map((clip) => clip.start));
+    const maximumEnd = Math.max(...selectedClips.map((clip) => clip.end));
+    const selectedKeys = new Set(
+      selectedClips.map((clip) => timelineSelectionKey(clip.track, clip.id)),
+    );
+    const anchor = selectedClips.find((clip) => clip.track === track && clip.id === id) || selectedClips[0];
+    let latest = { delta: 0, dragging: false, x: startX, y: startY };
+    setTimelineRangeDrag(latest);
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== undefined && pointerId !== undefined && moveEvent.pointerId !== pointerId) return;
+      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
+      if (!latest.dragging && distance < 5) return;
+      moveEvent.preventDefault();
+      const rawDelta = ((moveEvent.clientX - startX) / contentWidth) * timelineDuration;
+      const delta = Math.max(
+        -minimumStart,
+        Math.min(MAX_TIMELINE_DURATION_SECONDS - maximumEnd, rawDelta),
+      );
+      latest = { delta, dragging: true, x: moveEvent.clientX, y: moveEvent.clientY };
+      setTimelineRangeDrag(latest);
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", cancel, true);
+    };
+    const cancel = () => {
+      cleanup();
+      setTimelineRangeDrag(null);
+    };
+    const finish = (upEvent) => {
+      if (upEvent?.pointerId !== undefined && pointerId !== undefined && upEvent.pointerId !== pointerId) return;
+      cleanup();
+      setTimelineRangeDrag(null);
+      if (!latest.dragging) {
+        if (toggleOnClick) {
+          timelineRangeDragClickGuardRef.current = pressedKey;
+          toggleTimelineClipInSelection(track, id);
+          window.setTimeout(() => {
+            if (timelineRangeDragClickGuardRef.current === pressedKey) timelineRangeDragClickGuardRef.current = "";
+          }, 240);
+        }
+        return;
+      }
+      if (Math.abs(latest.delta) < 0.001) return;
+      const delta = latest.delta;
+      timelineRangeDragClickGuardRef.current = pressedKey;
+      setTimelineRangeSelection(new Set(selectedKeys));
+      const selectedVisualIds = new Set(
+        selectedClips.filter((clip) => clip.track === "image").map((clip) => clip.id),
+      );
+      if (selectedVisualIds.size) {
+        setVisualSegments((items) => {
+          const moving = items.filter((segment) => selectedVisualIds.has(segment.id));
+          const remaining = items.filter((segment) => !selectedVisualIds.has(segment.id));
+          if (!moving.length || !remaining.length) return items;
+          const targetTime = Math.max(0, anchor.start + delta);
+          let elapsed = 0;
+          let insertIndex = remaining.length;
+          for (let index = 0; index < remaining.length; index += 1) {
+            const midpoint = elapsed + (remaining[index].duration || 0) / 2;
+            if (targetTime < midpoint) {
+              insertIndex = index;
+              break;
+            }
+            elapsed += remaining[index].duration || 0;
+          }
+          const next = [...remaining];
+          next.splice(insertIndex, 0, ...moving);
+          return next;
+        });
+      }
+      setVisualOverlaySegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("overlay", segment.id))
+        ? { ...segment, start: Math.max(0, segment.start + delta) }
+        : segment));
+      setStickerSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("sticker", segment.id))
+        ? { ...segment, start: Math.max(0, segment.start + delta) }
+        : segment));
+      setCaptionSegments?.((items) => items.map((segment) => {
+        if (!selectedKeys.has(timelineSelectionKey("caption", segment.id))) return segment;
+        const range = selectedClips.find((clip) => clip.track === "caption" && clip.id === segment.id);
+        return {
+          ...segment,
+          start: Math.max(0, (range?.start ?? segment.start ?? 0) + delta),
+          end: Math.max(0.2, (range?.end ?? segment.end ?? 0.2) + delta),
+        };
+      }));
+      setAudioSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("audio", segment.id))
+        ? { ...segment, start: Math.max(0, segment.start + delta) }
+        : segment));
+      if (!sourceAudioLinked && selectedKeys.has(timelineSelectionKey("source", "source-audio"))) {
+        setSourceAudioStart?.((start) => Math.max(0, start + delta));
+      }
+      if (musicSegments.length) {
+        setMusicSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("music", segment.id))
+          ? { ...segment, start: Math.max(0, segment.start + delta) }
+          : segment));
+      } else if (selectedKeys.has(timelineSelectionKey("music", "music-audio"))) {
+        setMusicStart?.((start) => Math.max(0, start + delta));
+      }
+      suppressTimelineClipClickRef.current = id;
+      window.setTimeout(() => {
+        if (suppressTimelineClipClickRef.current === id) suppressTimelineClipClickRef.current = "";
+        if (timelineRangeDragClickGuardRef.current === pressedKey) timelineRangeDragClickGuardRef.current = "";
+      }, 240);
+      notify(t("timelineRangeMoved", "已移动 {count} 个片段").replace("{count}", selectedClips.length));
+    };
+    window.addEventListener("pointermove", move, { capture: true, passive: false });
+    window.addEventListener("pointerup", finish, { capture: true, once: true });
+    window.addEventListener("pointercancel", cancel, { capture: true, once: true });
+    return true;
+  };
 
   const clearClipSelections = (except = "") => {
     if (except !== "overlay") setSelectedVisualOverlayId?.("");
@@ -256,6 +537,19 @@ export function Timeline({
     if (except !== "voice") setSelectedAudioSegmentId("");
     if (except !== "source") setSelectedSourceAudioSegmentId("");
     if (except !== "music") setSelectedMusicSegmentId?.("");
+  };
+  const clearTimelineClipFocus = () => {
+    clearClipSelections();
+    setTimelineRangeSelection(new Set());
+    setContextMenu(null);
+    setMobileClipActionsVisible(false);
+    setMobileClipActionTrack("");
+  };
+  const selectTimelineTrackBackground = (event, track, tool = "") => {
+    if (event.target instanceof Element && event.target.closest("[data-timeline-segment-track]")) return;
+    clearTimelineClipFocus();
+    setSelectedTrack(track);
+    if (tool) setActiveTool(tool);
   };
   const selectedMobileClipTrack = resolveMobileClipActionTrack(mobileClipActionTrack, {
     visual: Boolean(selectedVisualSegmentId),
@@ -468,11 +762,30 @@ export function Timeline({
     return Number.isInteger(laneIndex) ? isOverlayLaneVisible(overlayLanes[laneIndex]) : isRowVisible("overlay");
   };
   const toggleTimelineRowVisibility = (track, visibilityKey = track) => {
+    const willHide = getTimelineRowVisibility(track, visibilityKey);
+    if (willHide) {
+      if (selectedTrack === track) {
+        clearTimelineClipFocus();
+        setSelectedTrack("");
+      }
+      setTimelineRangeSelection((current) => new Set(
+        [...current].filter((key) => !key.startsWith(`${track}:`)),
+      ));
+      setContextMenu(null);
+    }
     if (track === "overlay") {
       const laneIndex = Number(String(visibilityKey).replace(/^overlay-/, ""));
       if (Number.isInteger(laneIndex)) return toggleOverlayLaneVisibility(laneIndex);
     }
     toggleTrackVisibility(visibilityKey);
+  };
+  const toggleTimelineRowLock = (track) => {
+    if (!trackLocks[track]) {
+      setTimelineRangeSelection((current) => new Set(
+        [...current].filter((key) => !key.startsWith(`${track}:`)),
+      ));
+    }
+    toggleTrackLock(track);
   };
   const [rulerViewport, setRulerViewport] = useState({
     scrollLeft: 0,
@@ -515,8 +828,40 @@ export function Timeline({
   };
   const handleTimelineSurfacePointerDown = (event) => {
     if (window.matchMedia?.("(max-width: 760px)").matches) return;
+    clearTimelineClipFocus();
     startTimelineSeek(event);
   };
+  useEffect(() => {
+    const closeSelectionMenu = (event) => {
+      if (event.target?.closest?.(".timeline-selection-tool, .timeline-selection-menu")) return;
+      setTimelineSelectionMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", closeSelectionMenu);
+    return () => window.removeEventListener("pointerdown", closeSelectionMenu);
+  }, []);
+  useEffect(() => {
+    const handleSelectionShortcut = (event) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key === "[") {
+        event.preventDefault();
+        setTimelineSelectionMode("left");
+        setTimelineSelectionMenuOpen(false);
+      }
+      if (event.key === "]") {
+        event.preventDefault();
+        setTimelineSelectionMode("right");
+        setTimelineSelectionMenuOpen(false);
+      }
+      if (event.key === "Escape" && timelineSelectionMode !== "select") {
+        setTimelineSelectionMode("select");
+        setTimelineRangeSelection(new Set());
+      }
+    };
+    window.addEventListener("keydown", handleSelectionShortcut);
+    return () => window.removeEventListener("keydown", handleSelectionShortcut);
+  }, [timelineSelectionMode]);
   const selectContextTarget = (track, segmentId = "") => {
     const isMobileDirectClip = ["audio", "source", "music", "sticker"].includes(track)
       && !shouldActivateToolRailForClip(window.matchMedia?.("(max-width: 760px)").matches ?? false);
@@ -1281,18 +1626,17 @@ export function Timeline({
         key={`sticker-lane-${laneIndex}`}
         className={`sticker-track ${selectedTrack === "sticker" ? "is-selected" : ""} ${
           !isRowVisible("sticker") ? "is-track-disabled" : ""
-        } ${
+        } ${trackLocks.sticker ? "is-track-locked" : ""} ${
           assetDropTargetTrack === "sticker" ? "is-drop-target" : ""
         } ${assetDropPulseTrack === "sticker" ? "is-drop-landing" : ""}`}
-        onClick={() => {
-          setSelectedTrack("sticker");
-          setActiveTool("stickers");
-        }}
+        onClick={(event) => selectTimelineTrackBackground(event, "sticker", "stickers")}
         onDragOver={(event) => handleTrackAssetDragOver(event, "sticker")}
         onDragLeave={(event) => handleTrackAssetDragLeave(event, "sticker")}
         onDrop={(event) => handleTrackAssetDrop(event, "sticker")}
         data-asset-drop-track="sticker"
         data-sticker-lane-index={laneIndex}
+        aria-disabled={!isRowVisible("sticker")}
+        inert={!isRowVisible("sticker") ? true : undefined}
         onContextMenu={(event) => showTrackContextMenu(event, "sticker")}
       >
         {assetDropTargetTrack === "sticker" ? (
@@ -1318,6 +1662,7 @@ export function Timeline({
                   key={segment.id}
                   data-timeline-segment-track="sticker"
                   data-timeline-segment-id={segment.id}
+                  data-range-selected={isRangeSelected("sticker", segment.id) || undefined}
                   style={{
                     "--sticker-left": `${segmentLeft}%`,
                     "--sticker-width": `${segmentWidth}%`,
@@ -1365,9 +1710,11 @@ export function Timeline({
     const laneEnd = lane.reduce((end, segment) => Math.max(end, segment.start + segment.duration), 0);
     return (
     <div
-      className={`visual-overlay-track ${selectedTrack === "overlay" ? "is-selected" : ""} ${!isOverlayLaneVisible(lane) ? "is-track-disabled" : ""} ${assetDropTargetTrack === "overlay" ? "is-drop-target" : ""}`}
+      className={`visual-overlay-track ${selectedTrack === "overlay" ? "is-selected" : ""} ${!isOverlayLaneVisible(lane) ? "is-track-disabled" : ""} ${trackLocks.overlay ? "is-track-locked" : ""} ${assetDropTargetTrack === "overlay" ? "is-drop-target" : ""}`}
       key={`overlay-lane-${laneIndex}`}
-      onClick={() => setSelectedTrack("overlay")}
+      aria-disabled={!isOverlayLaneVisible(lane)}
+      inert={!isOverlayLaneVisible(lane) ? true : undefined}
+      onClick={(event) => selectTimelineTrackBackground(event, "overlay")}
       data-asset-drop-track="overlay"
       data-drop-start-time={laneEnd}
       data-drop-layer={laneIndex + 1}
@@ -1380,7 +1727,7 @@ export function Timeline({
         const width = timelineDuration > 0 ? Math.max(0.01, Math.min(100 - left, segment.duration / timelineDuration * 100)) : 0;
         const active = currentTime >= segment.start && currentTime < segment.start + segment.duration;
         const overlayFrames = segment.type === "video" && segment.trackFrames?.length
-          ? getSampledVideoFrames(segment.trackFrames, getTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth, timelineZoom: localTimelineZoom, availableFrames: MAX_IMAGE_THUMBNAILS }))
+          ? getSampledVideoFrames(segment.trackFrames, getTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth, timelineZoom: localTimelineZoom, availableFrames: MAX_IMAGE_THUMBNAILS }), segment)
           : [];
         const overlayImageCount = segment.type !== "video"
           ? getImageTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth })
@@ -1410,7 +1757,9 @@ export function Timeline({
             if (!dragging) { dragging = true; if (isPlaying) handlePlayToggle(); }
             moveEvent.preventDefault();
             autoScroller?.update(moveEvent.clientX);
-            const mainTrack = mode === "move" ? document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest?.('[data-asset-drop-track="image"]') : null;
+            const mainTrack = mode === "move" && !trackLocks.image
+              ? document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest?.('[data-asset-drop-track="image"]')
+              : null;
             promoteToMain = Boolean(mainTrack);
             if (promoteToMain) {
               const clips = Array.from(mainTrack.querySelectorAll('[data-timeline-segment-track="image"]'));
@@ -1469,7 +1818,7 @@ export function Timeline({
           window.addEventListener("pointerup", end, { once: true });
           window.addEventListener("pointercancel", cancel, { once: true });
         };
-        return <div className={`visual-overlay-clip ${segment.type === "video" ? "is-video" : "is-image"} ${active ? "is-current" : ""} ${segment.id === selectedVisualOverlayId ? "is-selected-segment" : ""}`} role="button" tabIndex={0} key={segment.id} data-timeline-segment-track="overlay" data-timeline-segment-id={segment.id} style={{ "--overlay-left": `${left}%`, "--overlay-width": `${width}%` }} onPointerDown={(event) => startOverlayEdit(event, "move")} onContextMenu={(event) => showTrackContextMenu(event, "overlay", segment.id)} onClick={(event) => {
+        return <div className={`visual-overlay-clip ${segment.type === "video" ? "is-video" : "is-image"} ${active ? "is-current" : ""} ${segment.id === selectedVisualOverlayId ? "is-selected-segment" : ""}`} role="button" tabIndex={0} key={segment.id} data-timeline-segment-track="overlay" data-timeline-segment-id={segment.id} data-range-selected={isRangeSelected("overlay", segment.id) || undefined} style={{ "--overlay-left": `${left}%`, "--overlay-width": `${width}%` }} onPointerDown={(event) => startOverlayEdit(event, "move")} onContextMenu={(event) => showTrackContextMenu(event, "overlay", segment.id)} onClick={(event) => {
           event.stopPropagation();
           clearClipSelections("overlay");
           setSelectedVisualOverlayId?.(segment.id);
@@ -1516,8 +1865,56 @@ export function Timeline({
   };
 
   return (
-    <section className="timeline" onPointerDownCapture={(event) => {
-      if (!window.matchMedia?.("(max-width: 760px)").matches || !(event.target instanceof Element)) return;
+    <section
+      className={`timeline is-selection-mode-${timelineSelectionMode} ${timelineRangeDrag?.dragging ? "is-range-dragging" : ""}`}
+      style={{ "--range-drag-x": `${timelineRangeDrag?.dragging ? timelineRangeDrag.delta / Math.max(0.001, timelineDuration) * Math.max(1, rulerViewport.contentWidth) : 0}px` }}
+      onClickCapture={(event) => {
+        if (!timelineRangeDragClickGuardRef.current) return;
+        event.preventDefault();
+        event.stopPropagation();
+        timelineRangeDragClickGuardRef.current = "";
+      }}
+      onPointerDownCapture={(event) => {
+      if (!(event.target instanceof Element)) return;
+      // A real follow-up pointer gesture is intentional user input, so it
+      // ends the one-shot guard reserved for the synthetic click after drag.
+      if (timelineRangeDragClickGuardRef.current && !timelineRangeDrag) {
+        timelineRangeDragClickGuardRef.current = "";
+      }
+      const isMobileTimeline = window.matchMedia?.("(max-width: 760px)").matches;
+      const desktopPressedSegment = !isMobileTimeline
+        ? event.target.closest("[data-timeline-segment-track]")
+        : null;
+      if (
+        desktopPressedSegment
+        && timelineSelectionMode === "select"
+        && startTimelineRangeDrag(
+          event,
+          desktopPressedSegment.dataset.timelineSegmentTrack,
+          desktopPressedSegment.dataset.timelineSegmentId,
+          { toggleOnClick: event.shiftKey },
+        )
+      ) return;
+      if (desktopPressedSegment && timelineSelectionMode === "select" && event.shiftKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleTimelineClipInSelection(
+          desktopPressedSegment.dataset.timelineSegmentTrack,
+          desktopPressedSegment.dataset.timelineSegmentId,
+        );
+        return;
+      }
+      if (desktopPressedSegment && timelineSelectionMode !== "select") {
+        event.preventDefault();
+        event.stopPropagation();
+        selectTimelineRangeFromClip(
+          desktopPressedSegment.dataset.timelineSegmentTrack,
+          desktopPressedSegment.dataset.timelineSegmentId,
+        );
+        return;
+      }
+      if (desktopPressedSegment && timelineRangeSelection.size) setTimelineRangeSelection(new Set());
+      if (!isMobileTimeline) return;
       const pressedSegment = event.target.closest("[data-timeline-segment-track]");
       if (pressedSegment?.dataset.timelineSegmentTrack) {
         setMobileClipActionTrack(pressedSegment.dataset.timelineSegmentTrack);
@@ -1525,6 +1922,12 @@ export function Timeline({
       } else if (event.target.closest(".track-scroll, .track-labels, .timeline-ruler-viewport")) {
         setMobileClipActionsVisible(false);
         setMobileClipActionTrack("");
+        if (
+          event.target.closest(".track-scroll, .timeline-ruler-viewport")
+          && !event.target.closest("[data-timeline-segment-track], button, [role='slider']")
+        ) {
+          clearTimelineClipFocus();
+        }
       }
     }}>
       <div className="timeline-tools">
@@ -1544,13 +1947,55 @@ export function Timeline({
           <IconButton label={t("cutSegment")} onClick={handleCutTrack}>
             <Scissors size={17} />
           </IconButton>
-          <IconButton
-            label={t("cropCanvas")}
-            active={fitMode === "cover"}
-            onClick={() => setFitMode((mode) => (mode === "cover" ? "contain" : "cover"))}
-          >
-            <Crop size={17} />
-          </IconButton>
+          <div className={`timeline-selection-tool ${timelineSelectionMenuOpen ? "is-open" : ""}`}>
+            <button
+              ref={timelineSelectionTriggerRef}
+              type="button"
+              className={`timeline-selection-trigger ${timelineSelectionMode !== "select" ? "is-active" : ""}`}
+              aria-label={t("timelineSelectionTools", "选择工具")}
+              aria-haspopup="menu"
+              aria-expanded={timelineSelectionMenuOpen}
+              onClick={() => setTimelineSelectionMenuOpen((open) => !open)}
+            >
+              {timelineSelectionMode === "left"
+                ? <ArrowLineLeft size={17} weight="bold" />
+                : timelineSelectionMode === "right"
+                  ? <ArrowLineRight size={17} weight="bold" />
+                  : <CursorClick size={17} />}
+              <CaretDown size={11} weight="bold" />
+            </button>
+            {timelineSelectionMenuOpen && typeof document !== "undefined" ? createPortal((
+              <div
+                className="timeline-selection-menu"
+                role="menu"
+                style={{
+                  left: timelineSelectionTriggerRef.current?.getBoundingClientRect().left ?? 0,
+                  top: (timelineSelectionTriggerRef.current?.getBoundingClientRect().bottom ?? 0) + 6,
+                }}
+              >
+                {[
+                  ["select", CursorClick, t("timelineSelect", "选择")],
+                  ["left", ArrowLineLeft, t("timelineSelectLeft", "向左全选")],
+                  ["right", ArrowLineRight, t("timelineSelectRight", "向右全选")],
+                ].map(([mode, Icon, label]) => (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={timelineSelectionMode === mode}
+                    className={timelineSelectionMode === mode ? "is-selected" : ""}
+                    key={mode}
+                    onClick={() => {
+                      setTimelineSelectionMode(mode);
+                      setTimelineSelectionMenuOpen(false);
+                    }}
+                  >
+                    <Icon size={19} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+            ), document.body) : null}
+          </div>
           <IconButton
             label={t(sourceAudioLinked ? "unlinkSourceAudio" : "linkSourceAudio")}
             active={sourceAudioLinked}
@@ -1633,14 +2078,16 @@ export function Timeline({
           </div>
         </div>
         <div className="track-labels" style={{ gridTemplateRows: timelineLabelRows }}>
-          {timelineTrackLabels.map(([track, label, rowId = track, visibilityKey = track]) => (
-            <div
-              className={`${selectedTrack === track ? "is-selected" : ""} ${
-                !getTimelineRowVisibility(track, visibilityKey) ? "is-track-disabled" : ""
-              } ${trackLocks[track] ? "is-track-locked" : ""}`}
-              key={rowId}
-              onContextMenu={(event) => showTrackContextMenu(event, track, "", visibilityKey)}
-            >
+          {timelineTrackLabels.map(([track, label, rowId = track, visibilityKey = track]) => {
+            const rowVisible = getTimelineRowVisibility(track, visibilityKey);
+            return (
+              <div
+                className={`${selectedTrack === track && rowVisible ? "is-selected" : ""} ${
+                  !rowVisible ? "is-track-disabled" : ""
+                } ${trackLocks[track] ? "is-track-locked" : ""}`}
+                key={rowId}
+                onContextMenu={rowVisible ? (event) => showTrackContextMenu(event, track, "", visibilityKey) : undefined}
+              >
               <button
                 type="button"
                 aria-label={`${label} ${t("visible")}`}
@@ -1655,18 +2102,20 @@ export function Timeline({
                 type="button"
                 aria-label={`${label} ${t("lock")}`}
                 aria-pressed={Boolean(trackLocks[track])}
+                disabled={!rowVisible}
                 onClick={(event) => {
                   event.stopPropagation();
-                  toggleTrackLock(track);
+                  toggleTimelineRowLock(track);
                 }}
               >
                 {trackLocks[track] ? <LockKey size={15} /> : <LockKeyOpen size={15} />}
               </button>
-              <button className="track-name-button" type="button" onClick={() => setSelectedTrack(track)}>
+              <button className="track-name-button" type="button" disabled={!rowVisible} onClick={() => setSelectedTrack(track)}>
                 {label}
               </button>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
 
         <div className="tracks">
@@ -1708,12 +2157,14 @@ export function Timeline({
             <div
               className={`image-track ${selectedTrack === "image" ? "is-selected" : ""} ${
                 !trackVisibility.image ? "is-track-disabled" : ""
-              } ${
+              } ${trackLocks.image ? "is-track-locked" : ""} ${
                 assetDropTargetTrack === "image" || assetDropTargetTrack === "overlay" || overlayPromotionTarget ? `is-drop-target is-drop-${overlayPromotionTarget ? "image" : assetDropTargetTrack}` : ""
               } ${assetDropPulseTrack === "image" ? "is-drop-landing" : ""} ${
                 activeTimelineClipDrag?.track === "image" ? "is-reordering" : ""
               }`}
-              onClick={() => setSelectedTrack("image")}
+              aria-disabled={!trackVisibility.image}
+              inert={!trackVisibility.image ? true : undefined}
+              onClick={(event) => selectTimelineTrackBackground(event, "image")}
               onDragLeave={(event) => handleTrackAssetDragLeave(event, "image")}
               onDragOver={(event) => {
                 if (event.dataTransfer?.types.includes("application/x-timeline-visual-style")) event.preventDefault();
@@ -1753,9 +2204,7 @@ export function Timeline({
                     const isCurrentVisualSegment =
                       segment.id === currentVisualSegment?.id ||
                       (currentTime >= (segmentRange?.start ?? 0) && currentTime < (segmentRange?.end ?? 0));
-                    const isSelectedVisualSegment =
-                      segment.id === selectedVisualSegmentId ||
-                      (!selectedVisualSegmentId && index === currentVisualSegmentIndex);
+                    const isSelectedVisualSegment = segment.id === selectedVisualSegmentId;
                     const isDraggingVisualSegment =
                       activeTimelineClipDrag?.track === "image" &&
                       activeTimelineClipDrag.segmentId === segment.id;
@@ -1782,7 +2231,7 @@ export function Timeline({
                     });
                     const visibleVideoFrames = segmentType === "video"
                       ? videoTrackFrames.length
-                        ? getSampledVideoFrames(videoTrackFrames, desiredVideoFrameCount)
+                        ? getSampledVideoFrames(videoTrackFrames, desiredVideoFrameCount, segment)
                         : segment.thumbnail
                           ? Array.from({ length: desiredVideoFrameCount }, () => segment.thumbnail)
                           : []
@@ -1797,6 +2246,7 @@ export function Timeline({
                         data-timeline-segment-track="image"
                         data-timeline-segment-index={index}
                         data-timeline-segment-id={segment.id}
+                        data-range-selected={isRangeSelected("image", segment.id) || undefined}
                         data-placeholder={t("dropSlot", "放置位置")}
                         style={{
                           "--image-clip-width": `${segmentWidth}%`,
@@ -1954,14 +2404,13 @@ export function Timeline({
               <div
                 className={`caption-track ${selectedTrack === "caption" ? "is-selected" : ""} ${
                   !isRowVisible(`caption-${laneIndex}`) ? "is-track-disabled" : ""
-                } ${
+                } ${trackLocks.caption ? "is-track-locked" : ""} ${
                   activeTimelineClipDrag?.track === "caption" ? "is-reordering" : ""
                 }`}
                 key={`caption-lane-${laneIndex}`}
-                onClick={() => {
-                  setSelectedTrack("caption");
-                  setActiveTool("caption");
-                }}
+                aria-disabled={!isRowVisible(`caption-${laneIndex}`)}
+                inert={!isRowVisible(`caption-${laneIndex}`) ? true : undefined}
+                onClick={(event) => selectTimelineTrackBackground(event, "caption", "caption")}
                 data-timeline-reorder-track="caption"
                 onContextMenu={(event) => showTrackContextMenu(event, "caption", "", `caption-${laneIndex}`)}
               >
@@ -1996,6 +2445,7 @@ export function Timeline({
                         data-timeline-segment-track="caption"
                         data-timeline-segment-index={index}
                         data-timeline-segment-id={segment.id}
+                        data-range-selected={isRangeSelected("caption", segment.id) || undefined}
                         data-placeholder={t("dropSlot", "放置位置")}
                         style={{
                           "--caption-left": `${segmentLeft}%`,
@@ -2034,14 +2484,12 @@ export function Timeline({
             {showSourceTrack ? <button
               className={`audio-track source-track ${selectedTrack === "source" ? "is-selected" : ""} ${
                 !trackVisibility.source ? "is-track-disabled" : ""
-              } ${
+              } ${trackLocks.source ? "is-track-locked" : ""} ${
                 assetDropTargetTrack === "source" ? "is-drop-target" : ""
               } ${assetDropPulseTrack === "source" ? "is-drop-landing" : ""}`}
               type="button"
-              onClick={() => {
-                setSelectedTrack("source");
-                setSelectedSourceAudioSegmentId("");
-              }}
+              disabled={!trackVisibility.source}
+              onClick={(event) => selectTimelineTrackBackground(event, "source")}
               onDragOver={(event) => handleTrackAssetDragOver(event, "source")}
               onDragLeave={(event) => handleTrackAssetDragLeave(event, "source")}
               onDrop={(event) => handleTrackAssetDrop(event, "source")}
@@ -2064,6 +2512,7 @@ export function Timeline({
                   key={segment.id}
                   data-timeline-segment-track="source"
                   data-timeline-segment-id={segment.id}
+                  data-range-selected={isRangeSelected("source", segment.id) || undefined}
                   style={{
                     width: `${timelineDuration > 0 ? Math.max(0.01, Math.min(100, (segment.duration / timelineDuration) * 100)) : 0}%`,
                     left: `${timelineDuration > 0 ? Math.max(0, Math.min(100, (segment.start / timelineDuration) * 100)) : 0}%`,
@@ -2089,6 +2538,7 @@ export function Timeline({
                   className={`audio-clip is-source ${selectedSourceAudioSegmentId === "source-audio" ? "is-selected" : ""}`}
                   data-timeline-segment-track="source"
                   data-timeline-segment-id="source-audio"
+                  data-range-selected={isRangeSelected("source", "source-audio") || undefined}
                   style={{
                     width: `${sourceAudioClipPercent}%`,
                     marginLeft: `${sourceAudioStartPercent}%`,
@@ -2115,12 +2565,13 @@ export function Timeline({
               <button
                 className={`audio-track ${selectedTrack === "audio" ? "is-selected" : ""} ${
                   !isRowVisible("audio") ? "is-track-disabled" : ""
-                } ${
+                } ${trackLocks.audio ? "is-track-locked" : ""} ${
                   laneIndex === 0 && assetDropTargetTrack === "audio" ? "is-drop-target" : ""
                 } ${laneIndex === 0 && assetDropPulseTrack === "audio" ? "is-drop-landing" : ""}`}
                 type="button"
+                disabled={!isRowVisible("audio")}
                 key={`audio-lane-${laneIndex}`}
-                onClick={() => setSelectedTrack("audio")}
+                onClick={(event) => selectTimelineTrackBackground(event, "audio")}
                 onDragOver={(event) => laneIndex === 0 && handleTrackAssetDragOver(event, "audio")}
                 onDragLeave={(event) => laneIndex === 0 && handleTrackAssetDragLeave(event, "audio")}
                 onDrop={(event) => laneIndex === 0 && handleTrackAssetDrop(event, "audio")}
@@ -2140,6 +2591,7 @@ export function Timeline({
                         key={segment.id}
                         data-timeline-segment-track="audio"
                         data-timeline-segment-id={segment.id}
+                        data-range-selected={isRangeSelected("audio", segment.id) || undefined}
                         style={{ left: `${left}%`, width: `${width}%` }}
                         onPointerDown={(event) => startAudioSegmentMove(event, segment.id)}
                         onContextMenu={(event) => showTrackContextMenu(event, "audio", segment.id)}
@@ -2165,14 +2617,12 @@ export function Timeline({
             {showMusicTrack ? <button
               className={`audio-track music-track ${selectedTrack === "music" ? "is-selected" : ""} ${
                 !trackVisibility.music ? "is-track-disabled" : ""
-              } ${
+              } ${trackLocks.music ? "is-track-locked" : ""} ${
                 assetDropTargetTrack === "music" ? "is-drop-target" : ""
               } ${assetDropPulseTrack === "music" ? "is-drop-landing" : ""}`}
               type="button"
-              onClick={() => {
-                setSelectedTrack("music");
-                setSelectedMusicSegmentId?.("");
-              }}
+              disabled={!trackVisibility.music}
+              onClick={(event) => selectTimelineTrackBackground(event, "music")}
               onDragOver={(event) => handleTrackAssetDragOver(event, "music")}
               onDragLeave={(event) => handleTrackAssetDragLeave(event, "music")}
               onDrop={(event) => handleTrackAssetDrop(event, "music")}
@@ -2184,7 +2634,7 @@ export function Timeline({
                 ) : null}
               {renderAssetDropSlot("music")}
               {musicBlob ? (musicSegments.length ? musicSegments : [{ id: "music-audio", start: musicStartPercent / 100 * timelineDuration, duration: musicDuration, peaks: musicPeaks }]).map((segment) => (
-                <div className={`audio-clip is-music ${selectedMusicSegmentId === segment.id ? "is-selected" : ""}`} key={segment.id} data-timeline-segment-track="music" data-timeline-segment-id={segment.id} style={{ width: `${timelineDuration > 0 ? segment.duration / timelineDuration * 100 : 0}%`, left: `${timelineDuration > 0 ? segment.start / timelineDuration * 100 : 0}%` }} onPointerDown={startMusicMove} onContextMenu={(event) => showTrackContextMenu(event, "music", segment.id)} onClick={(event) => { event.stopPropagation(); if (suppressTimelineClipClickRef.current === "music") return void (suppressTimelineClipClickRef.current = ""); setSelectedTrack("music"); activateAudioToolForClipSelection(); clearClipSelections("music"); setSelectedMusicSegmentId?.(segment.id); ensureMobileTimedClipVisible(segment.id); revealMobileClipActions("music"); }}>
+                <div className={`audio-clip is-music ${selectedMusicSegmentId === segment.id ? "is-selected" : ""}`} key={segment.id} data-timeline-segment-track="music" data-timeline-segment-id={segment.id} data-range-selected={isRangeSelected("music", segment.id) || undefined} style={{ width: `${timelineDuration > 0 ? segment.duration / timelineDuration * 100 : 0}%`, left: `${timelineDuration > 0 ? segment.start / timelineDuration * 100 : 0}%` }} onPointerDown={startMusicMove} onContextMenu={(event) => showTrackContextMenu(event, "music", segment.id)} onClick={(event) => { event.stopPropagation(); if (suppressTimelineClipClickRef.current === "music") return void (suppressTimelineClipClickRef.current = ""); setSelectedTrack("music"); activateAudioToolForClipSelection(); clearClipSelections("music"); setSelectedMusicSegmentId?.(segment.id); ensureMobileTimedClipVisible(segment.id); revealMobileClipActions("music"); }}>
                   <WaveformStrip peaks={segment.peaks?.length ? segment.peaks : musicPeaks} active />
                   <span className="audio-clip-duration" data-compact-duration={formatCompactDuration(segment.duration)}>{formatTime(segment.duration)}</span>
                 </div>
@@ -2217,6 +2667,16 @@ export function Timeline({
           <strong>{draggingCaptionSegment.text}</strong>
         </div>
       ) : null}
+      {timelineRangeDrag?.dragging && typeof document !== "undefined" ? createPortal((
+        <div
+          className="timeline-range-drag-preview"
+          style={{ left: timelineRangeDrag.x + 14, top: timelineRangeDrag.y + 14 }}
+        >
+          <span>{timelineRangeSelection.size}</span>
+          <strong>{t("timelineMovingSelection", "移动选中片段")}</strong>
+          <em>{timelineRangeDrag.delta >= 0 ? "+" : ""}{timelineRangeDrag.delta.toFixed(2)}s</em>
+        </div>
+      ), document.body) : null}
       {mobileClipActionsVisible && selectedMobileClipTrack && typeof document !== "undefined" ? createPortal((
         <nav className={`timeline-mobile-clip-actions ${mobileClipActionIds.length > 5 ? "is-scroll-actions" : ""}`} aria-label={t("clipActions")}>
           <button className="is-back" type="button" onClick={() => { closeMobileClipActions(); clearClipSelections(); }}><ArrowLeft size={21} /><span>{t("mobileClipDismiss")}</span></button>
@@ -2300,7 +2760,7 @@ export function Timeline({
             <>
               {["image", "caption"].includes(contextMenu.track) ? <button type="button" role="menuitem" onClick={() => runContextAction(() => handleAddSegment(contextMenu.targetTime))}><PlusCircle size={16} />{t("addClip")}</button> : null}
               <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track))}>{getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? <EyeSlash size={16} /> : <Eye size={16} />}{t(getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? "hideTrack" : "showTrack")}</button>
-              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTrackLock(contextMenu.track))}>{trackLocks[contextMenu.track] ? <LockKeyOpen size={16} /> : <LockKey size={16} />}{t(trackLocks[contextMenu.track] ? "unlockTrack" : "lockTrack")}</button>
+              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowLock(contextMenu.track))}>{trackLocks[contextMenu.track] ? <LockKeyOpen size={16} /> : <LockKey size={16} />}{t(trackLocks[contextMenu.track] ? "unlockTrack" : "lockTrack")}</button>
             </>
           )}
         </div>

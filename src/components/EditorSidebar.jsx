@@ -1,28 +1,86 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CaretDown } from "@phosphor-icons/react";
 import { TOOL_RAIL } from "../config/editor.js";
 import { MediaPanel, ToolPanel } from "./panels.jsx";
 
 export function EditorSidebar({ model: d }) {
+  const toolRailRef = useRef(null);
+  const [toolRailOverflow, setToolRailOverflow] = useState({ hasOverflow: false, canScrollDown: false });
+
+  const updateToolRailOverflow = useCallback(() => {
+    const rail = toolRailRef.current;
+    if (!rail) return;
+    const hasOverflow = rail.scrollHeight > rail.clientHeight + 2;
+    const canScrollDown = hasOverflow && rail.scrollTop + rail.clientHeight < rail.scrollHeight - 2;
+    setToolRailOverflow((current) => (
+      current.hasOverflow === hasOverflow && current.canScrollDown === canScrollDown
+        ? current
+        : { hasOverflow, canScrollDown }
+    ));
+  }, []);
+
+  useEffect(() => {
+    const rail = toolRailRef.current;
+    if (!rail) return undefined;
+    const frame = window.requestAnimationFrame(updateToolRailOverflow);
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateToolRailOverflow);
+    resizeObserver?.observe(rail);
+    window.addEventListener("resize", updateToolRailOverflow);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateToolRailOverflow);
+    };
+  }, [d.compactRail, updateToolRailOverflow]);
+
   return (
     <>
-      <aside className={`tool-rail ${d.compactRail ? "is-compact" : ""}`} aria-label={d.t("toolbar")}>
-        {TOOL_RAIL.map(({ id, label, icon: Icon }) => (
+      <div className="tool-rail-shell">
+        <aside
+          ref={toolRailRef}
+          id="editor-tool-rail"
+          className={`tool-rail ${d.compactRail ? "is-compact" : ""} ${toolRailOverflow.hasOverflow ? "has-overflow" : ""}`}
+          aria-label={d.t("toolbar")}
+          onScroll={updateToolRailOverflow}
+        >
+          {TOOL_RAIL.map(({ id, label, icon: Icon }) => (
+            <button
+              className={`rail-tool ${d.activeTool === id ? "is-active" : ""}`}
+              type="button"
+              key={id}
+              onClick={() => {
+                d.selectTool(id);
+                if (window.matchMedia?.("(max-width: 760px)").matches) {
+                  const defaultPanel = id === "caption" ? "inspector" : "tools";
+                  d.setMobilePanel?.(d.mobilePanel === defaultPanel && d.activeTool === id ? "" : defaultPanel);
+                }
+              }}
+            >
+              <Icon size={23} />
+              <span>{d.t(id, label)}</span>
+            </button>
+          ))}
+        </aside>
+        {toolRailOverflow.canScrollDown ? (
           <button
-            className={`rail-tool ${d.activeTool === id ? "is-active" : ""}`}
+            className="tool-rail-more"
             type="button"
-            key={id}
+            aria-label={d.t("moreTools", "More tools")}
+            aria-controls="editor-tool-rail"
             onClick={() => {
-              d.selectTool(id);
-              if (window.matchMedia?.("(max-width: 760px)").matches) {
-                const defaultPanel = id === "caption" ? "inspector" : "tools";
-                d.setMobilePanel?.(d.mobilePanel === defaultPanel && d.activeTool === id ? "" : defaultPanel);
-              }
+              const rail = toolRailRef.current;
+              rail?.scrollBy({
+                top: Math.max(64, rail.clientHeight * 0.55),
+                behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+              });
             }}
           >
-            <Icon size={23} />
-            <span>{d.t(id, label)}</span>
+            <CaretDown size={18} weight="bold" />
           </button>
-        ))}
-      </aside>
+        ) : null}
+      </div>
 
       <aside className={`media-panel ${d.mobilePanel === "tools" && d.selectedLibraryAssetId ? "has-mobile-asset-actions" : ""} ${d.mobilePanel === "tools" && d.activeTool === "stickers" ? "has-mobile-sticker-actions" : ""}`}>
         {d.activeTool === "media" ? (
@@ -154,7 +212,15 @@ export function EditorSidebar({ model: d }) {
             effectPhase={d.effectPhase}
             updateSelectedSubjectEffect={d.updateSelectedSubjectEffect}
             removeSelectedSubjectEffect={d.removeSelectedSubjectEffect}
-            openEffectsInspector={() => d.setMobilePanel?.("inspector")}
+            effectsPanelMode={d.effectsPanelMode}
+            openEffectsInspector={() => {
+              d.setEffectsPanelMode?.("outline");
+              d.setMobilePanel?.("inspector");
+            }}
+            openFaceSwapInspector={() => {
+              d.setEffectsPanelMode?.("face-swap");
+              d.setMobilePanel?.("inspector");
+            }}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
             miganRepair={d.miganRepair}

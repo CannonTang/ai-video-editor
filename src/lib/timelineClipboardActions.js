@@ -1,6 +1,6 @@
 import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
 import { downloadBlob } from "./media.js";
-import { createVisualSegment, makeId } from "./timeline.js";
+import { cloneVisualSegment, createVisualSegment, getVisualSegmentsTotal, makeId } from "./timeline.js";
 
 export function createTimelineClipboardActions(d) {
   const focusedStickerIndex = () => {
@@ -66,7 +66,7 @@ export function createTimelineClipboardActions(d) {
     if (d.selectedTrack === "overlay") {
       const source = d.visualOverlaySegments.find((segment) => segment.id === d.selectedVisualOverlayId);
       if (!source) return void d.notify("请先选择一个画中画片段");
-      const copy = { ...source, id: makeId("overlay"), name: `${source.name || "画中画"} 副本`, start: Math.min(MAX_TIMELINE_DURATION_SECONDS - source.duration, source.start + 0.2), layer: d.visualOverlaySegments.length + 1 };
+      const copy = cloneVisualSegment(source, { id: makeId("overlay"), name: `${source.name || "画中画"} 副本`, start: Math.min(MAX_TIMELINE_DURATION_SECONDS - source.duration, source.start + 0.2), layer: d.visualOverlaySegments.length + 1 });
       d.setVisualOverlaySegments((items) => [...items, copy]);
       d.setSelectedVisualOverlayId(copy.id);
       return void d.notify("已复制画中画片段");
@@ -84,13 +84,22 @@ export function createTimelineClipboardActions(d) {
       return void d.commitCaptionSegments(next, "已复制当前字幕片段", index + 1);
     }
     if (d.selectedTrack === "image") {
-      if (!d.imageSrc) return void d.notify("当前没有可复制的图片素材");
+      if (!d.imageSrc) return void d.notify("当前没有可复制的视觉片段");
       const source = d.visualSegments.length ? d.visualSegments : [createVisualSegment(d.imageDuration || 4, d.getCurrentVisualAssetSnapshot())];
-      const segment = source[d.selectedVisualSegmentId && source.some((item) => item.id === d.selectedVisualSegmentId) ? d.selectedVisualSegmentIndex : Math.max(0, d.currentVisualSegmentIndex)] ?? d.getCurrentVisualAssetSnapshot();
-      d.setUserAssets((assets) => [{ id: crypto.randomUUID(), type: segment.type || d.visualType, src: segment.src || d.imageSrc,
-        name: `${(segment.name || d.imageName).replace(/\.[^.]+$/, "")}-copy.${(segment.type || d.visualType) === "video" ? "mp4" : "png"}`,
-        meta: segment.meta || d.imageMeta, duration: segment.duration || d.imageDuration, blob: segment.blob || null }, ...assets]);
-      return void d.notify("当前图片已复制到我的素材");
+      const index = d.selectedVisualSegmentId && source.some((item) => item.id === d.selectedVisualSegmentId)
+        ? d.selectedVisualSegmentIndex
+        : Math.max(0, d.currentVisualSegmentIndex);
+      const segment = source[index];
+      if (!segment) return void d.notify("当前没有可复制的视觉片段");
+      if (getVisualSegmentsTotal(source) + segment.duration > MAX_TIMELINE_DURATION_SECONDS) {
+        return void d.notify("视觉轨道已经达到 30 分钟上限");
+      }
+      const copy = cloneVisualSegment(segment, {
+        id: makeId("visual"),
+      });
+      const next = [...source];
+      next.splice(index + 1, 0, copy);
+      return void d.commitVisualSegments(next, "已复制当前视觉片段", index + 1);
     }
     if (d.selectedTrack === "audio") {
       const source = d.selectedAudioSegment; if (!source) return void d.notify(d.t("audioClipMissing"));

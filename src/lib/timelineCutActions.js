@@ -1,6 +1,8 @@
 import { MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
-import { createVisualSegment, getVisualSegmentTimeline, getVisualSegmentsTotal, hasExplicitCaptionTiming, makeId } from "./timeline.js";
+import { cloneVisualSegment, createVisualSegment, getVisualSegmentTimeline, getVisualSegmentsTotal, makeId, materializeCaptionTimings } from "./timeline.js";
 import { normalizeVisualKeyframes, resolveVisualTransform } from "./visualEffects.js";
+
+const MIN_CAPTION_SPLIT_SECONDS = 0.2;
 
 function splitVisualKeyframes(keyframes, splitTime, duration, baseTransform) {
   const frames = normalizeVisualKeyframes(keyframes);
@@ -20,6 +22,29 @@ function splitVisualKeyframes(keyframes, splitTime, duration, baseTransform) {
   };
 }
 
+export function splitVisualSegmentState(source, firstDuration, secondDuration) {
+  const playbackRate = source.type === "video"
+    ? Math.max(0.25, Math.min(4, Number(source.playbackRate) || 1))
+    : 1;
+  const sourceStart = Math.max(0, Number(source.sourceStart) || 0);
+  return [
+    cloneVisualSegment(source, {
+      id: makeId("visual"),
+      duration: firstDuration,
+      sourceDuration: source.type === "video" ? firstDuration * playbackRate : source.sourceDuration,
+      sourceStart,
+    }),
+    cloneVisualSegment(source, {
+      id: makeId("visual"),
+      duration: secondDuration,
+      sourceDuration: source.type === "video" ? secondDuration * playbackRate : source.sourceDuration,
+      sourceStart: source.type === "video"
+        ? sourceStart + firstDuration * playbackRate
+        : sourceStart,
+    }),
+  ];
+}
+
 export function createTimelineCutActions(d) {
   const handleCutVisualSegment = () => {
     if (d.trackLocks.image) return void d.notify("图片轨已锁定，无法剪切");
@@ -35,26 +60,28 @@ export function createTimelineCutActions(d) {
     if (!source || !range) return void d.notify("请先选中要剪切的视觉片段");
     const firstDuration = time - range.start; const secondDuration = range.end - time;
     if (firstDuration < MIN_VISUAL_SEGMENT_SECONDS || secondDuration < MIN_VISUAL_SEGMENT_SECONDS) return void d.notify("切点离片段边缘太近，先把播放头移到片段中间");
-    const playbackRate = source.type === "video" ? Math.max(0.25, Math.min(4, Number(source.playbackRate) || 1)) : 1;
-    const first = { ...source, id: makeId("visual"), duration: firstDuration,
-      sourceDuration: source.type === "video" ? firstDuration * playbackRate : source.sourceDuration };
-    const second = { ...source, id: makeId("visual"), duration: secondDuration,
-      sourceDuration: source.type === "video" ? secondDuration * playbackRate : source.sourceDuration,
-      sourceStart: source.type === "video" ? Math.max(0, Number(source.sourceStart) || 0) + firstDuration * playbackRate : Math.max(0, Number(source.sourceStart) || 0) };
+    const [first, second] = splitVisualSegmentState(source, firstDuration, secondDuration);
     const next = [...segments]; next.splice(index, 1, first, second);
     d.commitVisualSegments(next, "已在播放头位置切开视觉片段", index + 1);
   };
   const handleCutCaption = () => {
     if (d.trackLocks.caption) return void d.notify("字幕轨已锁定，无法剪切");
     const index = d.selectedSegmentId ? d.selectedSegmentIndex : d.focusedSegmentIndex;
-    const source = d.captionSegments[index];
-    if (!source || source.text.length < 6) return void d.notify("当前字幕太短，不适合继续拆分");
-    const splitAt = Math.max(2, Math.ceil(source.text.length / 2));
-    const splitTime = hasExplicitCaptionTiming(source) && source.end - source.start > 0.4 ? source.start + (source.end - source.start) / 2 : null;
-    const next = [...d.captionSegments]; next.splice(index, 1,
-      { ...source, id: makeId("caption"), text: source.text.slice(0, splitAt), weight: Math.max(0.7, (source.weight ?? 1) / 2), ...(splitTime ? { end: splitTime } : {}) },
-      { ...source, id: makeId("caption"), text: source.text.slice(splitAt), weight: Math.max(0.7, (source.weight ?? 1) / 2), ...(splitTime ? { start: splitTime } : {}) });
-    d.commitCaptionSegments(next, "已把当前字幕片段拆成两段", index + 1);
+    const timedSegments = materializeCaptionTimings(d.captionSegments, d.captionTargetDuration);
+    const source = timedSegments[index];
+    if (!source) return void d.notify("请先选择一个字幕片段");
+    const splitTime = Math.max(source.start, Math.min(source.end, d.currentTime));
+    if (
+      splitTime <= source.start + MIN_CAPTION_SPLIT_SECONDS
+      || splitTime >= source.end - MIN_CAPTION_SPLIT_SECONDS
+    ) {
+      return void d.notify("请把播放头放在字幕片段中间再剪切");
+    }
+    const next = [...timedSegments];
+    next.splice(index, 1,
+      { ...source, id: makeId("caption"), end: splitTime },
+      { ...source, id: makeId("caption"), start: splitTime });
+    d.commitCaptionSegments(next, "已在播放头位置切开字幕片段", index + 1);
   };
   const handleCutAudioSegment = () => {
     if (d.trackLocks.audio) return void d.notify("配音轨已锁定，无法剪切");
@@ -149,15 +176,13 @@ export function createTimelineCutActions(d) {
     const secondId = makeId("overlay");
     const playbackRate = source.type === "video" ? Math.max(0.25, Math.min(4, Number(source.playbackRate) || 1)) : 1;
     const keyframes = splitVisualKeyframes(source.keyframes, firstDuration, duration, source.baseTransform);
-    const first = {
-      ...source,
+    const first = cloneVisualSegment(source, {
       id: firstId,
       duration: firstDuration,
       keyframes: keyframes.left,
       ...(source.type === "video" ? { sourceDuration: firstDuration * playbackRate } : {}),
-    };
-    const second = {
-      ...source,
+    });
+    const second = cloneVisualSegment(source, {
       id: secondId,
       start: time,
       duration: secondDuration,
@@ -166,7 +191,7 @@ export function createTimelineCutActions(d) {
         sourceStart: Math.max(0, Number(source.sourceStart) || 0) + firstDuration * playbackRate,
         sourceDuration: secondDuration * playbackRate,
       } : {}),
-    };
+    });
     const next = [...d.visualOverlaySegments];
     next.splice(index, 1, first, second);
     d.setVisualOverlaySegments(next);

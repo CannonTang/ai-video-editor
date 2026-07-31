@@ -6,6 +6,7 @@ import {
   ClosedCaptioning,
   CursorClick,
   Drop,
+  DownloadSimple,
   Eye,
   EyeSlash,
   ImageSquare,
@@ -823,7 +824,7 @@ function StickerContextPanel({ t, segment, updateStickerSegment, deleteStickerSe
   );
 }
 
-function AvatarContextPanel({ t, hasVisual, visualType, audioBlob, audioDuration, captionSegments, selectedVoice, avatarJob, generateAvatarAcceptanceFrame }) {
+function DigitalHumanContextPanel({ t, hasVisual, visualType, audioBlob, audioDuration, captionSegments, selectedVoice, avatarJob, generateAvatarAcceptanceFrame }) {
   const hasPortrait = hasVisual && visualType === "image";
   const [probeState, setProbeState] = useState("idle");
   const [probeResult, setProbeResult] = useState(null);
@@ -891,6 +892,119 @@ function AvatarContextPanel({ t, hasVisual, visualType, audioBlob, audioDuration
       </button>
     </div>
   );
+}
+
+function FaceSwapContextPanel({ t, hasVisual, visualType, faceSwap }) {
+  const inputRef = useRef(null);
+  const [consented, setConsented] = useState(false);
+  const targetReady = hasVisual && ["image", "video"].includes(visualType);
+  const running = Boolean(faceSwap?.job?.running);
+  return (
+    <div className="face-swap-context-panel">
+      <div className="avatar-context-hero face-swap-hero">
+        <span><PersonSimpleRun size={21} weight="duotone" /></span>
+        <div>
+          <small>{t("faceSwapKicker")}</small>
+          <strong>{t("faceSwapTitle")}</strong>
+          <em>{t("faceSwapDescription")}</em>
+        </div>
+      </div>
+
+      <section className={`face-swap-source-card ${faceSwap?.source ? "is-ready" : ""}`}>
+        <div className="face-swap-source-preview">
+          {faceSwap?.source?.url
+            ? <img src={faceSwap.source.url} alt={t("faceSwapSource")} />
+            : <PersonSimpleRun size={26} weight="duotone" />}
+        </div>
+        <div>
+          <strong>{t("faceSwapSource")}</strong>
+          <em>{faceSwap?.source?.name || t("faceSwapSourceHint")}</em>
+        </div>
+        <button type="button" className="panel-secondary" disabled={running} onClick={() => inputRef.current?.click()}>
+          <UploadSimple size={14} />{faceSwap?.source ? t("faceSwapReplace") : t("faceSwapUpload")}
+        </button>
+        <input
+          ref={inputRef}
+          hidden
+          type="file"
+          accept="image/*"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) faceSwap?.setSourceFile(file);
+            event.target.value = "";
+          }}
+        />
+      </section>
+
+      <div className={`face-swap-target-card ${targetReady ? "is-ready" : ""}`}>
+        <CheckCircle size={17} weight={targetReady ? "fill" : "regular"} />
+        <span>
+          <strong>{t("faceSwapTarget")}</strong>
+          <em>{targetReady ? t(visualType === "video" ? "faceSwapCurrentVideo" : "faceSwapCurrentImage") : t("faceSwapNeedsTarget")}</em>
+        </span>
+      </div>
+
+      <div className="avatar-sync-mode">
+        <span>{t("avatarModelSource")}</span>
+        <strong>MobileFaceSwap 224 · WebGPU</strong>
+      </div>
+
+      <p className="avatar-context-note">{t("faceSwapLocalNote")}</p>
+      <label className="face-swap-consent">
+        <input type="checkbox" checked={consented} disabled={running} onChange={(event) => setConsented(event.target.checked)} />
+        <span>{t("faceSwapConsent")}</span>
+      </label>
+
+      {faceSwap?.job?.stage !== "idle" && faceSwap?.job?.phase ? (
+        <div className="avatar-generation-progress" aria-live="polite">
+          <div>
+            <span>{faceSwap.job.stage === "setup" ? t("faceSwapModelSetup") : t("faceSwapGeneration")}</span>
+            <strong>{faceSwap.job.progress}%</strong>
+          </div>
+          <i><b style={{ width: `${faceSwap.job.progress}%` }} /></i>
+          <small>{faceSwap.job.phase}</small>
+        </div>
+      ) : null}
+      {faceSwap?.job?.error ? (
+        <div className="face-swap-error" role="alert">
+          <strong>{t("faceSwapFailed")}</strong>
+          <span>{faceSwap.job.error}</span>
+        </div>
+      ) : null}
+      {faceSwap?.lastResult ? (
+        <div className="face-swap-result">
+          <span>
+            <strong>{t("faceSwapResultReady")}</strong>
+            <em>{faceSwap.lastResult.name}</em>
+          </span>
+          <button className="panel-secondary" type="button" onClick={faceSwap.downloadResult}>
+            <DownloadSimple size={15} />{t("faceSwapDownloadResult")}
+          </button>
+        </div>
+      ) : null}
+
+      <div className="face-swap-actions">
+        {running ? (
+          <button className="panel-secondary" type="button" onClick={faceSwap.cancel}>
+            <X size={15} />{t("cancel")}
+          </button>
+        ) : null}
+        <button
+          className="panel-primary avatar-generate-button"
+          type="button"
+          disabled={!faceSwap?.source || !targetReady || !consented || running}
+          onClick={faceSwap?.generate}
+        >
+          <PersonSimpleRun size={17} weight="duotone" />
+          {running ? t("faceSwapGenerating") : t("faceSwapGenerate")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AvatarContextPanel(props) {
+  return <DigitalHumanContextPanel {...props} />;
 }
 
 function CaptionFontSheet({
@@ -1136,8 +1250,10 @@ export function VoicePanel({
   effectRunning,
   effectProgress,
   effectPhase,
+  effectsPanelMode = "outline",
   updateSelectedSubjectEffect,
   removeSelectedSubjectEffect,
+  faceSwap,
 }) {
   const [captionPanelTab, setCaptionPanelTab] = useState("caption");
   const panelRef = useRef(null);
@@ -1153,6 +1269,7 @@ export function VoicePanel({
   const isSmartAutoContext = isSmartContext && smartMode === "auto-edit";
   const isSmartFrameContext = isSmartContext && smartMode === "smart-frame";
   const isAiMusicContext = isSmartContext && smartMode === "ai-music";
+  const isFaceSwapContext = isEffectsContext && effectsPanelMode === "face-swap";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = panelContext === "audio" && (
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
@@ -1198,8 +1315,10 @@ export function VoicePanel({
     background: t("effectBackground"),
     edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
-  const title = focusedSectionTitle || (isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
-  const panelStatusText = isEffectsContext ? (effectRunning
+  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
+  const panelStatusText = isFaceSwapContext
+    ? faceSwap?.job?.running ? `${faceSwap.job.progress}%` : hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")
+    : isEffectsContext ? (effectRunning
     ? `${Math.round(effectProgress || 0)}%`
     : effectAnalysis?.complete
       ? t(effectAnalysis?.targetKind === "object" ? "effectObjectAnalysisComplete" : "effectAnalysisComplete")
@@ -1299,7 +1418,7 @@ export function VoicePanel({
       ) : null}
 
       <div className="voice-tab-body">
-        {isEffectsContext ? <SubjectEffectsInspector
+        {isEffectsContext && !isFaceSwapContext ? <SubjectEffectsInspector
           t={t}
           segment={effectSegment}
           analysis={effectAnalysis}
@@ -1311,6 +1430,7 @@ export function VoicePanel({
           onRemove={removeSelectedSubjectEffect}
           singleSection={mobileInspectorSection}
         /> : null}
+        {isFaceSwapContext ? <FaceSwapContextPanel t={t} hasVisual={hasVisual} visualType={visualType} faceSwap={faceSwap} /> : null}
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
         {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}
         {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}
