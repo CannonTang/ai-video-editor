@@ -116,13 +116,6 @@ const FACE_SWAP_PREVIEW_STILL = "/assets/sample-portrait.png";
 const FACE_SWAP_PREVIEW_GIF = "/assets/effects/previews/face-swap-hover.gif";
 const COMING_EFFECTS = Object.freeze([
   {
-    id: "vector-tracking",
-    titleKey: "effectVectorTracking",
-    hintKey: "effectVectorTrackingHint",
-    image: "/assets/effects/previews/vector-tracking-coming-soon.webp",
-    gif: "/assets/effects/previews/vector-tracking-hover.webp",
-  },
-  {
     id: "sway-motion",
     titleKey: "effectSwayMotion",
     hintKey: "effectSwayMotionHint",
@@ -268,6 +261,57 @@ function ComingEffectCard({ t, effect }) {
         <small>{t(effect.hintKey)}</small>
       </span>
     </article>
+  );
+}
+
+function OpticalFlowEffectCard({ t, active, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [hoverless, setHoverless] = useState(false);
+  const previewing = hovered || hoverless;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(hover: none)");
+    const update = () => setHoverless(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return (
+    <button
+      className={`subject-outline-entry subject-optical-flow-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span className="subject-outline-entry-preview">
+        <img
+          key={previewing ? "animated" : "still"}
+          src={previewing
+            ? "/assets/effects/previews/vector-tracking-hover.webp"
+            : "/assets/effects/previews/vector-tracking-coming-soon.webp"}
+          alt=""
+        />
+        <em className="subject-optical-flow-badge">{t("effectFlowExperimental")}</em>
+        <span className="subject-outline-entry-preview-state">
+          <i />
+          {previewing ? t("effectPreviewPlaying") : t("effectFlowVectorLab")}
+        </span>
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy">
+          <strong>{t("effectVectorTracking")}</strong>
+          <small>{t("effectVectorTrackingHint")}</small>
+        </span>
+        <span className="subject-outline-entry-state"><CaretRight size={17} /></span>
+      </span>
+    </button>
   );
 }
 
@@ -581,7 +625,9 @@ export function SubjectEffectsWorkspace({
   onChange,
   onOpenInspector,
   onOpenFaceSwap,
+  onOpenOpticalFlow,
   faceSwapActive = false,
+  opticalFlowActive = false,
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
@@ -643,6 +689,7 @@ export function SubjectEffectsWorkspace({
           onClick={selectObjectOutline}
         />
         <FaceSwapEffectCard t={t} active={faceSwapActive} onClick={onOpenFaceSwap} />
+        <OpticalFlowEffectCard t={t} active={opticalFlowActive} onClick={onOpenOpticalFlow} />
         {COMING_EFFECTS.map((comingEffect) => (
           <ComingEffectCard key={comingEffect.id} t={t} effect={comingEffect} />
         ))}

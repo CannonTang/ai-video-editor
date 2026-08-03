@@ -166,10 +166,14 @@ export function MediaPanel({
     closeMobilePanel?.();
   };
   const renderAssetList = (items, { deletable = false, prepend = null } = {}) => (
-    <div className={`asset-list ${mediaTab === "upload" ? "upload-assets" : ""}`}>
+    <div
+      className={`asset-list ${mediaTab === "upload" ? "upload-assets" : ""}`}
+      aria-label={libraryStatus === "loading" && mediaTab === "library" ? t("libraryLoading") : undefined}
+      aria-busy={libraryStatus === "loading" && mediaTab === "library" ? "true" : undefined}
+    >
       {prepend}
       {libraryStatus === "loading" && mediaTab === "library" ? (
-        <LibraryLoadingGrid label={t("libraryLoading")} />
+        <LibraryLoadingGrid />
       ) : items.length ? (
         items.map((asset) => (
           <div
@@ -882,16 +886,16 @@ function AssetPreviewDialog({ asset, t, onClose }) {
   );
 }
 
-function LibraryLoadingGrid({ label }) {
+function LibraryLoadingGrid() {
   return (
-    <div className="library-loading-grid" aria-label={label} aria-busy="true">
+    <>
       {Array.from({ length: 6 }, (_, index) => (
         <div className="library-skeleton-card" key={index}>
           <div className="library-skeleton-thumb"><i /></div>
           <span /><small />
         </div>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -1048,6 +1052,7 @@ export function ToolPanel(props) {
     removeSelectedSubjectEffect,
     openEffectsInspector,
     openFaceSwapInspector,
+    openOpticalFlowInspector,
     effectsPanelMode,
   } = props;
   const [captionFontStatus, setCaptionFontStatus] = useState("");
@@ -1414,7 +1419,9 @@ export function ToolPanel(props) {
         onAnalyze={analyzeEffectVisual || analyzeCurrentVisual}
         onOpenInspector={openEffectsInspector}
         onOpenFaceSwap={openFaceSwapInspector}
+        onOpenOpticalFlow={openOpticalFlowInspector}
         faceSwapActive={effectsPanelMode === "face-swap"}
+        opticalFlowActive={effectsPanelMode === "vector-tracking"}
         onRemove={removeSelectedSubjectEffect}
       />
     );

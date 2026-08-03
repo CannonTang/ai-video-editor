@@ -221,6 +221,10 @@ export function EditorSidebar({ model: d }) {
               d.setEffectsPanelMode?.("face-swap");
               d.setMobilePanel?.("inspector");
             }}
+            openOpticalFlowInspector={() => {
+              d.setEffectsPanelMode?.("vector-tracking");
+              d.setMobilePanel?.("inspector");
+            }}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
             miganRepair={d.miganRepair}

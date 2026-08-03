@@ -74,9 +74,10 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## Resilient model delivery
 
-Browser AI models are mirrored on both Hugging Face and ModelScope. Timeline Studio performs a lightweight reachability race on the first request, remembers the faster working source for the current runtime, and automatically falls back to the other source if the network changes. Cache identities are shared across both providers, so switching routes does not download the same revision twice.
+Browser AI models are mirrored on both Hugging Face and ModelScope. Timeline Studio uses ModelScope first for Chinese interfaces and domestic sessions, uses Hugging Face first elsewhere, remembers the first working source for the current runtime, and automatically falls back to the other source when needed. Cache identities are shared across both providers, so switching routes does not download the same revision twice.
 
 - Stable Audio: [Hugging Face](https://huggingface.co/haixin/stable-audio-3-small-music-onnx) · [ModelScope](https://www.modelscope.cn/models/martindelophy/stable-audio-3-small-music-onnx/files?version=main)
+- Voice models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-voice-models/tree/f6aa4cf8fb440352b9f36c637dd310d047011e52) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-voice-models/files?version=14a0656f5a111a0052dfca586fbe2ceb18b54adf) (mixed upstream licenses; see the repository model card)
 - Timeline Studio ONNX models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=main)
 - Vocal remover: [Hugging Face](https://huggingface.co/haixin/timeline-studio-vocal-remover) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/files?version=main)
 

@@ -54,18 +54,6 @@ async function getSession(requestId) {
         throw new Error(`NANODET_MODEL_SIZE_MISMATCH:${bytes.byteLength}:${MODEL_BYTES}`);
       }
       postProgress(requestId, 36, "初始化 NanoDet-Plus ONNX");
-      if (self.navigator?.gpu) {
-        try {
-          const session = await ort.InferenceSession.create(bytes, {
-            executionProviders: ["webgpu"],
-            graphOptimizationLevel: "all",
-          });
-          executionProvider = "webgpu";
-          return session;
-        } catch (error) {
-          console.warn("NanoDet WebGPU 初始化失败，回退 WASM。", error);
-        }
-      }
       executionProvider = "wasm";
       return ort.InferenceSession.create(bytes, {
         executionProviders: ["wasm"],

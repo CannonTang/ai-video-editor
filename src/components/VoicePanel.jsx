@@ -59,6 +59,7 @@ import {
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
 import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
+import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
 
 function AutoEditReviewDialog({ t, autoEdit }) {
   const { review, job } = autoEdit || {};
@@ -1254,6 +1255,7 @@ export function VoicePanel({
   updateSelectedSubjectEffect,
   removeSelectedSubjectEffect,
   faceSwap,
+  onOpticalFlowAssetReady,
 }) {
   const [captionPanelTab, setCaptionPanelTab] = useState("caption");
   const panelRef = useRef(null);
@@ -1270,6 +1272,7 @@ export function VoicePanel({
   const isSmartFrameContext = isSmartContext && smartMode === "smart-frame";
   const isAiMusicContext = isSmartContext && smartMode === "ai-music";
   const isFaceSwapContext = isEffectsContext && effectsPanelMode === "face-swap";
+  const isOpticalFlowContext = isEffectsContext && effectsPanelMode === "vector-tracking";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = panelContext === "audio" && (
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
@@ -1315,9 +1318,10 @@ export function VoicePanel({
     background: t("effectBackground"),
     edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
-  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
+  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isOpticalFlowContext ? t("effectVectorTracking") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
   const panelStatusText = isFaceSwapContext
     ? faceSwap?.job?.running ? `${faceSwap.job.progress}%` : hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")
+    : isOpticalFlowContext ? t("effectFlowExperimental")
     : isEffectsContext ? (effectRunning
     ? `${Math.round(effectProgress || 0)}%`
     : effectAnalysis?.complete
@@ -1418,7 +1422,7 @@ export function VoicePanel({
       ) : null}
 
       <div className="voice-tab-body">
-        {isEffectsContext && !isFaceSwapContext ? <SubjectEffectsInspector
+        {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext ? <SubjectEffectsInspector
           t={t}
           segment={effectSegment}
           analysis={effectAnalysis}
@@ -1431,6 +1435,12 @@ export function VoicePanel({
           singleSection={mobileInspectorSection}
         /> : null}
         {isFaceSwapContext ? <FaceSwapContextPanel t={t} hasVisual={hasVisual} visualType={visualType} faceSwap={faceSwap} /> : null}
+        {isOpticalFlowContext ? <OpticalFlowTrackingPanel
+          t={t}
+          segment={effectSegment}
+          localTime={visualLocalTime}
+          onAssetReady={onOpticalFlowAssetReady}
+        /> : null}
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
         {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}
         {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}

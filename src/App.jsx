@@ -493,6 +493,18 @@ export function App() {
     setSelectedLibraryAssetId(asset.id);
     setMediaTab("mine");
   };
+  const handleOpticalFlowAssetReady = (assetDraft) => {
+    const id = crypto.randomUUID();
+    const src = URL.createObjectURL(assetDraft.blob);
+    imageUrlRefs.current.add(src);
+    const asset = { id, src, ...assetDraft };
+    setUserAssets((current) => [asset, ...current]);
+    setSelectedLibraryAssetId(id);
+    setActiveTool("media");
+    setMediaTab("mine");
+    notify(t("effectFlowAddedToAssets"));
+    return asset;
+  };
 
   const {
     canDropAssetOnTrack, findAssetById, getActiveDraggedAsset, getDraggedAsset,
@@ -1329,6 +1341,7 @@ export function App() {
           effectsPanelMode={effectsPanelMode}
           updateSelectedSubjectEffect={updateSelectedSubjectEffect}
           removeSelectedSubjectEffect={removeSelectedSubjectEffect}
+          onOpticalFlowAssetReady={handleOpticalFlowAssetReady}
         />
       </section>
 

@@ -1,19 +1,14 @@
 import { loadTextToSpeech, loadVoiceStyle, writeWavFile } from "./supertonicWebRuntime.js";
-import { hubModelFileUrls, orderModelUrlsForNetwork } from "./modelSources.js";
+import { voiceModelFileUrls } from "../config/voiceModels.js";
+import { orderModelUrlsForNetwork } from "./modelSources.js";
 
 let runtimePromise;
 
 async function loadRuntime(onProgress) {
   if (!runtimePromise) {
     runtimePromise = (async () => {
-      const modelBases = await orderModelUrlsForNetwork(hubModelFileUrls({
-        repository: "Supertone/supertonic-3",
-        path: "onnx",
-      }));
-      const styleUrls = hubModelFileUrls({
-        repository: "Supertone/supertonic-3",
-        path: "voice_styles/F1.json",
-      });
+      const modelBases = await orderModelUrlsForNetwork(voiceModelFileUrls("supertonic/onnx"));
+      const styleUrls = voiceModelFileUrls("supertonic/voice_styles/F1.json");
       const failures = [];
       for (const modelBase of modelBases) {
         const useModelScope = modelBase.includes("modelscope.cn");

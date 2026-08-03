@@ -7,6 +7,7 @@ const DEFAULT_WASM_ROOT = "/vendor/mediapipe/vision";
 const DEFAULT_MODEL_PATH = "/assets/effects/models/selfie_segmenter.tflite";
 
 let segmenterPromise = null;
+let cpuSegmenterPromise = null;
 
 function assertImageSize(mask, width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || mask.length !== width * height) {
@@ -186,6 +187,26 @@ export function applySoftSubjectGate(alpha, subjectMask, width, height, radius =
 }
 
 export async function getMediaPipePersonSegmenter(options = {}) {
+  if (options.delegate === "CPU") {
+    cpuSegmenterPromise ??= (async () => {
+      const wasmRoot = options.wasmRoot || DEFAULT_WASM_ROOT;
+      const modelPath = options.modelPath || DEFAULT_MODEL_PATH;
+      const fileset = await FilesetResolver.forVisionTasks(wasmRoot);
+      return ImageSegmenter.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: modelPath,
+          delegate: "CPU",
+        },
+        runningMode: "IMAGE",
+        outputCategoryMask: false,
+        outputConfidenceMasks: true,
+      });
+    })().catch((error) => {
+      cpuSegmenterPromise = null;
+      throw error;
+    });
+    return cpuSegmenterPromise;
+  }
   if (!segmenterPromise) {
     const {
       wasmRoot = DEFAULT_WASM_ROOT,
@@ -224,9 +245,43 @@ export async function segmentMediaPipePerson(image, options = {}) {
   const result = segmenter.segment(image);
   const inferenceMs = performance.now() - inferenceStartedAt;
   try {
-    const confidenceMask = result.confidenceMasks?.[0];
+    const masks = result.confidenceMasks || [];
+    const rankedMasks = masks.map((mask, maskIndex) => {
+      const probabilities = mask.getAsFloat32Array();
+      let foregroundPixels = 0;
+      let centerTotal = 0;
+      let centerSamples = 0;
+      let edgeTotal = 0;
+      let edgeSamples = 0;
+      for (let y = 0; y < mask.height; y += 1) {
+        for (let x = 0; x < mask.width; x += 1) {
+          const probability = probabilities[y * mask.width + x];
+          if (probability >= 0.44) foregroundPixels += 1;
+          const centered = x >= mask.width * 0.25 && x <= mask.width * 0.75
+            && y >= mask.height * 0.2 && y <= mask.height * 0.88;
+          if (centered) {
+            centerTotal += probability;
+            centerSamples += 1;
+          } else {
+            edgeTotal += probability;
+            edgeSamples += 1;
+          }
+        }
+      }
+      const coverage = foregroundPixels / Math.max(1, mask.width * mask.height);
+      const centerMean = centerTotal / Math.max(1, centerSamples);
+      const edgeMean = edgeTotal / Math.max(1, edgeSamples);
+      return {
+        mask,
+        maskIndex,
+        probabilities,
+        rank: centerMean - edgeMean * 0.55 - Math.abs(coverage - 0.42) * 0.12,
+      };
+    }).sort((left, right) => right.rank - left.rank);
+    const selected = rankedMasks[0];
+    const confidenceMask = selected?.mask;
     if (!confidenceMask) throw new Error("MediaPipe 没有返回人物置信度蒙版。");
-    const probabilities = confidenceMask.getAsFloat32Array();
+    const probabilities = selected.probabilities;
     const alpha = new Uint8ClampedArray(probabilities.length);
     for (let index = 0; index < probabilities.length; index += 1) {
       alpha[index] = Math.round(Math.max(0, Math.min(1, probabilities[index])) * 255);
@@ -238,7 +293,7 @@ export async function segmentMediaPipePerson(image, options = {}) {
       initializedMs,
       inferenceMs,
       totalMs: initializedMs + inferenceMs,
-      qualityScore: Number(result.qualityScores?.[0]) || 1,
+      qualityScore: Number(result.qualityScores?.[selected.maskIndex]) || 1,
       modelId: "MediaPipe SelfieSegmenter float16",
     };
   } finally {
@@ -298,8 +353,12 @@ export async function segmentMediaPipePersonRoi(image, targetBox, options = {}) 
 }
 
 export async function disposeMediaPipePersonSegmenter() {
-  if (!segmenterPromise) return;
-  const segmenter = await segmenterPromise.catch(() => null);
+  const [segmenter, cpuSegmenter] = await Promise.all([
+    segmenterPromise?.catch(() => null),
+    cpuSegmenterPromise?.catch(() => null),
+  ]);
   segmenter?.close?.();
+  cpuSegmenter?.close?.();
   segmenterPromise = null;
+  cpuSegmenterPromise = null;
 }

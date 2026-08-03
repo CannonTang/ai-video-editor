@@ -3,11 +3,8 @@ export const MODEL_SCOPE_OWNER = "martindelophy";
 
 const UI_LANGUAGE_STORAGE_KEY = "ai-voiceover-ui-language";
 const VALID_PREFERENCES = new Set(["auto", "huggingface", "modelscope"]);
-const MODEL_SOURCE_PROBE_TIMEOUT_MS = 2_500;
 
 let runtimeModelSource = "";
-let modelSourceProbePromise = null;
-let modelSourceProbeCompleted = false;
 
 function readLocalStorage(key) {
   try {
@@ -52,68 +49,20 @@ function prioritizeSource(urls, source) {
   ));
 }
 
-async function probeFastestModelSource(urls) {
-  const sourceCandidates = new Map();
-  for (const url of urls) {
-    const source = modelSourceFromUrl(url);
-    if (source && !sourceCandidates.has(source)) sourceCandidates.set(source, url);
-  }
-  if (sourceCandidates.size < 2) return "";
-
-  return new Promise((resolve) => {
-    const controllers = [];
-    let settled = false;
-    let remaining = sourceCandidates.size;
-    const finish = (source = "") => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      for (const controller of controllers) controller.abort();
-      resolve(source);
-    };
-    const failed = () => {
-      remaining -= 1;
-      if (remaining === 0) finish();
-    };
-    const timer = setTimeout(() => finish(), MODEL_SOURCE_PROBE_TIMEOUT_MS);
-
-    for (const [source, url] of sourceCandidates) {
-      const controller = new AbortController();
-      controllers.push(controller);
-      fetch(url, {
-        method: "HEAD",
-        cache: "no-store",
-        signal: controller.signal,
-      }).then((response) => {
-        if (response.ok) finish(source);
-        else failed();
-      }).catch(failed);
-    }
-  });
-}
-
 export async function orderModelUrlsForNetwork(urls) {
   const candidates = [...new Set((urls || []).filter(Boolean))];
   if (runtimeModelSource) return prioritizeSource(candidates, runtimeModelSource);
-
-  if (!modelSourceProbeCompleted) {
-    modelSourceProbePromise ??= probeFastestModelSource(candidates)
-      .then((source) => {
-        runtimeModelSource = source;
-        modelSourceProbeCompleted = true;
-        return source;
-      })
-      .finally(() => {
-        modelSourceProbePromise = null;
-      });
-    await modelSourceProbePromise;
-  }
-  return prioritizeSource(candidates, runtimeModelSource);
+  // Preserve the locale/user-selected source order on the first request.
+  // The first successful fetch becomes the session route; failures clear it
+  // so the caller can immediately fall back to the other provider.
+  return candidates;
 }
 
 export function mirroredModelFileUrls({
   repository,
   revision,
+  huggingFaceRevision = revision,
+  modelScopeRevision = revision,
   path,
   preference,
   modelScopeOwner = MODEL_SCOPE_OWNER,
@@ -123,10 +72,48 @@ export function mirroredModelFileUrls({
     ? preference
     : getModelSourcePreference(preference);
   return orderModelSourceUrls(
-    `https://huggingface.co/haixin/${repository}/resolve/${revision}${suffix}`,
-    `https://www.modelscope.cn/models/${modelScopeOwner}/${repository}/resolve/${revision}${suffix}`,
+    `https://huggingface.co/haixin/${repository}/resolve/${huggingFaceRevision}${suffix}`,
+    `https://www.modelscope.cn/models/${modelScopeOwner}/${repository}/resolve/${modelScopeRevision}${suffix}`,
     resolvedPreference,
   );
+}
+
+export async function loadFromMirroredRepository(transformersEnv, {
+  repository,
+  modelPath,
+  revision,
+  huggingFaceRevision = revision,
+  modelScopeRevision = revision,
+  preference,
+  modelScopeOwner = MODEL_SCOPE_OWNER,
+}, loader) {
+  const cleanModelPath = String(modelPath || "").replace(/^\/+|\/+$/g, "");
+  const configPath = `${cleanModelPath}/config.json`;
+  const configUrls = mirroredModelFileUrls({
+    repository,
+    huggingFaceRevision,
+    modelScopeRevision,
+    path: configPath,
+    preference,
+    modelScopeOwner,
+  });
+  const candidates = await orderModelUrlsForNetwork(configUrls);
+  const failures = [];
+  for (const configUrl of candidates) {
+    const source = modelSourceFromUrl(configUrl);
+    const remoteHost = configUrl.slice(0, -configPath.length);
+    transformersEnv.remoteHost = remoteHost;
+    transformersEnv.remotePathTemplate = "{model}/";
+    try {
+      const result = await loader(cleanModelPath, remoteHost);
+      runtimeModelSource = source || runtimeModelSource;
+      return result;
+    } catch (error) {
+      failures.push(`${new URL(configUrl).hostname}: ${error?.message || String(error)}`);
+      if (source === runtimeModelSource) runtimeModelSource = "";
+    }
+  }
+  throw new Error(`MODEL_MIRRORS_UNAVAILABLE: ${failures.join("; ")}`);
 }
 
 export function mirroredModelBaseUrls(options) {
@@ -209,6 +196,4 @@ export async function fetchFirstAvailableModel(urls, init) {
 
 export function __resetModelSourceRoutingForTests() {
   runtimeModelSource = "";
-  modelSourceProbePromise = null;
-  modelSourceProbeCompleted = false;
 }

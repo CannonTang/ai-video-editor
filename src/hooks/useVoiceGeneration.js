@@ -1,8 +1,8 @@
 import { useCallback } from "react";
-import { MODEL_ID } from "../config/editor.js";
+import { loadVoiceModelFromMirrors } from "../config/voiceModels.js";
 import { isBuiltInPinyinVoice, predictPiperVoice } from "../lib/piperVoiceRuntime.js";
 import { predictMmsVoice } from "../lib/mmsVoiceRuntime.js";
-import { isModelDownloadError, loadFromModelHubs } from "../lib/modelSources.js";
+import { isModelDownloadError } from "../lib/modelSources.js";
 import { clearPiperCacheIfStorageTight, isPiperSymbolError, isStorageQuotaError, prepareTextForVoice, TtsInputError } from "../lib/ttsText.js";
 
 export function useVoiceGeneration(d) {
@@ -76,7 +76,7 @@ export function useVoiceGeneration(d) {
         if (webGpuAdapter) {
           try {
             d.setStatusText("ttsStatusLoadingWebGpu");
-            tts = await loadFromModelHubs(transformersEnv, () => KokoroTTS.from_pretrained(MODEL_ID, {
+            tts = await loadVoiceModelFromMirrors(transformersEnv, "kokoro", (modelId) => KokoroTTS.from_pretrained(modelId, {
               dtype: "fp32",
               device: "webgpu",
               progress_callback: progressCallback,
@@ -89,7 +89,7 @@ export function useVoiceGeneration(d) {
           }
         }
         if (!blob) {
-          tts = await loadFromModelHubs(transformersEnv, () => KokoroTTS.from_pretrained(MODEL_ID, {
+          tts = await loadVoiceModelFromMirrors(transformersEnv, "kokoro", (modelId) => KokoroTTS.from_pretrained(modelId, {
             dtype: "q8",
             device: "wasm",
             progress_callback: progressCallback,

@@ -1,14 +1,13 @@
 import {
   fetchFirstAvailableModel,
-  hubModelFileUrls,
-  loadFromModelHubs,
 } from "./modelSources.js";
+import { loadVoiceModelFromMirrors, voiceModelFileUrls } from "../config/voiceModels.js";
 
 const MMS_MODEL_BY_VOICE = {
-  "ko_KR-mms-medium": "Xenova/mms-tts-kor",
-  "vi_VN-mms-medium": "Xenova/mms-tts-vie",
-  "ru_RU-mms-medium": "Xenova/mms-tts-rus",
-  "th_TH-mms-medium": "siridech/mms-tts-tha-onnx",
+  "ko_KR-mms-medium": "mms-kor",
+  "vi_VN-mms-medium": "mms-vie",
+  "ru_RU-mms-medium": "mms-rus",
+  "th_TH-mms-medium": "mms-tha",
 };
 
 const runtimePromises = new Map();
@@ -33,8 +32,8 @@ export async function predictMmsVoice(input, onProgress) {
     runtimePromises.set(modelId, (async () => {
       const { env, pipeline } = await import("@huggingface/transformers");
       env.useBrowserCache = false;
-      const isRootOnnxModel = modelId === "siridech/mms-tts-tha-onnx";
-      return loadFromModelHubs(env, () => pipeline("text-to-speech", modelId, {
+      const isRootOnnxModel = modelId === "mms-tha";
+      return loadVoiceModelFromMirrors(env, modelId, (mirroredModelId) => pipeline("text-to-speech", mirroredModelId, {
         dtype: isRootOnnxModel ? "fp32" : "q8",
         device: "wasm",
         ...(isRootOnnxModel ? { model_file_name: "../model" } : {}),
@@ -52,10 +51,7 @@ export async function predictMmsVoice(input, onProgress) {
   let samples;
   let sampleRate = 16000;
   if (input.voiceId === "th_TH-mms-medium") {
-    thaiVocabPromise ??= fetchFirstAvailableModel(hubModelFileUrls({
-      repository: "siridech/mms-tts-tha-onnx",
-      path: "vocab.json",
-    })).then(({ response }) => {
+    thaiVocabPromise ??= fetchFirstAvailableModel(voiceModelFileUrls("mms-tha/vocab.json")).then(({ response }) => {
       return response.json();
     });
     const [vocab, { Tensor }] = await Promise.all([thaiVocabPromise, import("@huggingface/transformers")]);

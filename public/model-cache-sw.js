@@ -35,10 +35,13 @@ const MODEL_SCOPE_HOSTS = new Set([
 const MIRRORED_REPOSITORIES = new Set([
   "stable-audio-3-small-music-onnx",
   "timeline-studio-onnx-models",
+  "timeline-studio-voice-models",
   "timeline-studio-vocal-remover",
 ]);
 const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
+const VOICE_MODEL_HUGGING_FACE_REVISION = "f6aa4cf8fb440352b9f36c637dd310d047011e52";
+const VOICE_MODEL_MODELSCOPE_REVISION = "14a0656f5a111a0052dfca586fbe2ceb18b54adf";
 function hasCacheableExtension(pathname) {
   return CACHEABLE_EXTENSIONS.some((extension) => pathname.endsWith(extension));
 }
@@ -50,7 +53,7 @@ function isHuggingFaceModelRequest(url) {
 
   // Piper's runtime owns its OPFS cache. Caching the same voice files here
   // would keep a second full model copy for every non-English language.
-  if (url.pathname.includes("/rhasspy/piper-voices/resolve/")) return false;
+  if (isPiperVoiceRequest(url)) return false;
   return url.hostname !== "huggingface.co" || url.pathname.includes("/resolve/");
 }
 
@@ -58,8 +61,13 @@ function isModelScopeModelRequest(url) {
   if (!MODEL_SCOPE_HOSTS.has(url.hostname)) return false;
   // Piper is persisted in OPFS by its runtime so both public sources share
   // one source-independent cache entry instead of duplicating a large model.
-  if (url.pathname.includes("/rhasspy/piper-voices/resolve/")) return false;
+  if (isPiperVoiceRequest(url)) return false;
   return url.hostname !== "www.modelscope.cn" || url.pathname.includes("/resolve/");
+}
+
+function isPiperVoiceRequest(url) {
+  return url.pathname.includes("/rhasspy/piper-voices/resolve/")
+    || (url.pathname.includes("/timeline-studio-voice-models/resolve/") && url.pathname.includes("/piper/"));
 }
 
 function canonicalModelIdentity(url) {
@@ -80,6 +88,9 @@ function canonicalModelIdentity(url) {
   if (owner === "haixin" && repository === "timeline-studio-vocal-remover" && revision === "main") {
     revision = VOCAL_REMOVER_REVISION;
   }
+  if (owner === "haixin" && repository === "timeline-studio-voice-models" && revision === VOICE_MODEL_MODELSCOPE_REVISION) {
+    revision = VOICE_MODEL_HUGGING_FACE_REVISION;
+  }
   return `${owner}/${repository}/${revision}/${path}`;
 }
 
@@ -93,7 +104,7 @@ function canonicalModelCacheRequest(request) {
 async function removeLegacyPiperDuplicates() {
   const cache = await caches.open(MODEL_CACHE_NAME);
   const keys = await cache.keys();
-  await Promise.all(keys.filter((request) => new URL(request.url).pathname.includes("/rhasspy/piper-voices/resolve/")).map((request) => cache.delete(request)));
+  await Promise.all(keys.filter((request) => isPiperVoiceRequest(new URL(request.url))).map((request) => cache.delete(request)));
 }
 
 function isRuntimeAssetRequest(url) {
