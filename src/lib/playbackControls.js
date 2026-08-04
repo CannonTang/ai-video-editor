@@ -55,6 +55,16 @@ export function createPlaybackControls(deps) {
   const seekTo = (time) => {
     const clamped = Math.max(0, Math.min(deps.timelineDurationRef.current || MAX_TIMELINE_DURATION_SECONDS, time));
     deps.currentTimeRef.current = clamped; deps.setCurrentTime(clamped);
+    // Seeking while playback is active must also move the fallback timeline
+    // clock. This matters after trimming: the video element can briefly be
+    // paused/ended while its new source range is applied, so the animation
+    // clock otherwise keeps its pre-seek origin and the UI remains stuck with
+    // a visible Pause button.
+    if (deps.isPlaying) {
+      deps.visualPlaybackStartTimeRef.current = clamped;
+      deps.visualPlaybackStartedAtRef.current = performance.now();
+      deps.visualPlaybackLastUpdateRef.current = 0;
+    }
     syncPreviewVideoTime(clamped);
     deps.audioSegments.forEach((segment) => {
       const audio = deps.audioSegmentRefs.current.get(segment.id);
@@ -62,6 +72,14 @@ export function createPlaybackControls(deps) {
     });
     if (deps.sourceAudioRef.current) deps.sourceAudioRef.current.currentTime = getSourceState(clamped).sourceTime;
     if (deps.musicRef.current) deps.musicRef.current.currentTime = getMusicState(clamped).sourceTime;
+    if (deps.isPlaying) {
+      const video = deps.previewVideoRef.current;
+      const index = getVisualSegmentIndexAtTime(deps.visualSegments, clamped);
+      const segment = index >= 0 ? deps.visualSegments[index] : null;
+      if (video && deps.previewVisualType === "video" && (!deps.previewVisualSegment?.id || segment?.id === deps.previewVisualSegment.id)) {
+        requestTimelineMediaPlay(video);
+      }
+    }
   };
   const getTimelineTimeFromClientX = (clientX) => {
     const rect = deps.trackScrollRef.current?.getBoundingClientRect(); const duration = deps.timelineDurationRef.current;
