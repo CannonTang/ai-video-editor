@@ -178,16 +178,9 @@ export function EditorSidebar({ model: d }) {
             vocalSeparationJob={d.vocalSeparationJob}
             hasVisual={Boolean(d.previewVisualSrc)}
             visualType={d.previewVisualType}
-            visionAnalysis={d.previewVisionAnalysis}
-            visionOptions={d.previewVisionOptions}
-            visionRunning={d.visionJob.running && d.visionJob.key === d.previewVisionKey}
-            visionProgress={d.visionJob.key === d.previewVisionKey ? d.visionJob.progress : 0}
-            visionPhase={d.visionJob.key === d.previewVisionKey ? d.visionJob.phase : ""}
+            smartFrame={d.smartFrame}
             analyzeCurrentVisual={d.analyzeCurrentVisual}
             analyzeEffectVisual={d.analyzeEffectVisual}
-            toggleVisionOption={d.toggleVisionOption}
-            clearVisionAnalysis={d.clearVisionAnalysis}
-            downloadVisionCutout={d.downloadVisionCutout}
             openAvatarPanel={d.openAvatarPanel}
             smartMode={d.smartMode}
             setSmartMode={d.setSmartMode}

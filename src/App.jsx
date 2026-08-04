@@ -23,6 +23,7 @@ import { useToast } from "./hooks/useToast.js";
 import { useProjectFiles } from "./hooks/useProjectFiles.js";
 import { useAutosaveTimestamp } from "./hooks/useAutosaveTimestamp.js";
 import { useVisionAnalysis } from "./hooks/useVisionAnalysis.js";
+import { useSmartFrame } from "./hooks/useSmartFrame.js";
 import { useFileUpload } from "./hooks/useFileUpload.js";
 import { useMediaSync } from "./hooks/useMediaSync.js";
 import { useVideoExport } from "./hooks/useVideoExport.js";
@@ -480,16 +481,25 @@ export function App() {
     notify,
     t,
   });
+  const smartFrame = useSmartFrame({
+    selectedSegment: selectedVisualSegment,
+    ratioId,
+    setRatioId,
+    setVisualSegments,
+    trackLocked: Boolean(trackLocks.image),
+    notify,
+  });
   const exportElapsedSeconds = useExportElapsed(exporting, exportStartRef);
   const {
     effectiveCaptionPlacement, previewSmartCropRect, previewVisionAnalysis,
-    previewVisionFrameSize, previewVisionMaskUrl, previewVisionOptions,
-    previewVisionOverlayBoxes, previewVisualObjectFit, previewVisualObjectPosition,
+    previewVisionMaskUrl, previewVisionOptions,
+    previewSmartBackgroundPosition, previewVisualObjectFit, previewVisualObjectPosition,
     previewVisualRenderSrc,
   } = usePreviewModel({
     captionPlacement, captionSize, captionStyle, currentCaption, fitMode, previewFrameSize,
     previewVideoMediaTime, previewVisionBaseAnalysis, previewVisionRecord,
     previewVisualSourceTime, previewVisualSrc, previewVisualType, ratio,
+    previewVisualSegment, previewSmartFrameOverride: smartFrame.previewOverride,
   });
 
   const { builtInAssets, filteredVoices, libraryType, libraryQuery, setLibraryQuery,
@@ -559,8 +569,7 @@ export function App() {
   });
 
   const {
-    clearVisionAnalysis, downloadVisionCutout, removeVisionRecordsForAsset,
-    setFitModeFromUser, toggleVisionOption,
+    removeVisionRecordsForAsset, setFitModeFromUser,
   } = createVisionControls({
     imageName, notify, previewVisionAnalysis, previewVisionBaseAnalysis, previewVisionKey,
     previewVisionOptions, previewVisionRecord, previewVisualSegment, previewVisualType,
@@ -1137,8 +1146,8 @@ export function App() {
           activeLanguage, activeTool, analyzeCurrentVisual, analyzeEffectVisual, audioBlob, audioDuration,
           builtInAssets, captionPosition, captionSegments, captionSize, captionStyle,
           captionTargetDuration, captionsEnabled, clearMusicTrack, clearSourceAudioTrack,
-          clearVisionAnalysis, compactRail, currentSegmentIndex, deleteCaptionSegment,
-          deleteUserAsset, downloadBlob, downloadVisionCutout, draggedAssetId,
+          compactRail, currentSegmentIndex, deleteCaptionSegment,
+          deleteUserAsset, downloadBlob, draggedAssetId,
           estimatedDuration, fileInputRef, generateCaptionsFromSourceAudio, handleAssetClick,
           handleAssetPointerDown, handleCaptionPositionChange, handleFiles, handleStickerClick, confirmStickerSelection,
           imageSrc, isDragging, mediaTab, musicBlob, musicDuration, musicName, musicVolume,
@@ -1153,8 +1162,8 @@ export function App() {
           setSelectedStickerId, setSelectedTrack, setSelectedTransitionId, setSourceAudioVolume, setVoiceTab,
           sourceAudioBlob, sourceAudioDuration, sourceAudioLinked, sourceAudioName, sourceAudioVolume, status, t,
           selectedAudioToolTarget, separateSelectedAudioVocals, separateSourceVocals, vocalSeparationJob,
-          toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
-          updateScript, userAssets, visionJob, aiMusic,
+          toggleCaptionSegmentHidden, trOption, updateCaptionSegmentText,
+          updateScript, userAssets, visionJob, aiMusic, smartFrame,
           selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
           effectsPanelMode, setEffectsPanelMode, cinematicDepth, photoParallaxDepth,
           visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
@@ -1215,16 +1224,13 @@ export function App() {
           }}
           visualObjectFit={previewVisualObjectFit}
           visualObjectPosition={previewVisualObjectPosition}
-          visionOverlayBoxes={previewVisionOverlayBoxes}
-          showVisionOverlays={activeTool !== "effects" && previewVisionOptions.showDetections}
           backgroundRemoved={
             previewVisionOptions.removeBackground &&
             Boolean(previewVisionAnalysis?.cutoutUrl)
           }
           smartCropActive={Boolean(previewSmartCropRect)}
-          captionAvoidanceActive={
-            previewVisionOptions.avoidCaptions && Boolean(previewVisionAnalysis?.subject?.box)
-          }
+          smartFramePresentation={previewSmartCropRect?.presentation}
+          smartFrameBackgroundPosition={previewSmartBackgroundPosition}
           setFitMode={setFitModeFromUser}
           captionsEnabled={captionsEnabled}
           currentCaption={currentCaption}
@@ -1346,16 +1352,9 @@ export function App() {
           captionStyle={captionStyle}
           setCaptionStyle={setCaptionStyle}
           setCaptionSegments={setCaptionSegments}
-          visionAnalysis={previewVisionAnalysis}
-          visionOptions={previewVisionOptions}
-          visionRunning={visionJob.running && visionJob.key === previewVisionKey}
-          visionProgress={visionJob.key === previewVisionKey ? visionJob.progress : 0}
-          visionPhase={visionJob.key === previewVisionKey ? visionJob.phase : ""}
+          smartFrame={smartFrame}
           analyzeCurrentVisual={analyzeCurrentVisual}
           analyzeEffectVisual={analyzeEffectVisual}
-          toggleVisionOption={toggleVisionOption}
-          clearVisionAnalysis={clearVisionAnalysis}
-          downloadVisionCutout={downloadVisionCutout}
           hasVisual={Boolean(previewVisualSrc)}
           visualType={previewVisualType}
           audioDuration={audioDuration}

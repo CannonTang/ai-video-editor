@@ -57,7 +57,8 @@ import {
   updateVectorPart,
 } from "../lib/vectorDocument.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
-import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { SmartFramePanel } from "./SmartFramePanel.jsx";
 import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
 import { CinematicDepthPanel } from "./CinematicDepthPanel.jsx";
@@ -1199,16 +1200,9 @@ export function VoicePanel({
   captionStyle,
   setCaptionStyle,
   setCaptionSegments,
-  visionAnalysis,
-  visionOptions,
-  visionRunning,
-  visionProgress,
-  visionPhase,
+  smartFrame,
   analyzeCurrentVisual,
   analyzeEffectVisual,
-  toggleVisionOption,
-  clearVisionAnalysis,
-  downloadVisionCutout,
   hasVisual,
   visualType,
   audioDuration,
@@ -1474,7 +1468,7 @@ export function VoicePanel({
           onChange={updateSelectedPhotoParallax}
         /> : null}
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
-        {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}
+        {isSmartFrameContext ? <SmartFramePanel t={t} smartFrame={smartFrame} /> : null}
         {isAiMusicContext ? <AiMusicGenerator language={uiLanguage} music={aiMusic} embedded /> : null}
         {isStickerContext ? <StickerContextPanel t={t} segment={selectedStickerSegment} updateStickerSegment={updateStickerSegment} deleteStickerSegment={deleteStickerSegment} /> : null}
         {isOverlayContext ? <div className="visual-overlay-inspector">

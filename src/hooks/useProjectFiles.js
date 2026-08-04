@@ -3,6 +3,7 @@ import { DEFAULT_SCRIPT, DEFAULT_TIMELINE_DURATION_SECONDS, RATIO_OPTIONS, VOICE
 import { decodeWaveform, downloadBlob } from "../lib/media.js";
 import { createProjectArchive, readProjectArchive, readProjectFileAsText, resolveProjectVisualMedia } from "../lib/projectArchive.js";
 import { createCaptionSegments, getImageThumbnailCount, getVisualSegmentsTotal } from "../lib/timeline.js";
+import { normalizeSmartFrame } from "../lib/smartFrame.js";
 
 export function useProjectFiles(deps) {
   const commandStateRef = useRef({ schemaVersion: 1, revision: 0, appliedOperationIds: [] });
@@ -87,7 +88,14 @@ export function useProjectFiles(deps) {
       deps.setSelectedStickerId(data.selectedStickerId || "none"); deps.setStickerSegments(Array.isArray(data.stickerSegments) ? data.stickerSegments : []);
       const visuals = Array.isArray(data.visualSegments) ? data.visualSegments.map((segment) => {
         const media = resolveProjectVisualMedia(visualMedia, segment);
-        return media?.blob ? { ...segment, src: URL.createObjectURL(media.blob), blob: media.blob } : segment?.src ? segment : null;
+        const restored = media?.blob ? { ...segment, src: URL.createObjectURL(media.blob), blob: media.blob } : segment?.src ? segment : null;
+        if (!restored) return null;
+        const smartFrame = normalizeSmartFrame(restored.smartFrame);
+        if (!smartFrame) {
+          const { smartFrame: _smartFrame, ...withoutSmartFrame } = restored;
+          return withoutSmartFrame;
+        }
+        return { ...restored, smartFrame };
       }).filter(Boolean) : [];
       visuals.filter((segment) => segment.src?.startsWith("blob:")).forEach((segment) => deps.imageUrlRefs.current.add(segment.src));
       deps.setVisualSegments(visuals); deps.setImageDuration(getVisualSegmentsTotal(visuals));

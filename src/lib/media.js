@@ -19,7 +19,8 @@ import {
 } from "./captionLayout.js";
 import { resolveCaptionStyleForSegment } from "./captionFonts.js";
 import { resolveVisionAnalysisAtTime } from "./vision.js";
-import { getCaptionAvoidancePlacement, getSmartCropRect, getVisualFitRect } from "./visualGeometry.js";
+import { getVisualFitRect } from "./visualGeometry.js";
+import { resolveSmartFrameCropAtTime, smartFrameCropToPixels } from "./smartFrame.js";
 import {
   getVisualMaskFeatherPixels,
   getVisualMaskGeometry,
@@ -622,16 +623,44 @@ function drawVisualUsingLayout(context, visual, layout, isMask = false) {
   );
 }
 
-function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = null, requestedSubjectEffect = null) {
+function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = null, requestedSubjectEffect = null, smartFrameCrop = null) {
   const { width, height } = canvas;
   const visualSize = getVisualDimensions(visual);
-  const smartCropEnabled = Boolean(fitMode === "cover" && vision?.options?.smartCrop && vision?.subject?.box);
-  const smartCropRect = smartCropEnabled
-    ? getSmartCropRect(visualSize, canvas, vision.subject.box, { padding: 0.14 })
+  const smartCropRect = smartFrameCrop
+    ? smartFrameCropToPixels(smartFrameCrop, visualSize)
     : null;
 
   let layout;
-  if (smartCropRect) {
+  if (smartCropRect?.presentation === "safe-contain") {
+    const backgroundRect = getVisualFitRect(visualSize, canvas, "cover");
+    const backgroundScale = 1.1;
+    const backgroundWidth = backgroundRect.width * backgroundScale;
+    const backgroundHeight = backgroundRect.height * backgroundScale;
+    context.save();
+    context.fillStyle = "#080a0e";
+    context.fillRect(0, 0, width, height);
+    context.filter = "blur(20px) brightness(58%) saturate(112%)";
+    drawVisualUsingLayout(context, visual, {
+      sourceSize: visualSize,
+      smartCropRect: null,
+      drawRect: {
+        x: backgroundRect.x - (backgroundWidth - backgroundRect.width) / 2,
+        y: backgroundRect.y - (backgroundHeight - backgroundRect.height) / 2,
+        width: backgroundWidth,
+        height: backgroundHeight,
+      },
+      outputSize: { width, height },
+    });
+    context.restore();
+    const fitRect = getVisualFitRect(visualSize, canvas, "contain");
+    layout = {
+      sourceSize: visualSize,
+      smartCropRect: null,
+      drawRect: { x: fitRect.x, y: fitRect.y, width: fitRect.width, height: fitRect.height },
+      fitMode: "contain",
+      outputSize: { width, height },
+    };
+  } else if (smartCropRect) {
     layout = {
       sourceSize: visualSize,
       smartCropRect,
@@ -820,7 +849,6 @@ export function drawPreviewFrame(context, visual, canvas, options) {
   const maskWidth = mask.type === "circle" ? circleSize : (Number.isFinite(mask.width) ? mask.width : 80) / 100 * width;
   const maskHeight = mask.type === "circle" ? circleSize : (Number.isFinite(mask.height) ? mask.height : 80) / 100 * height;
   const usesAlphaMask = mask.type && mask.type !== "none" && (mask.inverted || Number(mask.feather) > 0);
-  let visualLayout;
   const cinematicDepth = normalizeCinematicDepth(visualEffects?.cinematicDepth);
   const photoParallax = normalizePhotoParallax(visualEffects?.photoParallax);
   const drawPrimaryVisual = (targetContext, targetCanvas) => {
@@ -841,7 +869,9 @@ export function drawPreviewFrame(context, visual, canvas, options) {
         outputSize: { width: targetCanvas.width, height: targetCanvas.height },
       };
     }
-    return drawFittedVisual(targetContext, visual, targetCanvas, fitMode, filter, vision, visualEffects?.subjectEffect);
+    const smartFrameSourceTime = getVisualSourceTime(visualEffects, visualTime);
+    const smartFrameCrop = resolveSmartFrameCropAtTime(visualEffects?.smartFrame, smartFrameSourceTime);
+    return drawFittedVisual(targetContext, visual, targetCanvas, fitMode, filter, vision, visualEffects?.subjectEffect, smartFrameCrop);
   };
   if (usesAlphaMask) {
     const layers = getVisualEffectsLayers(canvas);
@@ -854,7 +884,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     layerContext.rotate((animatedTransform.rotation * Math.PI) / 180);
     layerContext.scale(animatedTransform.scale, animatedTransform.scale);
     layerContext.translate(-width / 2, -height / 2);
-    visualLayout = drawPrimaryVisual(layerContext, layers.visual);
+    drawPrimaryVisual(layerContext, layers.visual);
     layerContext.restore();
     drawVisualEffectsMask(maskContext, mask, layers.mask);
     layerContext.save();
@@ -876,7 +906,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     context.rotate((animatedTransform.rotation * Math.PI) / 180);
     context.scale(animatedTransform.scale, animatedTransform.scale);
     context.translate(-width / 2, -height / 2);
-    visualLayout = drawPrimaryVisual(context, canvas);
+    drawPrimaryVisual(context, canvas);
     context.restore();
   }
 
@@ -895,7 +925,9 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       context.translate(width / 2, height / 2); context.scale(scale, scale); context.translate(-width / 2, -height / 2);
     }
     const nextFilter = transitionId === "blur" ? `blur(${Math.max(0, (1 - amount) * 14)}px)` : transitionNext.filter || filter;
-    drawFittedVisual(context, transitionNext.visual, canvas, fitMode, nextFilter, transitionNext.vision || null);
+    const nextSourceTime = getVisualSourceTime(transitionNext.visualEffects, transitionNext.visualTime || 0);
+    const nextSmartFrameCrop = resolveSmartFrameCropAtTime(transitionNext.visualEffects?.smartFrame, nextSourceTime);
+    drawFittedVisual(context, transitionNext.visual, canvas, fitMode, nextFilter, transitionNext.vision || null, null, nextSmartFrameCrop);
     context.restore();
     if (transitionId === "flash") {
       context.fillStyle = `rgba(255,255,255,${Math.max(0, 1 - Math.abs(amount - 0.5) * 2) * 0.7})`;
@@ -1000,24 +1032,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       referenceFrame: captionReferenceSize ?? canvas,
       renderFrame: canvas,
     });
-    const baseCaptionPlacement = captionPlacement ?? captionPosition;
-    const avoidingPlacement =
-      vision?.options?.avoidCaptions && vision?.subject?.box
-        ? getCaptionAvoidancePlacement(vision.subject.box, {
-            sourceSize: visualLayout.sourceSize,
-            frameSize: canvas,
-            fitMode: visualLayout.fitMode,
-            smartCrop: visualLayout.smartCropRect || false,
-            basePlacement: baseCaptionPlacement,
-            previousPlacement: baseCaptionPlacement,
-            captionSize: {
-              width: captionLayout.width / Math.max(1, width),
-              height: captionLayout.height,
-            },
-            safeMargin: 0.045,
-          })
-        : null;
-    const effectiveCaptionPlacement = avoidingPlacement || baseCaptionPlacement;
+    const effectiveCaptionPlacement = captionPlacement ?? captionPosition;
     drawCaptionLayout(
       context,
       captionLayout,
@@ -1596,7 +1611,11 @@ export async function exportBrowserVideo({
       stickers: exportStickers,
       stickerImages: exportStickers.map((item) => item?.src ? stickerImageMap.get(item.src) : null),
       transitionId: nextVisualItem ? junction.id : "none",
-      transitionNext: nextVisualItem ? { visual: nextVisualItem.cutoutVisual || nextVisualItem.visual } : null,
+      transitionNext: nextVisualItem ? {
+        visual: nextVisualItem.cutoutVisual || nextVisualItem.visual,
+        visualEffects: nextVisualItem.segment,
+        visualTime: transitionProgress * transitionDuration,
+      } : null,
       transitionProgress,
       vision: frameVision,
       depth: frameDepth,
