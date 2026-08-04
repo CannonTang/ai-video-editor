@@ -121,6 +121,8 @@ export function useDepthOfFieldAnalysis({
   depthRecords,
   setDepthRecords,
   updateEffect,
+  effectField = "cinematicDepth",
+  readyToastKey = "depthReadyToast",
   notify,
   setCurrentTime,
   timelineStart = 0,
@@ -165,7 +167,7 @@ export function useDepthOfFieldAnalysis({
     }
     const controller = new AbortController();
     abortRef.current = controller;
-    const effect = segment.cinematicDepth || {};
+    const effect = segment?.[effectField] || {};
     const quality = QUALITY[effect.quality] || QUALITY.balanced;
     setJob({ running: true, key, stage: "setup", progress: 1, phase: t("depthModelPreparing"), error: "" });
     let source;
@@ -225,9 +227,9 @@ export function useDepthOfFieldAnalysis({
       oldUrls.forEach((url) => URL.revokeObjectURL(url));
       urlsRef.current.set(key, createdUrls);
       setDepthRecords((records) => ({ ...records, [key]: analysis }));
-      updateEffect?.({ ...segment.cinematicDepth, enabled: true });
+      updateEffect?.({ ...segment?.[effectField], enabled: true });
       setJob({ running: false, key, stage: "complete", progress: 100, phase: t("depthAnalysisComplete"), error: "" });
-      notify(t("depthReadyToast"));
+      notify(t(readyToastKey));
     } catch (error) {
       if (error?.name === "AbortError") {
         createdUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -243,8 +245,7 @@ export function useDepthOfFieldAnalysis({
       source?.cleanup?.();
       if (abortRef.current === controller) abortRef.current = null;
     }
-  }, [cancel, ensureWorker, job.running, key, notify, segment, setCurrentTime, setDepthRecords, t, timelineStart, updateEffect]);
+  }, [cancel, effectField, ensureWorker, job.running, key, notify, readyToastKey, segment, setCurrentTime, setDepthRecords, t, timelineStart, updateEffect]);
 
   return useMemo(() => ({ key, record, job, analyze, cancel }), [analyze, cancel, job, key, record]);
 }
-

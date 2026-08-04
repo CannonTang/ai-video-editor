@@ -76,6 +76,7 @@ import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
 import { getVisionKey } from "./lib/vision.js";
 import { DEFAULT_SUBJECT_EFFECT, normalizeSubjectEffect } from "./lib/subjectEffects.js";
 import { normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./lib/depthOfField.js";
+import { normalizePhotoParallax } from "./lib/photoParallax.js";
 import {
   getExportContentDuration,
   getExportDimensions,
@@ -392,6 +393,7 @@ export function App() {
       if (change.animation) return { ...item, animation: change.animation };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
       if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
+      if (change.photoParallax) return { ...item, photoParallax: normalizePhotoParallax(change.photoParallax) };
       if (change.vectorPatch && (item.kind === "vector" || item.vectorBody)) return { ...item, ...change.vectorPatch };
       if (typeof change.enhancementEnabled === "boolean" && item.enhancement) {
         if (["remaster-drunet-full", "nanovsr-644k"].includes(item.enhancement.mode)) {
@@ -930,6 +932,7 @@ export function App() {
       if (change.animation) return { ...item, animation: change.animation };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
       if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
+      if (change.photoParallax) return { ...item, photoParallax: normalizePhotoParallax(change.photoParallax) };
       if (change.timing) return { ...item, ...change.timing };
       if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
       return item;
@@ -944,6 +947,14 @@ export function App() {
     }
     updateSelectedVisualEffects({ cinematicDepth });
   };
+  const updateSelectedPhotoParallax = (nextEffect) => {
+    const photoParallax = normalizePhotoParallax(nextEffect);
+    if (selectedTrack === "overlay" && selectedVisualOverlay) {
+      updateSelectedVisualOverlayEffects({ photoParallax });
+      return;
+    }
+    updateSelectedVisualEffects({ photoParallax });
+  };
   const depthTimelineStart = selectedTrack === "overlay" && selectedVisualOverlay
     ? selectedVisualOverlay.start || 0
     : selectedVisualRange?.start || 0;
@@ -952,6 +963,18 @@ export function App() {
     depthRecords,
     setDepthRecords,
     updateEffect: updateSelectedCinematicDepth,
+    notify,
+    setCurrentTime,
+    timelineStart: depthTimelineStart,
+    t,
+  });
+  const photoParallaxDepth = useDepthOfFieldAnalysis({
+    segment: selectedEffectSegment,
+    depthRecords,
+    setDepthRecords,
+    updateEffect: updateSelectedPhotoParallax,
+    effectField: "photoParallax",
+    readyToastKey: "parallaxReadyToast",
     notify,
     setCurrentTime,
     timelineStart: depthTimelineStart,
@@ -1133,7 +1156,7 @@ export function App() {
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
           selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
-          effectsPanelMode, setEffectsPanelMode, cinematicDepth,
+          effectsPanelMode, setEffectsPanelMode, cinematicDepth, photoParallaxDepth,
           visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
@@ -1160,6 +1183,7 @@ export function App() {
           subjectEffect={previewVisualSegment?.subjectEffect}
           subjectCutoutUrl={previewVisionAnalysis?.cutoutUrl || ""}
           cinematicDepth={previewVisualSegment?.cinematicDepth}
+          photoParallax={previewVisualSegment?.photoParallax}
           depthAnalysis={previewDepthAnalysis}
           visualLocalTime={visualAnimationPreview?.segmentId && visualAnimationPreview.segmentId === previewVisualSegment?.id
             ? visualAnimationPreview.localTime
@@ -1380,6 +1404,8 @@ export function App() {
           effectsPanelMode={effectsPanelMode}
           cinematicDepth={cinematicDepth}
           updateSelectedCinematicDepth={updateSelectedCinematicDepth}
+          photoParallaxDepth={photoParallaxDepth}
+          updateSelectedPhotoParallax={updateSelectedPhotoParallax}
           updateSelectedSubjectEffect={updateSelectedSubjectEffect}
           removeSelectedSubjectEffect={removeSelectedSubjectEffect}
           onOpticalFlowAssetReady={handleOpticalFlowAssetReady}

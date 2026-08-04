@@ -31,14 +31,18 @@ import { getVectorDesignAppearance, getVectorRenderSource } from "../lib/vectorD
 import { hasSubjectEffect, normalizeSubjectEffect } from "../lib/subjectEffects.js";
 import { SubjectMaterialFilterDefs } from "./SubjectMaterialFilter.jsx";
 import { drawCinematicDepthFrame, normalizeCinematicDepth } from "../lib/depthOfField.js";
+import { drawPhotoParallaxFrame, normalizePhotoParallax } from "../lib/photoParallax.js";
 
 function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
   const videoRef = useRef(null);
   const imageRef = useRef(null);
   const canvasRef = useRef(null);
   const depthEffect = useMemo(() => normalizeCinematicDepth(overlay.cinematicDepth), [overlay.cinematicDepth]);
+  const parallaxEffect = useMemo(() => normalizePhotoParallax(overlay.photoParallax), [overlay.photoParallax]);
   const depthUrl = overlay.depthAnalysis?.depthUrl || "";
   const depthActive = depthEffect.enabled && Boolean(depthUrl);
+  const parallaxActive = overlay.type === "image" && parallaxEffect.enabled && Boolean(depthUrl);
+  const depthRenderActive = parallaxActive || depthActive;
   useEffect(() => {
     const video = videoRef.current;
     if (!video || overlay.type !== "video") return;
@@ -50,7 +54,7 @@ function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
     else video.pause();
   }, [isPlaying, localTime, overlay.playbackRate, overlay.sourceStart, overlay.type]);
   useEffect(() => {
-    if (!depthActive || !canvasRef.current) return undefined;
+    if (!depthRenderActive || !canvasRef.current) return undefined;
     let canceled = false;
     const depthImage = new Image();
     depthImage.onload = () => {
@@ -62,16 +66,17 @@ function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
       canvas.width = Math.max(2, Math.round(rect.width * Math.max(1, window.devicePixelRatio || 1)));
       canvas.height = Math.max(2, Math.round(rect.height * Math.max(1, window.devicePixelRatio || 1)));
       const context = canvas.getContext("2d", { alpha: true });
-      drawCinematicDepthFrame(context, source, canvas, { effect: depthEffect, depthVisual: depthImage, fitMode: "contain", filter: style?.filter });
+      if (parallaxActive) drawPhotoParallaxFrame(context, source, canvas, { effect: parallaxEffect, depthVisual: depthImage, fitMode: "contain", filter: style?.filter, time: localTime });
+      else drawCinematicDepthFrame(context, source, canvas, { effect: depthEffect, depthVisual: depthImage, fitMode: "contain", filter: style?.filter });
     };
     depthImage.src = depthUrl;
     return () => { canceled = true; };
-  }, [depthActive, depthEffect, depthUrl, localTime, overlay.type, style?.filter]);
+  }, [depthEffect, depthRenderActive, depthUrl, localTime, overlay.type, parallaxActive, parallaxEffect, style?.filter]);
   return <>
     {overlay.type === "video"
-      ? <video ref={videoRef} src={src} crossOrigin="anonymous" muted={overlay.muted === true} playsInline preload="metadata" style={{ ...style, opacity: depthActive ? 0 : style?.opacity }} />
-      : <img ref={imageRef} src={src} alt="" crossOrigin="anonymous" draggable={false} style={{ ...style, opacity: depthActive ? 0 : style?.opacity }} />}
-    {depthActive ? <canvas ref={canvasRef} className="cinematic-depth-preview-canvas" /> : null}
+      ? <video ref={videoRef} src={src} crossOrigin="anonymous" muted={overlay.muted === true} playsInline preload="metadata" style={{ ...style, opacity: depthRenderActive ? 0 : style?.opacity }} />
+      : <img ref={imageRef} src={src} alt="" crossOrigin="anonymous" draggable={false} style={{ ...style, opacity: depthRenderActive ? 0 : style?.opacity }} />}
+    {depthRenderActive ? <canvas ref={canvasRef} className="cinematic-depth-preview-canvas photo-parallax-preview-canvas" /> : null}
   </>;
 }
 
@@ -129,6 +134,7 @@ export function PreviewStage({
   subjectEffect,
   subjectCutoutUrl = "",
   cinematicDepth,
+  photoParallax,
   depthAnalysis = null,
   visualLocalTime = 0,
   visualMaskEditable = false,
@@ -169,6 +175,9 @@ export function PreviewStage({
   const normalizedSubjectEffect = normalizeSubjectEffect(subjectEffect);
   const normalizedCinematicDepth = useMemo(() => normalizeCinematicDepth(cinematicDepth), [cinematicDepth]);
   const cinematicDepthActive = normalizedCinematicDepth.enabled && Boolean(depthAnalysis?.depthUrl);
+  const normalizedPhotoParallax = useMemo(() => normalizePhotoParallax(photoParallax), [photoParallax]);
+  const photoParallaxActive = previewVisualType === "image" && normalizedPhotoParallax.enabled && Boolean(depthAnalysis?.depthUrl);
+  const depthRenderActive = photoParallaxActive || cinematicDepthActive;
   const subjectEffectActive = hasSubjectEffect(normalizedSubjectEffect) && Boolean(subjectCutoutUrl);
   const replacesBackground = subjectEffectActive && (
     normalizedSubjectEffect.background.visible === false
@@ -244,7 +253,7 @@ export function PreviewStage({
     maskRepeat: shapeMaskUrl ? "no-repeat" : undefined,
   };
   useEffect(() => {
-    if (!cinematicDepthActive || !depthCanvasRef.current) return undefined;
+    if (!depthRenderActive || !depthCanvasRef.current) return undefined;
     let canceled = false;
     const depthImage = new Image();
     depthImage.onload = () => {
@@ -255,7 +264,14 @@ export function PreviewStage({
       canvas.width = Math.max(2, Math.round(frameWidth * previewPixelRatio));
       canvas.height = Math.max(2, Math.round(frameHeight * previewPixelRatio));
       const context = canvas.getContext("2d", { alpha: true });
-      drawCinematicDepthFrame(context, source, canvas, {
+      if (photoParallaxActive) drawPhotoParallaxFrame(context, source, canvas, {
+        effect: normalizedPhotoParallax,
+        depthVisual: depthImage,
+        fitMode: activeObjectFit,
+        filter: selectedFilter.css,
+        time: visualLocalTime,
+      });
+      else drawCinematicDepthFrame(context, source, canvas, {
         effect: normalizedCinematicDepth,
         depthVisual: depthImage,
         fitMode: activeObjectFit,
@@ -264,7 +280,7 @@ export function PreviewStage({
     };
     depthImage.src = depthAnalysis.depthUrl;
     return () => { canceled = true; };
-  }, [activeObjectFit, cinematicDepthActive, depthAnalysis?.depthUrl, frameHeight, frameWidth, normalizedCinematicDepth, previewPixelRatio, previewVideoRef, previewVisualType, selectedFilter.css, visualLocalTime]);
+  }, [activeObjectFit, depthAnalysis?.depthUrl, depthRenderActive, frameHeight, frameWidth, normalizedCinematicDepth, normalizedPhotoParallax, photoParallaxActive, previewPixelRatio, previewVideoRef, previewVisualType, selectedFilter.css, visualLocalTime]);
   const startMaskEdit = (event, mode) => {
     const frame = previewCanvasRef.current;
     if (!frame || !onUpdateVisualMask) return;
@@ -626,7 +642,7 @@ export function PreviewStage({
                   src={renderedVisualSrc}
                   alt={t("currentMediaAlt")}
                   crossOrigin="anonymous"
-                  style={{ ...visualTransformStyle, opacity: cinematicDepthActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
+                  style={{ ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
                 /> : null}
                 {previewVisualType === "video" ? <video
                   key={previewVisualSrc}
@@ -643,7 +659,7 @@ export function PreviewStage({
                     onPreviewVideoTimeUpdate?.(event.currentTarget.currentTime);
                   }}
                   style={{
-                    ...visualTransformStyle, opacity: cinematicDepthActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition,
+                    ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition,
                     WebkitMaskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     maskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     WebkitMaskSize: previewVisionMaskUrl ? activeObjectFit : undefined,
@@ -654,7 +670,7 @@ export function PreviewStage({
                     maskRepeat: previewVisionMaskUrl ? "no-repeat" : undefined,
                   }}
                 /> : null}
-                {cinematicDepthActive ? <canvas ref={depthCanvasRef} className="cinematic-depth-preview-canvas" style={visualTransformStyle} /> : null}
+                {depthRenderActive ? <canvas ref={depthCanvasRef} className="cinematic-depth-preview-canvas photo-parallax-preview-canvas" style={visualTransformStyle} /> : null}
                 {showRemasterPreview ? <img
                   className="remaster-preview-frame"
                   src={enhancement.previewUrl}
