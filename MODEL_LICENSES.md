@@ -73,6 +73,7 @@ license files and upstream notices control:
 | NanoVSR 644K | Browser image/video 4× restoration | MIT | [`public/models/nanovsr-644k/README.md`](public/models/nanovsr-644k/README.md) and [`LICENSE`](public/models/nanovsr-644k/LICENSE) |
 | NanoDet-Plus-m-320 | Object proposals | Apache-2.0 | [`public/assets/effects/models/OBJECT_MODELS.md`](public/assets/effects/models/OBJECT_MODELS.md) |
 | MediaPipe MagicTouch 512 | Point-prompted object segmentation | Apache-2.0 | [`public/assets/effects/models/OBJECT_MODELS.md`](public/assets/effects/models/OBJECT_MODELS.md) |
+| Depth Anything V2 Small Q4F16 | Browser-local relative depth estimation | Apache-2.0 | [`public/assets/effects/models/DEPTH_ANYTHING_V2_SMALL.md`](public/assets/effects/models/DEPTH_ANYTHING_V2_SMALL.md) |
 
 ## Other remotely loaded AI models
 

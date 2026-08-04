@@ -35,6 +35,7 @@ import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js
 import { getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect } from "./subjectEffects.js";
 import { getGeneratedMediaTags } from "./generatedMediaMetadata.js";
+import { resolveDepthAnalysisAtTime } from "./depthOfField.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 let aacFallbackRegistered = false;
@@ -225,6 +226,9 @@ async function prepareComposition(options) {
     return {
       segment, visual, cutoutVisual,
       temporalMaskCache: maskUrls.length ? createTemporalMaskCache(maskUrls) : null,
+      depthCache: (segment.depth?.samples || []).length
+        ? createTemporalMaskCache([...new Set(segment.depth.samples.map((sample) => sample.depthUrl).filter(Boolean))])
+        : null,
       sequentialFrames,
       decodeMode: segment.type === "video" ? (sequentialFrames ? "sequential-webcodecs" : "precise-seek") : "static-image",
     };
@@ -247,12 +251,16 @@ async function prepareComposition(options) {
     ) ? segment.vision?.cutoutUrl : "";
     const temporalMaskCache = createTemporalMaskCache(imageMaskUrl ? [imageMaskUrl] : maskUrls);
     if (imageMaskUrl || maskUrls[0]) await temporalMaskCache.prepare(imageMaskUrl || maskUrls[0]);
+    const depthUrls = [...new Set((segment.depth?.samples || []).map((sample) => sample.depthUrl).filter(Boolean))];
+    const depthCache = createTemporalMaskCache(depthUrls);
+    if (depthUrls[0]) await depthCache.prepare(depthUrls[0]);
     return {
       segment,
       visual: segment.type === "video"
         ? await loadVideo(segment.src)
         : await loadImage(getVectorRenderSource(segment, { targetWidth, targetHeight })),
       temporalMaskCache,
+      depthCache,
     };
   }));
   throwIfExportAborted(options.signal);
@@ -279,6 +287,12 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
     ...vision,
     options: item.segment.vision?.options || vision.options,
     maskVisual: vision.cutoutUrl ? item.temporalMaskCache?.get(vision.cutoutUrl) : null,
+  } : null;
+  const depthSample = resolveDepthAnalysisAtTime(item.segment.depth || null, sourceTime);
+  if (depthSample?.depthUrl) await item.depthCache?.prepare(depthSample.depthUrl);
+  const frameDepth = depthSample ? {
+    ...depthSample,
+    depthVisual: item.depthCache?.get(depthSample.depthUrl) || null,
   } : null;
   const junction = item.segment.transition;
   const transitionDuration = junction?.id && junction.id !== "none"
@@ -307,17 +321,20 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
       ? getVisualSourceTime(overlay.segment, Math.max(0, time - overlay.segment.start))
       : Math.max(0, time - overlay.segment.start);
     const vision = resolveVisionAnalysisAtTime(overlay.segment.vision || null, sourceTime);
+    const depthSample = resolveDepthAnalysisAtTime(overlay.segment.depth || null, sourceTime);
     if (vision?.cutoutUrl) await overlay.temporalMaskCache?.prepare(vision.cutoutUrl);
+    if (depthSample?.depthUrl) await overlay.depthCache?.prepare(depthSample.depthUrl);
     return {
       ...overlay,
-      renderSegment: vision ? {
+      renderSegment: {
         ...overlay.segment,
-        vision: {
+        ...(vision ? { vision: {
           ...vision,
           options: overlay.segment.vision?.options || vision.options,
           maskVisual: overlay.temporalMaskCache?.get(vision.cutoutUrl) || null,
-        },
-      } : overlay.segment,
+        } } : {}),
+        ...(depthSample ? { depth: { ...depthSample, depthVisual: overlay.depthCache?.get(depthSample.depthUrl) || null } } : {}),
+      },
     };
   }));
   drawPreviewFrame(context, frameVisual, canvas, {
@@ -330,7 +347,7 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
     stickers, stickerImages: stickers.map((sticker) => prepared.stickerImages.get(sticker.src)),
     transitionId: next ? junction.id : "none",
     transitionNext: next ? { visual: next.cutoutVisual || next.visual } : null,
-    transitionProgress, vision: frameVision, visualEffects: item.segment, visualTime: localTime,
+    transitionProgress, vision: frameVision, depth: frameDepth, visualEffects: item.segment, visualTime: localTime,
     visualOverlays: renderedOverlayItems.map((item) => ({ ...item.renderSegment, start: item.segment.start - (range?.start || 0) })),
     visualOverlaySources: renderedOverlayItems.map((item) => item.visual),
   });

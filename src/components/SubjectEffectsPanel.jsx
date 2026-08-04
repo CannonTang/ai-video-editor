@@ -1,4 +1,5 @@
 import {
+  Aperture,
   CaretRight,
   Check,
   CircleNotch,
@@ -114,6 +115,8 @@ const OBJECT_OUTLINE_PREVIEW_STILL = "/assets/effects/previews/object-outline-st
 const OBJECT_OUTLINE_PREVIEW_GIF = "/assets/effects/previews/object-outline-hover.webp";
 const FACE_SWAP_PREVIEW_STILL = "/assets/sample-portrait.png";
 const FACE_SWAP_PREVIEW_GIF = "/assets/effects/previews/face-swap-hover.gif";
+const CINEMATIC_DEPTH_PREVIEW_STILL = "/assets/effects/previews/cinematic-depth-still.png";
+const CINEMATIC_DEPTH_PREVIEW_HOVER = "/assets/effects/previews/cinematic-depth-hover.png";
 
 function ObjectOutlineCard({ t, active, running, progress, analysis, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -311,6 +314,57 @@ function FaceSwapEffectCard({ t, active, onClick }) {
           <small>{t("faceSwapDescription")}</small>
         </span>
         <span className="subject-outline-entry-state"><CaretRight size={17} /></span>
+      </span>
+    </button>
+  );
+}
+
+function CinematicDepthEffectCard({ t, active, analysis, running, progress, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [hoverless, setHoverless] = useState(false);
+  const previewing = hovered || hoverless;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(hover: none)");
+    const update = () => setHoverless(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return (
+    <button
+      className={`subject-outline-entry subject-cinematic-depth-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => {
+        if (event.pointerType !== "touch") setHovered(true);
+      }}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span className="subject-outline-entry-preview">
+        <img
+          key={previewing ? "depth" : "source"}
+          src={previewing ? CINEMATIC_DEPTH_PREVIEW_HOVER : CINEMATIC_DEPTH_PREVIEW_STILL}
+          alt=""
+        />
+        <span className="subject-outline-entry-preview-state">
+          <Aperture size={13} weight="fill" />
+          {previewing ? t("depthPreviewApplied") : t("effectPreviewHover")}
+        </span>
+        {running ? <span className="subject-outline-entry-progress"><i style={{ width: `${Math.round(progress || 0)}%` }} /></span> : null}
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy">
+          <strong>{t("depthTitle")}</strong>
+          <small>{t("depthDescription")}</small>
+        </span>
+        <span className="subject-outline-entry-state">
+          {running ? `${Math.round(progress || 0)}%` : analysis?.complete ? <Check size={16} weight="bold" /> : <CaretRight size={17} />}
+        </span>
       </span>
     </button>
   );
@@ -579,8 +633,13 @@ export function SubjectEffectsWorkspace({
   onOpenInspector,
   onOpenFaceSwap,
   onOpenOpticalFlow,
+  onOpenCinematicDepth,
   faceSwapActive = false,
   opticalFlowActive = false,
+  cinematicDepthActive = false,
+  cinematicDepthAnalysis = null,
+  cinematicDepthRunning = false,
+  cinematicDepthProgress = 0,
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
@@ -643,6 +702,14 @@ export function SubjectEffectsWorkspace({
         />
         <FaceSwapEffectCard t={t} active={faceSwapActive} onClick={onOpenFaceSwap} />
         <OpticalFlowEffectCard t={t} active={opticalFlowActive} onClick={onOpenOpticalFlow} />
+        <CinematicDepthEffectCard
+          t={t}
+          active={cinematicDepthActive}
+          analysis={cinematicDepthAnalysis}
+          running={cinematicDepthRunning}
+          progress={cinematicDepthProgress}
+          onClick={onOpenCinematicDepth}
+        />
       </div>
     </div>
   );
