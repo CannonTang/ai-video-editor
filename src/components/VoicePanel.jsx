@@ -61,6 +61,7 @@ import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, SmartVisionPanel, Visual
 import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
 import { CinematicDepthPanel } from "./CinematicDepthPanel.jsx";
+import { PhotoParallaxPanel } from "./PhotoParallaxPanel.jsx";
 
 function AutoEditReviewDialog({ t, autoEdit }) {
   const { review, job } = autoEdit || {};
@@ -1258,6 +1259,8 @@ export function VoicePanel({
   faceSwap,
   cinematicDepth,
   updateSelectedCinematicDepth,
+  photoParallaxDepth,
+  updateSelectedPhotoParallax,
   onOpticalFlowAssetReady,
 }) {
   const [captionPanelTab, setCaptionPanelTab] = useState("caption");
@@ -1277,6 +1280,7 @@ export function VoicePanel({
   const isFaceSwapContext = isEffectsContext && effectsPanelMode === "face-swap";
   const isOpticalFlowContext = isEffectsContext && effectsPanelMode === "vector-tracking";
   const isCinematicDepthContext = isEffectsContext && effectsPanelMode === "cinematic-depth";
+  const isPhotoParallaxContext = isEffectsContext && effectsPanelMode === "photo-parallax";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = panelContext === "audio" && (
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
@@ -1322,13 +1326,16 @@ export function VoicePanel({
     background: t("effectBackground"),
     edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
-  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isOpticalFlowContext ? t("effectVectorTracking") : isCinematicDepthContext ? t("depthTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
+  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isOpticalFlowContext ? t("effectVectorTracking") : isCinematicDepthContext ? t("depthTitle") : isPhotoParallaxContext ? t("parallaxTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
   const panelStatusText = isFaceSwapContext
     ? faceSwap?.job?.running ? `${faceSwap.job.progress}%` : hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")
     : isOpticalFlowContext ? t("effectFlowExperimental")
     : isCinematicDepthContext ? cinematicDepth?.job?.running
       ? `${Math.round(cinematicDepth.job.progress || 0)}%`
       : cinematicDepth?.record?.complete ? t("depthAnalysisComplete") : t("depthAnalysisNeeded")
+    : isPhotoParallaxContext ? photoParallaxDepth?.job?.running
+      ? `${Math.round(photoParallaxDepth.job.progress || 0)}%`
+      : photoParallaxDepth?.record?.complete ? t("parallaxLayersReady") : t("depthAnalysisNeeded")
     : isEffectsContext ? (effectRunning
     ? `${Math.round(effectProgress || 0)}%`
     : effectAnalysis?.complete
@@ -1429,7 +1436,7 @@ export function VoicePanel({
       ) : null}
 
       <div className="voice-tab-body">
-        {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext && !isCinematicDepthContext ? <SubjectEffectsInspector
+        {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext && !isCinematicDepthContext && !isPhotoParallaxContext ? <SubjectEffectsInspector
           t={t}
           segment={effectSegment}
           analysis={effectAnalysis}
@@ -1456,6 +1463,15 @@ export function VoicePanel({
           onAnalyze={cinematicDepth?.analyze}
           onCancel={cinematicDepth?.cancel}
           onChange={updateSelectedCinematicDepth}
+        /> : null}
+        {isPhotoParallaxContext ? <PhotoParallaxPanel
+          t={t}
+          segment={effectSegment}
+          analysis={photoParallaxDepth?.record}
+          job={photoParallaxDepth?.job}
+          onAnalyze={photoParallaxDepth?.analyze}
+          onCancel={photoParallaxDepth?.cancel}
+          onChange={updateSelectedPhotoParallax}
         /> : null}
         {isSmartAutoContext ? <AutoEditPanel t={t} hasVisual={hasVisual} language={uiLanguage} autoEdit={autoEdit} /> : null}
         {isSmartFrameContext ? <SmartVisionPanel t={t} language={uiLanguage} hasVisual={hasVisual} visualType={visualType} analysis={visionAnalysis} options={visionOptions} running={visionRunning} progress={visionProgress} phase={visionPhase} onAnalyze={analyzeCurrentVisual} onToggle={toggleVisionOption} onClear={clearVisionAnalysis} onDownloadCutout={downloadVisionCutout} /> : null}

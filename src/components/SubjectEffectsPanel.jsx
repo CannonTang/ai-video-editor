@@ -10,6 +10,7 @@ import {
   PersonSimpleRun,
   Play,
   SlidersHorizontal,
+  Stack,
   Trash,
   X,
 } from "@phosphor-icons/react";
@@ -117,6 +118,8 @@ const FACE_SWAP_PREVIEW_STILL = "/assets/sample-portrait.png";
 const FACE_SWAP_PREVIEW_GIF = "/assets/effects/previews/face-swap-hover.gif";
 const CINEMATIC_DEPTH_PREVIEW_STILL = "/assets/effects/previews/cinematic-depth-still.png";
 const CINEMATIC_DEPTH_PREVIEW_HOVER = "/assets/effects/previews/cinematic-depth-hover.png";
+const PHOTO_PARALLAX_PREVIEW_STILL = "/assets/effects/previews/photo-parallax-still.png";
+const PHOTO_PARALLAX_PREVIEW_HOVER = "/assets/effects/previews/photo-parallax-hover.png";
 
 function ObjectOutlineCard({ t, active, running, progress, analysis, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -361,6 +364,51 @@ function CinematicDepthEffectCard({ t, active, analysis, running, progress, onCl
         <span className="subject-outline-entry-copy">
           <strong>{t("depthTitle")}</strong>
           <small>{t("depthDescription")}</small>
+        </span>
+        <span className="subject-outline-entry-state">
+          {running ? `${Math.round(progress || 0)}%` : analysis?.complete ? <Check size={16} weight="bold" /> : <CaretRight size={17} />}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function PhotoParallaxEffectCard({ t, active, analysis, running, progress, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [hoverless, setHoverless] = useState(false);
+  const previewing = hovered || hoverless;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia("(hover: none)");
+    const update = () => setHoverless(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
+
+  return (
+    <button
+      className={`subject-outline-entry subject-photo-parallax-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => { if (event.pointerType !== "touch") setHovered(true); }}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+    >
+      <span className="subject-outline-entry-preview">
+        <img key={previewing ? "layers" : "source"} src={previewing ? PHOTO_PARALLAX_PREVIEW_HOVER : PHOTO_PARALLAX_PREVIEW_STILL} alt="" />
+        <span className="subject-outline-entry-preview-state">
+          <Stack size={13} weight="fill" />
+          {previewing ? t("parallaxPreviewApplied") : t("effectPreviewHover")}
+        </span>
+        {running ? <span className="subject-outline-entry-progress"><i style={{ width: `${Math.round(progress || 0)}%` }} /></span> : null}
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy">
+          <strong>{t("parallaxTitle")}</strong>
+          <small>{t("parallaxDescription")}</small>
         </span>
         <span className="subject-outline-entry-state">
           {running ? `${Math.round(progress || 0)}%` : analysis?.complete ? <Check size={16} weight="bold" /> : <CaretRight size={17} />}
@@ -634,12 +682,17 @@ export function SubjectEffectsWorkspace({
   onOpenFaceSwap,
   onOpenOpticalFlow,
   onOpenCinematicDepth,
+  onOpenPhotoParallax,
   faceSwapActive = false,
   opticalFlowActive = false,
   cinematicDepthActive = false,
   cinematicDepthAnalysis = null,
   cinematicDepthRunning = false,
   cinematicDepthProgress = 0,
+  photoParallaxActive = false,
+  photoParallaxAnalysis = null,
+  photoParallaxRunning = false,
+  photoParallaxProgress = 0,
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
@@ -709,6 +762,14 @@ export function SubjectEffectsWorkspace({
           running={cinematicDepthRunning}
           progress={cinematicDepthProgress}
           onClick={onOpenCinematicDepth}
+        />
+        <PhotoParallaxEffectCard
+          t={t}
+          active={photoParallaxActive}
+          analysis={photoParallaxAnalysis}
+          running={photoParallaxRunning}
+          progress={photoParallaxProgress}
+          onClick={onOpenPhotoParallax}
         />
       </div>
     </div>

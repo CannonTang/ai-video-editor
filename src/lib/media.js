@@ -35,6 +35,7 @@ import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign
 import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
 import { resolveSubjectMaterialShadow } from "./subjectMaterialRendering.js";
 import { drawCinematicDepthFrame, normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./depthOfField.js";
+import { drawPhotoParallaxFrame, normalizePhotoParallax } from "./photoParallax.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -821,14 +822,14 @@ export function drawPreviewFrame(context, visual, canvas, options) {
   const usesAlphaMask = mask.type && mask.type !== "none" && (mask.inverted || Number(mask.feather) > 0);
   let visualLayout;
   const cinematicDepth = normalizeCinematicDepth(visualEffects?.cinematicDepth);
+  const photoParallax = normalizePhotoParallax(visualEffects?.photoParallax);
   const drawPrimaryVisual = (targetContext, targetCanvas) => {
-    if (cinematicDepth.enabled && depth?.depthVisual) {
-      drawCinematicDepthFrame(targetContext, visual, targetCanvas, {
-        effect: cinematicDepth,
-        depthVisual: depth.depthVisual,
-        fitMode,
-        filter,
-        clear: false,
+    if ((photoParallax.enabled || cinematicDepth.enabled) && depth?.depthVisual) {
+      if (photoParallax.enabled) drawPhotoParallaxFrame(targetContext, visual, targetCanvas, {
+        effect: photoParallax, depthVisual: depth.depthVisual, fitMode, filter, time: visualTime, clear: false,
+      });
+      else drawCinematicDepthFrame(targetContext, visual, targetCanvas, {
+        effect: cinematicDepth, depthVisual: depth.depthVisual, fitMode, filter, clear: false,
       });
       const sourceSize = getVisualDimensions(visual);
       const fitRect = getVisualFitRect(sourceSize, targetCanvas, fitMode);
@@ -934,13 +935,13 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       targetContext.scale(animatedOverlayTransform.scale, animatedOverlayTransform.scale);
       targetContext.translate(-width / 2, -height / 2);
       const overlayDepth = normalizeCinematicDepth(overlay.cinematicDepth);
-      if (overlayDepth.enabled && overlay.depth?.depthVisual) {
-        drawCinematicDepthFrame(targetContext, overlayVisual, canvas, {
-          effect: overlayDepth,
-          depthVisual: overlay.depth.depthVisual,
-          fitMode: "contain",
-          filter: overlayFilter,
-          clear: false,
+      const overlayParallax = normalizePhotoParallax(overlay.photoParallax);
+      if ((overlayParallax.enabled || overlayDepth.enabled) && overlay.depth?.depthVisual) {
+        if (overlayParallax.enabled) drawPhotoParallaxFrame(targetContext, overlayVisual, canvas, {
+          effect: overlayParallax, depthVisual: overlay.depth.depthVisual, fitMode: "contain", filter: overlayFilter, time: overlayTime, clear: false,
+        });
+        else drawCinematicDepthFrame(targetContext, overlayVisual, canvas, {
+          effect: overlayDepth, depthVisual: overlay.depth.depthVisual, fitMode: "contain", filter: overlayFilter, clear: false,
         });
       } else {
         drawFittedVisual(

@@ -1054,7 +1054,9 @@ export function ToolPanel(props) {
     openFaceSwapInspector,
     openOpticalFlowInspector,
     openCinematicDepthInspector,
+    openPhotoParallaxInspector,
     cinematicDepth,
+    photoParallaxDepth,
     effectsPanelMode,
   } = props;
   const [captionFontStatus, setCaptionFontStatus] = useState("");
@@ -1423,12 +1425,17 @@ export function ToolPanel(props) {
         onOpenFaceSwap={openFaceSwapInspector}
         onOpenOpticalFlow={openOpticalFlowInspector}
         onOpenCinematicDepth={openCinematicDepthInspector}
+        onOpenPhotoParallax={openPhotoParallaxInspector}
         faceSwapActive={effectsPanelMode === "face-swap"}
         opticalFlowActive={effectsPanelMode === "vector-tracking"}
         cinematicDepthActive={effectsPanelMode === "cinematic-depth"}
         cinematicDepthAnalysis={cinematicDepth?.record}
         cinematicDepthRunning={cinematicDepth?.job?.running}
         cinematicDepthProgress={cinematicDepth?.job?.progress}
+        photoParallaxActive={effectsPanelMode === "photo-parallax"}
+        photoParallaxAnalysis={photoParallaxDepth?.record}
+        photoParallaxRunning={photoParallaxDepth?.job?.running}
+        photoParallaxProgress={photoParallaxDepth?.job?.progress}
         onRemove={removeSelectedSubjectEffect}
       />
     );

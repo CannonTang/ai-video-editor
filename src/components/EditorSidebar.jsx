@@ -229,7 +229,12 @@ export function EditorSidebar({ model: d }) {
               d.setEffectsPanelMode?.("cinematic-depth");
               d.setMobilePanel?.("inspector");
             }}
+            openPhotoParallaxInspector={() => {
+              d.setEffectsPanelMode?.("photo-parallax");
+              d.setMobilePanel?.("inspector");
+            }}
             cinematicDepth={d.cinematicDepth}
+            photoParallaxDepth={d.photoParallaxDepth}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
             miganRepair={d.miganRepair}
