@@ -169,8 +169,8 @@ export function isStorageQuotaError(error) {
   return /QuotaExceededError|storage quota|exceed.*quota/i.test(message);
 }
 
-export async function clearPiperCacheIfStorageTight(tts) {
-  if (!navigator.storage?.estimate || typeof tts?.flush !== "function") {
+export async function clearPiperCacheIfStorageTight(tts, voiceId = "") {
+  if (!navigator.storage?.estimate || typeof tts?.stored !== "function") {
     return false;
   }
 
@@ -180,8 +180,14 @@ export async function clearPiperCacheIfStorageTight(tts) {
     const quota = estimate.quota ?? 0;
     const remaining = quota > usage ? quota - usage : 0;
     if (quota > 0 && (usage / quota > 0.85 || remaining < 200 * 1024 * 1024)) {
-      await tts.flush();
-      return true;
+      const storedVoices = await tts.stored();
+      let cleared = false;
+      for (const storedVoice of storedVoices) {
+        if (storedVoice === voiceId || typeof tts.remove !== "function") continue;
+        await tts.remove(storedVoice);
+        cleared = true;
+      }
+      return cleared;
     }
   } catch {
     return false;

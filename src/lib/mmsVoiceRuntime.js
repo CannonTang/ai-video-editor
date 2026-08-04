@@ -2,6 +2,7 @@ import {
   fetchFirstAvailableModel,
 } from "./modelSources.js";
 import { loadVoiceModelFromMirrors, voiceModelFileUrls } from "../config/voiceModels.js";
+import { prepareVoiceModelStorage } from "./voiceModelStorage.js";
 
 const MMS_MODEL_BY_VOICE = {
   "ko_KR-mms-medium": "mms-kor",
@@ -30,6 +31,11 @@ export async function predictMmsVoice(input, onProgress) {
   if (!modelId) throw new Error(`Unsupported MMS voice: ${input.voiceId}`);
   if (!runtimePromises.has(modelId)) {
     runtimePromises.set(modelId, (async () => {
+      await prepareVoiceModelStorage({
+        preserveModelPath: modelId,
+        requiredBytes: modelId === "mms-tha" ? 144 * 1024 * 1024 : 64 * 1024 * 1024,
+        clearPiper: true,
+      });
       const { env, pipeline } = await import("@huggingface/transformers");
       env.useBrowserCache = false;
       const isRootOnnxModel = modelId === "mms-tha";
@@ -37,12 +43,19 @@ export async function predictMmsVoice(input, onProgress) {
         dtype: isRootOnnxModel ? "fp32" : "q8",
         device: "wasm",
         ...(isRootOnnxModel ? { model_file_name: "../model" } : {}),
-        progress_callback: (event) => onProgress?.(event),
+        progress_callback: (event) => {
+          if (!String(event?.file || "").endsWith(".onnx")) return;
+          if (Number.isFinite(event?.progress)) onProgress?.({ ...event, progress: 10 + Math.max(0, Math.min(100, event.progress)) * 0.76 });
+        },
       }));
     })().catch((error) => { runtimePromises.delete(modelId); throw error; }));
   }
   const synthesizer = await runtimePromises.get(modelId);
-  onProgress?.({ backend: "wasm" });
+  onProgress?.({ backend: "wasm", progress: 92 });
+  await new Promise((resolve) => {
+    if (globalThis.requestAnimationFrame) requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
   let text = input.text.trim();
   if (input.voiceId === "ko_KR-mms-medium") {
     const { convert } = await import("hangul-romanization");

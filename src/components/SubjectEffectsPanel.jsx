@@ -114,14 +114,6 @@ const OBJECT_OUTLINE_PREVIEW_STILL = "/assets/effects/previews/object-outline-st
 const OBJECT_OUTLINE_PREVIEW_GIF = "/assets/effects/previews/object-outline-hover.webp";
 const FACE_SWAP_PREVIEW_STILL = "/assets/sample-portrait.png";
 const FACE_SWAP_PREVIEW_GIF = "/assets/effects/previews/face-swap-hover.gif";
-const COMING_EFFECTS = Object.freeze([
-  {
-    id: "sway-motion",
-    titleKey: "effectSwayMotion",
-    hintKey: "effectSwayMotionHint",
-    image: "/assets/effects/previews/sway-motion-coming-soon.webp",
-  },
-]);
 
 function ObjectOutlineCard({ t, active, running, progress, analysis, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -222,45 +214,6 @@ function OutlinePreviewCard({ t, active, running, progress, analysis, onClick })
         </span>
       </span>
     </button>
-  );
-}
-
-function ComingEffectCard({ t, effect }) {
-  const [hovered, setHovered] = useState(false);
-  const [hoverless, setHoverless] = useState(false);
-  const previewing = Boolean(effect.gif) && (hovered || hoverless);
-
-  useEffect(() => {
-    if (!effect.gif || typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
-    const media = window.matchMedia("(hover: none)");
-    const update = () => setHoverless(media.matches);
-    update();
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, [effect.gif]);
-
-  return (
-    <article
-      className={`subject-coming-effect-card ${previewing ? "is-previewing" : ""}`}
-      aria-disabled="true"
-      onPointerEnter={(event) => {
-        if (effect.gif && event.pointerType !== "touch") setHovered(true);
-      }}
-      onPointerLeave={() => setHovered(false)}
-    >
-      <span className="subject-coming-effect-preview">
-        <img
-          key={previewing ? "animated" : "still"}
-          src={previewing ? effect.gif : effect.image}
-          alt=""
-        />
-        <em>{t("effectInDevelopment")}</em>
-      </span>
-      <span className="subject-coming-effect-copy">
-        <strong>{t(effect.titleKey)}</strong>
-        <small>{t(effect.hintKey)}</small>
-      </span>
-    </article>
   );
 }
 
@@ -690,9 +643,6 @@ export function SubjectEffectsWorkspace({
         />
         <FaceSwapEffectCard t={t} active={faceSwapActive} onClick={onOpenFaceSwap} />
         <OpticalFlowEffectCard t={t} active={opticalFlowActive} onClick={onOpenOpticalFlow} />
-        {COMING_EFFECTS.map((comingEffect) => (
-          <ComingEffectCard key={comingEffect.id} t={t} effect={comingEffect} />
-        ))}
       </div>
     </div>
   );

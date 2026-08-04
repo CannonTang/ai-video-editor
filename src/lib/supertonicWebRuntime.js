@@ -463,11 +463,11 @@ export async function loadTextToSpeech(onnxDir, sessionOptions = {}, progressCal
 
     const sessions = [];
     for (let i = 0; i < modelPaths.length; i++) {
+        const session = await loadOnnx(modelPaths[i].path, sessionOptions);
+        sessions.push(session);
         if (progressCallback) {
             progressCallback(modelPaths[i].name, i + 1, modelPaths.length);
         }
-        const session = await loadOnnx(modelPaths[i].path, sessionOptions);
-        sessions.push(session);
     }
 
     const [dpOrt, textEncOrt, vectorEstOrt, vocoderOrt] = sessions;

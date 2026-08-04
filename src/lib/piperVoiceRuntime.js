@@ -4,6 +4,7 @@ import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url
 import { pinyin } from "pinyin-pro";
 import { voiceModelFileUrls } from "../config/voiceModels.js";
 import { fetchFirstAvailableModel, orderModelUrlsForNetwork } from "./modelSources.js";
+import { preparePiperVoiceStorage } from "./voiceModelStorage.js";
 
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
@@ -229,6 +230,7 @@ export async function predictPiperVoice(tts, input, onProgress) {
   }
 
   const originalFetch = globalThis.fetch;
+  await preparePiperVoiceStorage(tts, input.voiceId);
   const mirroredFetch = async (resource, init) => {
     const requestUrl = typeof resource === "string" ? resource : resource?.url;
     const candidates = routes.get(requestUrl);
@@ -246,9 +248,21 @@ export async function predictPiperVoice(tts, input, onProgress) {
     throw new Error(`MODEL_MIRRORS_UNAVAILABLE: ${failures.join("; ")}`);
   };
   globalThis.fetch = mirroredFetch;
+  const originalConsoleError = console.error;
+  let reportedQuotaSkip = false;
+  const filteredConsoleError = (...args) => {
+    const quotaError = args.some((value) => /QuotaExceededError|exceed.*storage quota/i.test(value?.message || String(value || "")));
+    if (!quotaError) originalConsoleError(...args);
+    else if (!reportedQuotaSkip) {
+      reportedQuotaSkip = true;
+      console.info("[Voice] Persistent Piper cache is full; continuing this generation from memory.");
+    }
+  };
+  console.error = filteredConsoleError;
   try {
     return await tts.predict(input, onProgress);
   } finally {
+    if (console.error === filteredConsoleError) console.error = originalConsoleError;
     if (globalThis.fetch === mirroredFetch) globalThis.fetch = originalFetch;
   }
 }

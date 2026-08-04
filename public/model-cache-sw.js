@@ -107,6 +107,16 @@ async function removeLegacyPiperDuplicates() {
   await Promise.all(keys.filter((request) => isPiperVoiceRequest(new URL(request.url))).map((request) => cache.delete(request)));
 }
 
+async function removeLegacyKokoroFp32Model() {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  const keys = await cache.keys();
+  await Promise.all(keys.filter((request) => {
+    const pathname = new URL(request.url).pathname;
+    return pathname.endsWith("/kokoro/onnx/model.onnx")
+      || (pathname.includes("/Kokoro-82M-v1.0-ONNX/") && pathname.endsWith("/onnx/model.onnx"));
+  }).map((request) => cache.delete(request)));
+}
+
 function isRuntimeAssetRequest(url) {
   if (url.origin === self.location.origin) {
     return url.pathname.startsWith("/models/")
@@ -166,8 +176,34 @@ async function cacheFirst(request, event) {
   if (response.ok || response.type === "opaque") {
     // Keep the service worker alive until the large model shard is durably
     // committed. The live response remains streaming and is not blocked.
-    event.waitUntil(cache.put(cacheRequest, response.clone()).catch((error) => {
-      if (error?.name !== "QuotaExceededError") console.warn("Model cache write failed.", error);
+    event.waitUntil(cache.put(cacheRequest, response.clone()).catch(async (error) => {
+      if (error?.name !== "QuotaExceededError") {
+        console.warn("Model cache write failed.", error);
+        return;
+      }
+      const requestUrl = new URL(request.url);
+      if (!requestUrl.pathname.includes("timeline-studio-voice-models")) return;
+      // Voice models share a bounded browser quota. Evict older voice families
+      // so the next model file can persist. Do not clone/refetch this large
+      // response a second time merely to fill an optional cache.
+      const keys = await cache.keys();
+      const modelFamily = (url) => {
+        const pathname = new URL(url).pathname;
+        const markerIndex = pathname.indexOf("timeline-studio-voice-models/");
+        if (markerIndex < 0) return "";
+        const parts = pathname.slice(markerIndex + "timeline-studio-voice-models/".length).split("/").filter(Boolean);
+        if (parts[0] === "resolve") parts.splice(0, 2);
+        else parts.shift();
+        return parts[0] || "";
+      };
+      const currentFamily = modelFamily(request.url);
+      const staleVoiceKeys = keys.filter((key) => (
+        key.url !== cacheRequest.url
+        && new URL(key.url).pathname.includes("timeline-studio-voice-models")
+        && modelFamily(key.url) !== currentFamily
+      ));
+      await Promise.all(staleVoiceKeys.map((key) => cache.delete(key)));
+      await caches.delete("kokoro-voices").catch(() => false);
     }));
   }
   return withCacheStatus(response, "miss");
@@ -219,6 +255,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(caches.delete("transformers-cache").catch(() => false));
   event.waitUntil(caches.delete("stable-audio-3-small-music-q4-v1").catch(() => false));
   event.waitUntil(removeLegacyPiperDuplicates().catch(() => {}));
+  event.waitUntil(removeLegacyKokoroFp32Model().catch(() => {}));
 });
 
 self.addEventListener("fetch", (event) => {
