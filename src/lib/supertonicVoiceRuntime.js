@@ -1,12 +1,18 @@
 import { loadTextToSpeech, loadVoiceStyle, writeWavFile } from "./supertonicWebRuntime.js";
 import { voiceModelFileUrls } from "../config/voiceModels.js";
 import { orderModelUrlsForNetwork } from "./modelSources.js";
+import { prepareVoiceModelStorage } from "./voiceModelStorage.js";
 
 let runtimePromise;
 
 async function loadRuntime(onProgress) {
   if (!runtimePromise) {
     runtimePromise = (async () => {
+      await prepareVoiceModelStorage({
+        preserveModelPath: "supertonic",
+        requiredBytes: 440 * 1024 * 1024,
+        clearPiper: true,
+      });
       const modelBases = await orderModelUrlsForNetwork(voiceModelFileUrls("supertonic/onnx"));
       const styleUrls = voiceModelFileUrls("supertonic/voice_styles/F1.json");
       const failures = [];
@@ -33,7 +39,11 @@ async function loadRuntime(onProgress) {
 
 export async function predictSupertonicVoice(input, onProgress) {
   const { textToSpeech, style } = await loadRuntime(onProgress);
-  onProgress?.({ backend: "wasm" });
+  onProgress?.({ backend: "wasm", progress: 92 });
+  await new Promise((resolve) => {
+    if (globalThis.requestAnimationFrame) requestAnimationFrame(() => resolve());
+    else setTimeout(resolve, 0);
+  });
   const { wav, duration } = await textToSpeech.call(input.text.trim(), "ja", style, 5, Number(input.speed) || 1.05, 0.3, (step, total) => {
     onProgress?.({ progress: (step / total) * 100 });
   });
