@@ -79,6 +79,7 @@ Browser AI models are mirrored on both Hugging Face and ModelScope. Timeline Stu
 - Stable Audio: [Hugging Face](https://huggingface.co/haixin/stable-audio-3-small-music-onnx) · [ModelScope](https://www.modelscope.cn/models/martindelophy/stable-audio-3-small-music-onnx/files?version=main)
 - Voice models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-voice-models/tree/f6aa4cf8fb440352b9f36c637dd310d047011e52) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-voice-models/files?version=14a0656f5a111a0052dfca586fbe2ceb18b54adf) (mixed upstream licenses; see the repository model card)
 - Timeline Studio ONNX models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=main)
+- Depth Anything V2 Small Q4F16: [Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models/tree/a0806c6fb9484894dcb78df523156d244461515d/depth-anything-v2-small) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=4cc757f80330e22cb8f82b628c53ceca6307fd12&subpath=depth-anything-v2-small) (Apache-2.0)
 - Vocal remover: [Hugging Face](https://huggingface.co/haixin/timeline-studio-vocal-remover) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/files?version=main)
 
 ## Editing and export

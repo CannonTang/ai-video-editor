@@ -225,6 +225,11 @@ export function EditorSidebar({ model: d }) {
               d.setEffectsPanelMode?.("vector-tracking");
               d.setMobilePanel?.("inspector");
             }}
+            openCinematicDepthInspector={() => {
+              d.setEffectsPanelMode?.("cinematic-depth");
+              d.setMobilePanel?.("inspector");
+            }}
+            cinematicDepth={d.cinematicDepth}
             visualLocalTime={d.visualLocalTime}
             updateSelectedVisualEffects={d.updateSelectedVisualEffects}
             miganRepair={d.miganRepair}

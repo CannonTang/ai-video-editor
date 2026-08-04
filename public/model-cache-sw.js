@@ -42,6 +42,8 @@ const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
 const VOICE_MODEL_HUGGING_FACE_REVISION = "f6aa4cf8fb440352b9f36c637dd310d047011e52";
 const VOICE_MODEL_MODELSCOPE_REVISION = "14a0656f5a111a0052dfca586fbe2ceb18b54adf";
+const DEPTH_MODEL_HUGGING_FACE_REVISION = "a0806c6fb9484894dcb78df523156d244461515d";
+const DEPTH_MODEL_MODELSCOPE_REVISION = "4cc757f80330e22cb8f82b628c53ceca6307fd12";
 function hasCacheableExtension(pathname) {
   return CACHEABLE_EXTENSIONS.some((extension) => pathname.endsWith(extension));
 }
@@ -90,6 +92,14 @@ function canonicalModelIdentity(url) {
   }
   if (owner === "haixin" && repository === "timeline-studio-voice-models" && revision === VOICE_MODEL_MODELSCOPE_REVISION) {
     revision = VOICE_MODEL_HUGGING_FACE_REVISION;
+  }
+  if (
+    owner === "haixin"
+    && repository === "timeline-studio-onnx-models"
+    && revision === DEPTH_MODEL_MODELSCOPE_REVISION
+    && path.startsWith("depth-anything-v2-small/")
+  ) {
+    revision = DEPTH_MODEL_HUGGING_FACE_REVISION;
   }
   return `${owner}/${repository}/${revision}/${path}`;
 }

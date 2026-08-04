@@ -34,6 +34,7 @@ import { emitMediaBackendDiagnostic, getMediaFileExtension, isLibavCompatibility
 import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
 import { resolveSubjectMaterialShadow } from "./subjectMaterialRendering.js";
+import { drawCinematicDepthFrame, normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./depthOfField.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -783,6 +784,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     transitionNext = null,
     transitionProgress = 0,
     vision = null,
+    depth = null,
     visualEffects = null,
     visualTime = 0,
     visualOverlays = [],
@@ -818,6 +820,28 @@ export function drawPreviewFrame(context, visual, canvas, options) {
   const maskHeight = mask.type === "circle" ? circleSize : (Number.isFinite(mask.height) ? mask.height : 80) / 100 * height;
   const usesAlphaMask = mask.type && mask.type !== "none" && (mask.inverted || Number(mask.feather) > 0);
   let visualLayout;
+  const cinematicDepth = normalizeCinematicDepth(visualEffects?.cinematicDepth);
+  const drawPrimaryVisual = (targetContext, targetCanvas) => {
+    if (cinematicDepth.enabled && depth?.depthVisual) {
+      drawCinematicDepthFrame(targetContext, visual, targetCanvas, {
+        effect: cinematicDepth,
+        depthVisual: depth.depthVisual,
+        fitMode,
+        filter,
+        clear: false,
+      });
+      const sourceSize = getVisualDimensions(visual);
+      const fitRect = getVisualFitRect(sourceSize, targetCanvas, fitMode);
+      return {
+        sourceSize,
+        smartCropRect: null,
+        drawRect: fitRect,
+        fitMode: fitRect.fitMode,
+        outputSize: { width: targetCanvas.width, height: targetCanvas.height },
+      };
+    }
+    return drawFittedVisual(targetContext, visual, targetCanvas, fitMode, filter, vision, visualEffects?.subjectEffect);
+  };
   if (usesAlphaMask) {
     const layers = getVisualEffectsLayers(canvas);
     const layerContext = layers.visual.getContext("2d");
@@ -829,7 +853,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     layerContext.rotate((animatedTransform.rotation * Math.PI) / 180);
     layerContext.scale(animatedTransform.scale, animatedTransform.scale);
     layerContext.translate(-width / 2, -height / 2);
-    visualLayout = drawFittedVisual(layerContext, visual, layers.visual, fitMode, filter, vision, visualEffects?.subjectEffect);
+    visualLayout = drawPrimaryVisual(layerContext, layers.visual);
     layerContext.restore();
     drawVisualEffectsMask(maskContext, mask, layers.mask);
     layerContext.save();
@@ -851,7 +875,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     context.rotate((animatedTransform.rotation * Math.PI) / 180);
     context.scale(animatedTransform.scale, animatedTransform.scale);
     context.translate(-width / 2, -height / 2);
-    visualLayout = drawFittedVisual(context, visual, canvas, fitMode, filter, vision, visualEffects?.subjectEffect);
+    visualLayout = drawPrimaryVisual(context, canvas);
     context.restore();
   }
 
@@ -909,15 +933,26 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       targetContext.rotate((animatedOverlayTransform.rotation * Math.PI) / 180);
       targetContext.scale(animatedOverlayTransform.scale, animatedOverlayTransform.scale);
       targetContext.translate(-width / 2, -height / 2);
-      drawFittedVisual(
-        targetContext,
-        overlayVisual,
-        canvas,
-        "contain",
-        overlayFilter,
-        overlay.vision || null,
-        overlay.subjectEffect,
-      );
+      const overlayDepth = normalizeCinematicDepth(overlay.cinematicDepth);
+      if (overlayDepth.enabled && overlay.depth?.depthVisual) {
+        drawCinematicDepthFrame(targetContext, overlayVisual, canvas, {
+          effect: overlayDepth,
+          depthVisual: overlay.depth.depthVisual,
+          fitMode: "contain",
+          filter: overlayFilter,
+          clear: false,
+        });
+      } else {
+        drawFittedVisual(
+          targetContext,
+          overlayVisual,
+          canvas,
+          "contain",
+          overlayFilter,
+          overlay.vision || null,
+          overlay.subjectEffect,
+        );
+      }
       targetContext.restore();
     };
     if (hasMask) {
@@ -1177,11 +1212,15 @@ export async function exportBrowserVideo({
         );
         await temporalMaskCache.prepare(initialVision?.cutoutUrl);
       }
+      const depthUrls = [...new Set((segment.depth?.samples || []).map((sample) => sample.depthUrl).filter(Boolean))];
+      const depthCache = depthUrls.length ? createTemporalMaskCache(depthUrls) : null;
+      if (depthCache && depthUrls[0]) await depthCache.prepare(depthUrls[0]);
       return {
         segment,
         visual,
         cutoutVisual,
         temporalMaskCache,
+        depthCache,
       };
     }),
   );
@@ -1210,6 +1249,9 @@ export async function exportBrowserVideo({
       ) ? segment.vision?.cutoutUrl : "";
       const temporalMaskCache = createTemporalMaskCache(imageMaskUrl ? [imageMaskUrl] : maskUrls);
       if (imageMaskUrl || maskUrls[0]) await temporalMaskCache.prepare(imageMaskUrl || maskUrls[0]);
+      const depthUrls = [...new Set((segment.depth?.samples || []).map((sample) => sample.depthUrl).filter(Boolean))];
+      const depthCache = createTemporalMaskCache(depthUrls);
+      if (depthUrls[0]) await depthCache.prepare(depthUrls[0]);
       return {
         segment,
         visual: segment.type === "video"
@@ -1219,6 +1261,7 @@ export async function exportBrowserVideo({
               targetHeight: exportHeight,
             })),
         temporalMaskCache,
+        depthCache,
       };
     }),
   );
@@ -1492,16 +1535,19 @@ export async function exportBrowserVideo({
         ? getVisualSourceTime(item.segment, Math.max(0, timelineTime - item.segment.start))
         : Math.max(0, timelineTime - item.segment.start);
       const vision = resolveVisionAnalysisAtTime(item.segment.vision || null, sourceTime);
+      const depthSample = resolveDepthAnalysisAtTime(item.segment.depth || null, sourceTime);
+      if (depthSample?.depthUrl) void item.depthCache?.prepare(depthSample.depthUrl);
       return {
         ...item,
-        renderSegment: vision ? {
+        renderSegment: {
           ...item.segment,
-          vision: {
+          ...(vision ? { vision: {
             ...vision,
             options: item.segment.vision?.options || vision.options,
             maskVisual: item.temporalMaskCache?.get(vision.cutoutUrl) || null,
-          },
-        } : item.segment,
+          } } : {}),
+          ...(depthSample ? { depth: { ...depthSample, depthVisual: item.depthCache?.get(depthSample.depthUrl) || null } } : {}),
+        },
       };
     });
     const exportVisual = visualItem.cutoutVisual || visualItem.visual;
@@ -1530,6 +1576,11 @@ export async function exportBrowserVideo({
             : null,
         }
       : null;
+    const resolvedDepth = resolveDepthAnalysisAtTime(visualItem.segment.depth ?? null, visualSourceTime);
+    if (resolvedDepth?.depthUrl) void visualItem.depthCache?.prepare(resolvedDepth.depthUrl);
+    const frameDepth = resolvedDepth
+      ? { ...resolvedDepth, depthVisual: visualItem.depthCache?.get(resolvedDepth.depthUrl) || null }
+      : null;
     drawPreviewFrame(context, exportVisual, canvas, {
       subtitle: exportCaption,
       progress: elapsed / totalDuration,
@@ -1547,6 +1598,7 @@ export async function exportBrowserVideo({
       transitionNext: nextVisualItem ? { visual: nextVisualItem.cutoutVisual || nextVisualItem.visual } : null,
       transitionProgress,
       vision: frameVision,
+      depth: frameDepth,
       visualEffects: visualItem.segment,
       visualTime: localTime,
       visualOverlays: renderedVisualOverlays.map(({ segment, renderSegment }) => ({
@@ -1604,6 +1656,11 @@ export async function exportBrowserVideo({
             : null,
         }
       : null;
+    const finalResolvedDepth = resolveDepthAnalysisAtTime(finalVisualItem.segment.depth ?? null, finalVisualSourceTime);
+    if (finalResolvedDepth?.depthUrl) await finalVisualItem.depthCache?.prepare(finalResolvedDepth.depthUrl);
+    const finalFrameDepth = finalResolvedDepth
+      ? { ...finalResolvedDepth, depthVisual: finalVisualItem.depthCache?.get(finalResolvedDepth.depthUrl) || null }
+      : null;
     drawPreviewFrame(context, finalVisualItem.cutoutVisual || finalVisualItem.visual, canvas, {
       subtitle:
         finalSegmentIndex >= 0 && !exportSegments[finalSegmentIndex]?.hidden
@@ -1622,6 +1679,7 @@ export async function exportBrowserVideo({
       stickerImages: finalStickers.map((item) => item?.src ? stickerImageMap.get(item.src) : null),
       transitionId,
       vision: finalFrameVision,
+      depth: finalFrameDepth,
       visualTime: finalLocalTime,
       visualOverlays: finalVisualOverlays.map(({ segment }) => ({
         ...segment,

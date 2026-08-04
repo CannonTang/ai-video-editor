@@ -4237,6 +4237,73 @@ button:disabled {
 .subject-remove-effect:disabled { opacity: .35; cursor: not-allowed; }
 .voice-panel.is-effects-context .voice-tab-body { padding-top: 4px; }
 
+.cinematic-depth-panel { display: grid; gap: 13px; min-width: 0; }
+.cinematic-depth-hero {
+  display: grid;
+  grid-template-columns: 38px minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(53,234,217,.22);
+  border-radius: 10px;
+  padding: 11px;
+  background: radial-gradient(circle at 16% 25%,rgba(53,234,217,.15),transparent 38%),linear-gradient(135deg,rgba(53,234,217,.08),rgba(91,110,235,.08));
+}
+.cinematic-depth-hero > span { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; color: #79f2e5; background: rgba(53,234,217,.12); }
+.cinematic-depth-hero > div { display: grid; gap: 2px; min-width: 0; }
+.cinematic-depth-hero small { color: #6fcfc7; font-size: 8px; font-weight: 800; letter-spacing: .11em; }
+.cinematic-depth-hero strong { color: #edf9f8; font-size: 13px; }
+.cinematic-depth-hero em { color: #829099; font-size: 9px; font-style: normal; line-height: 1.4; }
+.cinematic-depth-analysis { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 10px; border: 1px solid rgba(255,255,255,.075); border-radius: 10px; padding: 9px; background: rgba(255,255,255,.025); }
+.cinematic-depth-analysis.is-ready { border-color: rgba(53,234,217,.22); background: rgba(53,234,217,.035); }
+.cinematic-depth-map { position: relative; display: grid; place-items: center; overflow: hidden; aspect-ratio: 4/3; border-radius: 7px; color: #62727c; background: #080d11; }
+.cinematic-depth-map img { display: block; width: 100%; height: 100%; object-fit: cover; filter: contrast(1.08); }
+.cinematic-depth-map > i { position: absolute; top: 0; bottom: 0; width: 2px; background: #43f3df; box-shadow: 0 0 7px rgba(67,243,223,.75); transform: translateX(-1px); }
+.cinematic-depth-analysis-copy { display: grid; grid-template-columns: 21px minmax(0,1fr); align-items: center; gap: 6px; min-width: 0; }
+.cinematic-depth-analysis-copy > span { color: #56e5d6; }
+.cinematic-depth-analysis-copy > div { display: grid; gap: 4px; min-width: 0; }
+.cinematic-depth-analysis-copy strong { color: #dce8eb; font-size: 10px; }
+.cinematic-depth-analysis-copy em { color: #71808a; font-size: 8px; font-style: normal; line-height: 1.45; }
+.cinematic-depth-progress { display: grid; gap: 6px; border-radius: 8px; padding: 9px; background: rgba(53,234,217,.055); }
+.cinematic-depth-progress > div { display: flex; justify-content: space-between; color: #9caaaF; font-size: 9px; }
+.cinematic-depth-progress > div strong { color: #67e9dc; }
+.cinematic-depth-progress > i { display: block; overflow: hidden; height: 4px; border-radius: 99px; background: rgba(255,255,255,.08); }
+.cinematic-depth-progress > i > b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#29cdbd,#6af4e5); transition: width 150ms ease; }
+.cinematic-depth-progress small { color: #71808a; font-size: 8px; line-height: 1.4; }
+.cinematic-depth-progress.is-error { background: rgba(230,80,90,.07); }
+.cinematic-depth-progress.is-error small { color: #db8f95; }
+.cinematic-depth-actions { display: flex; justify-content: flex-end; gap: 7px; }
+.cinematic-depth-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; }
+.cinematic-depth-actions .panel-primary { flex: 1 1 auto; }
+.cinematic-depth-controls { display: grid; gap: 12px; border: 1px solid rgba(255,255,255,.065); border-radius: 10px; padding: 11px; background: rgba(255,255,255,.018); }
+.cinematic-depth-toggle { display: grid; grid-template-columns: 26px minmax(0,1fr) auto; align-items: center; gap: 7px; }
+.cinematic-depth-toggle > span:first-child { display: grid; place-items: center; color: #5adfd2; }
+.cinematic-depth-toggle > span:nth-child(2) { display: grid; gap: 2px; }
+.cinematic-depth-toggle strong,.cinematic-depth-range strong,.cinematic-depth-quality strong { color: #d5e0e3; font-size: 10px; }
+.cinematic-depth-toggle em,.cinematic-depth-quality em { color: #697780; font-size: 8px; font-style: normal; }
+.cinematic-depth-toggle input { width: 30px; accent-color: #39ead9; }
+.cinematic-depth-range { display: grid; gap: 6px; }
+.cinematic-depth-range > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cinematic-depth-range output { color: #7ce9df; font-size: 9px; font-variant-numeric: tabular-nums; }
+.cinematic-depth-range input { width: 100%; accent-color: #39ead9; }
+.cinematic-depth-range > small { display: flex; justify-content: space-between; margin-top: -3px; color: #596870; font-size: 8px; }
+.cinematic-depth-quality { display: grid; gap: 7px; }
+.cinematic-depth-quality > span { display: grid; gap: 2px; }
+.cinematic-depth-quality > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; }
+.cinematic-depth-quality button { min-height: 29px; border: 1px solid rgba(255,255,255,.08); border-radius: 6px; color: #7e8b93; background: rgba(255,255,255,.025); font-size: 9px; cursor: pointer; }
+.cinematic-depth-quality button.is-active { border-color: rgba(53,234,217,.46); color: #dffdfa; background: rgba(53,234,217,.1); }
+.cinematic-depth-note { margin: 0; color: #65737c; font-size: 8px; line-height: 1.55; }
+.cinematic-depth-preview-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; transform-origin: center; pointer-events: none; }
+.visual-overlay-layer .cinematic-depth-preview-canvas { z-index: 2; }
+.is-spinning { animation: spinner 900ms linear infinite; }
+@keyframes spinner { to { transform: rotate(360deg); } }
+
+@media (max-width:760px) {
+  .cinematic-depth-panel { gap: 11px; }
+  .cinematic-depth-hero { padding: 9px; }
+  .cinematic-depth-analysis { grid-template-columns: 78px minmax(0,1fr); }
+  .cinematic-depth-controls { gap: 10px; padding: 10px; }
+}
+
 .subject-effect-preview { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
 .subject-effect-background { position: absolute; inset: 0; overflow: hidden; }
 .subject-effect-background > img,.subject-effect-background > video { width: 100%; height: 100%; }

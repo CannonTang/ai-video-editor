@@ -109,7 +109,12 @@ export function useVideoExport(d) {
         : embeddedVideoAudio.segments;
       const exportedVisualSegments = d.renderedVisualSegments.map((segment) => {
         const record = d.visionRecords[getVisionKey(segment)];
-        return record ? { ...segment, vision: { ...record.analysis, options: record.options } } : segment;
+        const depth = d.depthRecords?.[getVisionKey(segment)];
+        return {
+          ...segment,
+          ...(record ? { vision: { ...record.analysis, options: record.options } } : {}),
+          ...(depth ? { depth } : {}),
+        };
       });
       const exportedOverlaySegments = d.trackVisibility.overlay === false
         ? []
@@ -117,10 +122,12 @@ export function useVideoExport(d) {
             .filter((segment) => segment.hidden !== true)
             .map((segment) => {
               const record = d.visionRecords[getVisionKey(segment)];
-              return record ? {
+              const depth = d.depthRecords?.[getVisionKey(segment)];
+              return {
                 ...segment,
-                vision: { ...record.analysis, options: record.options },
-              } : segment;
+                ...(record ? { vision: { ...record.analysis, options: record.options } } : {}),
+                ...(depth ? { depth } : {}),
+              };
             });
       const generationMetadata = createGeneratedExportMetadata({
         visualSegments: exportedVisualSegments,

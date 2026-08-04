@@ -34,6 +34,7 @@ import { useSourceAudioExtraction } from "./hooks/useSourceAudioExtraction.js";
 import { useVocalSeparation } from "./hooks/useVocalSeparation.js";
 import { useAvatarGeneration } from "./hooks/useAvatarGeneration.js";
 import { useFaceSwapGeneration } from "./hooks/useFaceSwapGeneration.js";
+import { useDepthOfFieldAnalysis } from "./hooks/useDepthOfFieldAnalysis.js";
 import { useCaptionState } from "./hooks/useCaptionState.js";
 import { useAudioTrackState } from "./hooks/useAudioTrackState.js";
 import { useVisualTrackState } from "./hooks/useVisualTrackState.js";
@@ -69,11 +70,12 @@ import { useAiMusicGeneration } from "./hooks/useAiMusicGeneration.js";
 import { useMiganRepair } from "./hooks/useMiganRepair.js";
 import { useNanoVsrRestoration } from "./hooks/useNanoVsrRestoration.js";
 import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentIds } from "./lib/timeline.js";
-import { normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
+import { getVisualSourceTime, normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
 import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
 import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
 import { getVisionKey } from "./lib/vision.js";
 import { DEFAULT_SUBJECT_EFFECT, normalizeSubjectEffect } from "./lib/subjectEffects.js";
+import { normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./lib/depthOfField.js";
 import {
   getExportContentDuration,
   getExportDimensions,
@@ -181,6 +183,7 @@ export function App() {
   const { notify, toast } = useToast(2600, uiLanguage || "zh");
   const [previewVideoMediaTime, setPreviewVideoMediaTime] = useState(0);
   const [visionRecords, setVisionRecords] = useState({});
+  const [depthRecords, setDepthRecords] = useState({});
   const [visionJob, setVisionJob] = useState({
     running: false,
     key: "",
@@ -388,6 +391,7 @@ export function App() {
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
+      if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
       if (change.vectorPatch && (item.kind === "vector" || item.vectorBody)) return { ...item, ...change.vectorPatch };
       if (typeof change.enhancementEnabled === "boolean" && item.enhancement) {
         if (["remaster-drunet-full", "nanovsr-644k"].includes(item.enhancement.mode)) {
@@ -812,6 +816,7 @@ export function App() {
     sourceAudioLinked,
     sourceAudioRef, sourceAudioStart, sourceAudioUrl, timelineDuration,
     timelineDurationRef, trackScrollRef, trackVisibility, visualSegments, visualTimeline, previewVisualSegment,
+    visualPlaybackLastUpdateRef, visualPlaybackStartedAtRef, visualPlaybackStartTimeRef,
   });
   const pauseForTimelineEdit = () => {
     if (!isPlaying) return;
@@ -924,11 +929,43 @@ export function App() {
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
+      if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
       if (change.timing) return { ...item, ...change.timing };
       if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
       return item;
     }));
   };
+
+  const updateSelectedCinematicDepth = (nextEffect) => {
+    const cinematicDepth = normalizeCinematicDepth(nextEffect);
+    if (selectedTrack === "overlay" && selectedVisualOverlay) {
+      updateSelectedVisualOverlayEffects({ cinematicDepth });
+      return;
+    }
+    updateSelectedVisualEffects({ cinematicDepth });
+  };
+  const depthTimelineStart = selectedTrack === "overlay" && selectedVisualOverlay
+    ? selectedVisualOverlay.start || 0
+    : selectedVisualRange?.start || 0;
+  const cinematicDepth = useDepthOfFieldAnalysis({
+    segment: selectedEffectSegment,
+    depthRecords,
+    setDepthRecords,
+    updateEffect: updateSelectedCinematicDepth,
+    notify,
+    setCurrentTime,
+    timelineStart: depthTimelineStart,
+    t,
+  });
+  const previewDepthRecord = previewVisionKey ? depthRecords[previewVisionKey] || null : null;
+  const previewDepthAnalysis = resolveDepthAnalysisAtTime(previewDepthRecord, previewVisualSourceTime);
+  const previewVisualOverlaysWithDepth = useMemo(() => previewVisualOverlays.map((overlay) => {
+    const depthRecord = depthRecords[getVisionKey(overlay)];
+    if (!depthRecord) return overlay;
+    const localTime = Math.max(0, currentTime - (overlay.start || 0));
+    const sourceTime = overlay.type === "video" ? getVisualSourceTime(overlay, localTime) : localTime;
+    return { ...overlay, depthAnalysis: resolveDepthAnalysisAtTime(depthRecord, sourceTime) };
+  }), [currentTime, depthRecords, previewVisualOverlays]);
 
   const { handleExportProject, handleImportProject, handleNewProject } = useProjectFiles({
     audioBlob, audioDuration, audioSegments, captionPlacement, captionPosition, captionSegments, captionSize,
@@ -983,7 +1020,7 @@ export function App() {
     selectedSticker, selectedTransitionId, setExporting, setExportPhase,
     setExportProgress, setStatus, setStatusText, sourceAudioBlob, sourceAudioDuration,
     linkedSourceAudioSegments, sourceAudioLinked, sourceAudioStart, sourceAudioTimelineEnd, sourceAudioVolume, stickerDuration, stickerSegments,
-    trackVisibility, visionRecords, visualType, voiceTrackDuration, volume, exportSettings: {
+    trackVisibility, visionRecords, depthRecords, visualType, voiceTrackDuration, volume, exportSettings: {
       ...exportSettings,
       ...getExportDimensions(ratio, Number(exportSettings.resolution)),
       videoBitsPerSecond: getEffectiveExportBitrate(exportSettings),
@@ -1096,7 +1133,7 @@ export function App() {
           toggleCaptionSegmentHidden, toggleVisionOption, trOption, updateCaptionSegmentText,
           updateScript, userAssets, visionJob, aiMusic,
           selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
-          effectsPanelMode, setEffectsPanelMode,
+          effectsPanelMode, setEffectsPanelMode, cinematicDepth,
           visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
@@ -1122,6 +1159,8 @@ export function App() {
             : previewVisualSegment}
           subjectEffect={previewVisualSegment?.subjectEffect}
           subjectCutoutUrl={previewVisionAnalysis?.cutoutUrl || ""}
+          cinematicDepth={previewVisualSegment?.cinematicDepth}
+          depthAnalysis={previewDepthAnalysis}
           visualLocalTime={visualAnimationPreview?.segmentId && visualAnimationPreview.segmentId === previewVisualSegment?.id
             ? visualAnimationPreview.localTime
             : previewVisualLocalTime}
@@ -1187,7 +1226,7 @@ export function App() {
           getDraggedAsset={getDraggedAsset}
           applyAssetToTrack={applyAssetToTrack}
           addVisualOverlay={addVisualOverlay}
-          visualOverlays={previewVisualOverlays}
+          visualOverlays={previewVisualOverlaysWithDepth}
           selectedVisualOverlayId={canvasVisualTarget === `overlay:${selectedVisualOverlayId}` ? selectedVisualOverlayId : ""}
           onSelectVisualOverlay={(id) => {
             setSelectedVisualOverlayId(id);
@@ -1339,6 +1378,8 @@ export function App() {
           effectProgress={effectProgress}
           effectPhase={effectPhase}
           effectsPanelMode={effectsPanelMode}
+          cinematicDepth={cinematicDepth}
+          updateSelectedCinematicDepth={updateSelectedCinematicDepth}
           updateSelectedSubjectEffect={updateSelectedSubjectEffect}
           removeSelectedSubjectEffect={removeSelectedSubjectEffect}
           onOpticalFlowAssetReady={handleOpticalFlowAssetReady}
