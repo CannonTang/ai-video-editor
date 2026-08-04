@@ -2,14 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 
 import {
-  BoundingBox,
   CaretDown,
   CaretLeft,
   CaretRight,
   Check,
   CloudArrowUp,
   ClosedCaptioning,
-  Crop,
   Diamond,
   DownloadSimple,
   FrameCorners,
@@ -21,8 +19,6 @@ import {
   PersonSimpleRun,
   Scan,
   Scissors,
-  SelectionBackground,
-  Target,
   Trash,
   Waveform,
   X,
@@ -1013,18 +1009,8 @@ export function ToolPanel(props) {
     selectedAudioToolTarget,
     separateSelectedAudioVocals,
     vocalSeparationJob,
-    hasVisual,
-    visualType,
-    visionAnalysis,
-    visionOptions,
-    visionRunning,
-    visionProgress,
-    visionPhase,
     analyzeCurrentVisual,
     analyzeEffectVisual,
-    toggleVisionOption,
-    clearVisionAnalysis,
-    downloadVisionCutout,
     openAvatarPanel,
     smartMode,
     setSmartMode,
@@ -1714,226 +1700,6 @@ export function VisualEffectsPanel({
           {segment?.enhancement?.mode === "nanovsr-644k" ? <label className="switch-row repair-result-toggle"><input type="checkbox" checked={segment.enhancement.enabled !== false} onChange={(event) => onChange?.({ enhancementEnabled: event.target.checked })} />{t("hdRestoreUseResult")}</label> : null}
         </section> : null}
       </>}
-    </div>
-  );
-}
-
-const SUBJECT_LABELS_ZH = {
-  foreground: "前景主体",
-  person: "人物",
-  cat: "猫",
-  dog: "狗",
-  bird: "鸟",
-  horse: "马",
-  car: "汽车",
-  motorcycle: "摩托车",
-  bicycle: "自行车",
-  bus: "公交车",
-  truck: "卡车",
-  bottle: "瓶子",
-  cup: "杯子",
-  chair: "椅子",
-  laptop: "笔记本电脑",
-  "cell phone": "手机",
-  book: "书",
-};
-
-function getDisplaySubjectLabel(label, language) {
-  const normalized = String(label ?? "").trim();
-  if (!normalized) {
-    return language === "zh" ? "前景主体" : "Foreground subject";
-  }
-  return language === "zh" ? SUBJECT_LABELS_ZH[normalized.toLowerCase()] ?? normalized : normalized;
-}
-
-export function SmartVisionPanel({
-  t,
-  language = "zh",
-  hasVisual,
-  visualType,
-  analysis,
-  options = {},
-  running,
-  progress = 0,
-  phase = "",
-  onAnalyze,
-  onToggle,
-  onClear,
-  onDownloadCutout,
-}) {
-  const subject = analysis?.subject ?? null;
-  const detections = Array.isArray(analysis?.detections) ? analysis.detections : [];
-  const canUseSubject = Boolean(subject?.box);
-  const temporalSamples = Array.isArray(analysis?.samples) ? analysis.samples : [];
-  const canUseMatting =
-    Boolean(analysis?.cutoutUrl) || temporalSamples.some((sample) => sample.cutoutUrl);
-  const canDownloadCutout = Boolean(analysis?.cutoutBlob) && visualType === "image";
-  const statusText = running
-    ? t("smartVisionRunning")
-    : analysis
-      ? t("smartVisionReady")
-      : t("smartVisionIdle");
-  const featureRows = [
-    {
-      id: "showDetections",
-      icon: BoundingBox,
-      title: t("smartVisionDetection"),
-      description: t("smartVisionDetectionDesc"),
-      disabled: !detections.length,
-    },
-    {
-      id: "removeBackground",
-      icon: SelectionBackground,
-      title: t("smartVisionMatting"),
-      description: t("smartVisionMattingDesc"),
-      disabled: !canUseMatting,
-    },
-    {
-      id: "avoidCaptions",
-      icon: ClosedCaptioning,
-      title: t("smartVisionCaptionAvoidance"),
-      description: t("smartVisionCaptionAvoidanceDesc"),
-      disabled: !canUseSubject,
-    },
-    {
-      id: "smartCrop",
-      icon: Crop,
-      title: t("smartVisionCrop"),
-      description: t("smartVisionCropDesc"),
-      disabled: !canUseSubject,
-    },
-  ];
-
-  return (
-    <div className="tool-panel smart-vision-panel">
-      <div className="smart-vision-heading">
-        <div>
-          <span>{t("smartVisionKicker")}</span>
-          <h2>{t("smartVisionTitle")}</h2>
-        </div>
-        <span className={`smart-vision-status ${running ? "is-running" : analysis ? "is-ready" : ""}`}>
-          <i />
-          {statusText}
-        </span>
-      </div>
-
-      <div className="vision-model-stack" aria-label={t("smartVisionModels")}>
-        <div>
-          <BoundingBox size={20} weight="duotone" />
-          <span>
-            <strong>YOLOS tiny</strong>
-            <em>{t("smartVisionDetection")}</em>
-          </span>
-        </div>
-        <div>
-          <SelectionBackground size={20} weight="duotone" />
-          <span>
-            <strong>MODNet</strong>
-            <em>{t("smartVisionMatting")}</em>
-          </span>
-        </div>
-      </div>
-
-      {!hasVisual ? <div className="vision-empty-state">{t("smartVisionNoMedia")}</div> : null}
-
-      <button
-        className="panel-primary vision-analyze-button"
-        type="button"
-        disabled={!hasVisual}
-        onClick={onAnalyze}
-      >
-        <Scan size={18} weight="bold" />
-        {running
-          ? t("smartVisionCancel")
-          : visualType === "video"
-          ? analysis
-            ? t("smartVisionAnalyzeAgainVideo")
-            : t("smartVisionAnalyzeVideo")
-          : analysis
-            ? t("smartVisionAnalyzeAgain")
-            : t("smartVisionAnalyze")}
-      </button>
-
-      {running ? (
-        <div className="vision-progress" role="status" aria-live="polite">
-          <div>
-            <span>{phase || t("smartVisionRunning")}</span>
-            <strong>{Math.max(0, Math.min(100, Math.round(progress)))}%</strong>
-          </div>
-          <span className="vision-progress-track">
-            <span style={{ width: `${Math.max(0, Math.min(100, progress))}%` }} />
-          </span>
-        </div>
-      ) : null}
-
-      {analysis ? (
-        <div className="vision-result-card">
-          {subject ? (
-            <>
-              <div className="vision-subject-icon">
-                <Target size={22} weight="duotone" />
-              </div>
-              <div>
-                <span>{t("smartVisionSubject")}</span>
-                <strong>{getDisplaySubjectLabel(subject.label, language)}</strong>
-              </div>
-              <div className="vision-confidence">
-                <span>{t("smartVisionConfidence")}</span>
-                <strong>{Math.round((subject.score ?? 0) * 100)}%</strong>
-              </div>
-              <div className="vision-object-count">
-                <span>{t("smartVisionObjects")}</span>
-                <strong>{detections.length}</strong>
-              </div>
-            </>
-          ) : (
-            <p>{t("smartVisionNoSubject")}</p>
-          )}
-        </div>
-      ) : null}
-
-      {visualType === "video" && temporalSamples.length ? (
-        <div className="vision-timeline-summary">
-          <span>{t("smartVisionVideoCoverage")}</span>
-          <strong>{temporalSamples.length}</strong>
-          <em>{t("smartVisionTemporalFrames")}</em>
-        </div>
-      ) : null}
-
-      <div className="vision-feature-list">
-        {featureRows.map(({ id, icon: Icon, title, description, disabled }) => (
-          <label className={`${disabled ? "is-disabled" : ""} ${options[id] ? "is-active" : ""}`} key={id}>
-            <Icon size={19} weight="duotone" />
-            <span>
-              <strong>{title}</strong>
-              <em>{description}</em>
-            </span>
-            <input
-              type="checkbox"
-              checked={Boolean(options[id])}
-              disabled={disabled}
-              onChange={() => onToggle?.(id)}
-            />
-          </label>
-        ))}
-      </div>
-
-      <p className="vision-model-note">{t("smartVisionImageOnly")}</p>
-
-      {analysis ? (
-        <div className="vision-result-actions">
-          <button className="panel-secondary" type="button" disabled={!canDownloadCutout} onClick={onDownloadCutout}>
-            <DownloadSimple size={16} />
-            {visualType === "video"
-              ? t("smartVisionVideoCutoutExport")
-              : t("smartVisionCutoutDownload")}
-          </button>
-          <button className="panel-secondary" type="button" onClick={onClear}>
-            <Trash size={16} />
-            {t("smartVisionClear")}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

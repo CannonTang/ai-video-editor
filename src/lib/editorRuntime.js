@@ -9,8 +9,8 @@ import {
 // Update on each ordinary display frame so the visible playhead stays attached
 // to the media clock. The previous 80 ms cadence visibly lagged behind video.
 export const PLAYBACK_UI_FRAME_MS = 15;
-export const DEFAULT_VISION_OPTIONS = Object.freeze({ showDetections: true, removeBackground: false, avoidCaptions: true, smartCrop: true });
-export const EMPTY_VISION_OPTIONS = Object.freeze({ showDetections: false, removeBackground: false, avoidCaptions: false, smartCrop: false });
+export const DEFAULT_VISION_OPTIONS = Object.freeze({ removeBackground: false });
+export const EMPTY_VISION_OPTIONS = Object.freeze({ removeBackground: false });
 
 export function shouldCorrectPreviewMediaTime({ isPlaying, currentTime, targetTime, threshold = 0.04 }) {
   return !isPlaying && Number.isFinite(targetTime) && Math.abs((Number(currentTime) || 0) - targetTime) > threshold;

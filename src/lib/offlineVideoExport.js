@@ -346,7 +346,11 @@ async function renderCompositionAt(context, canvas, prepared, options, time) {
     captionReferenceSize: options.captionReferenceSize,
     stickers, stickerImages: stickers.map((sticker) => prepared.stickerImages.get(sticker.src)),
     transitionId: next ? junction.id : "none",
-    transitionNext: next ? { visual: next.cutoutVisual || next.visual } : null,
+    transitionNext: next ? {
+      visual: next.cutoutVisual || next.visual,
+      visualEffects: next.segment,
+      visualTime: transitionProgress * transitionDuration,
+    } : null,
     transitionProgress, vision: frameVision, depth: frameDepth, visualEffects: item.segment, visualTime: localTime,
     visualOverlays: renderedOverlayItems.map((item) => ({ ...item.renderSegment, start: item.segment.start - (range?.start || 0) })),
     visualOverlaySources: renderedOverlayItems.map((item) => item.visual),

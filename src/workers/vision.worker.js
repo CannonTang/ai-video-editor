@@ -10,6 +10,8 @@ import { normalizeDetections, selectPrimarySubject } from "../lib/visualGeometry
 
 let transformersPromise = null;
 let detectorPromise = null;
+let detectorBackend = "unknown";
+let detectorFallbackReason = "";
 let backgroundRemoverPromise = null;
 let analysisQueue = Promise.resolve();
 
@@ -67,7 +69,7 @@ function createModelLoadProgressCallback(requestId, { start, end, label }) {
 
 function getTransformers() {
   transformersPromise ??= import("@huggingface/transformers").then((transformers) => {
-    transformers.env.useBrowserCache = false;
+    transformers.env.useBrowserCache = true;
     if (transformers.env?.backends?.onnx?.wasm) {
       transformers.env.backends.onnx.wasm.numThreads = 1;
     }
@@ -80,21 +82,38 @@ async function getDetector(requestId) {
   if (!detectorPromise) {
     detectorPromise = (async () => {
       const { pipeline } = await getTransformers();
-      return pipeline("object-detection", YOLOS_TINY_MODEL_ID, {
-        device: "wasm",
-        dtype: "q8",
-        revision: YOLOS_TINY_MODEL_REVISION,
-        session_options: {
-          graphOptimizationLevel: "all",
-        },
-        progress_callback: createModelLoadProgressCallback(requestId, {
-          start: 8,
-          end: 48,
-          label: YOLOS_TINY_MODEL_LABEL,
-        }),
-      });
+      const createPipeline = (device, dtype) => pipeline("object-detection", YOLOS_TINY_MODEL_ID, {
+          device,
+          dtype,
+          revision: YOLOS_TINY_MODEL_REVISION,
+          session_options: { graphOptimizationLevel: "all" },
+          progress_callback: createModelLoadProgressCallback(requestId, {
+            start: 8,
+            end: 48,
+            label: `${YOLOS_TINY_MODEL_LABEL} · ${device === "webgpu" ? "WebGPU" : "WASM"}`,
+          }),
+        });
+      if (self.navigator?.gpu) {
+        try {
+          postProgress(requestId, 5, `正在初始化 ${YOLOS_TINY_MODEL_LABEL} WebGPU`);
+          const detector = await createPipeline("webgpu", "fp16");
+          detectorBackend = "webgpu";
+          detectorFallbackReason = "";
+          postProgress(requestId, 48, `${YOLOS_TINY_MODEL_LABEL} WebGPU 已就绪`);
+          return detector;
+        } catch (error) {
+          detectorFallbackReason = error?.message || String(error);
+          console.warn(`${YOLOS_TINY_MODEL_LABEL} WebGPU 初始化失败，切换到 WASM。`, error);
+          postProgress(requestId, 6, `${YOLOS_TINY_MODEL_LABEL} WebGPU 不可用，切换到 WASM`);
+        }
+      }
+      const detector = await createPipeline("wasm", "q8");
+      detectorBackend = "wasm";
+      postProgress(requestId, 48, `${YOLOS_TINY_MODEL_LABEL} WASM 已就绪`);
+      return detector;
     })().catch((error) => {
       detectorPromise = null;
+      detectorBackend = "unknown";
       throw error;
     });
   } else {
@@ -369,6 +388,10 @@ async function analyzeVisual(message) {
       modelRevisions: {
         detector: YOLOS_TINY_MODEL_REVISION,
         matting: removeBackground ? MODNET_MODEL_REVISION : null,
+      },
+      runtimeBackends: {
+        detector: detectorBackend,
+        detectorFallbackReason,
       },
     },
   });

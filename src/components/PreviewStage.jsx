@@ -107,6 +107,8 @@ export function PreviewStage({
   showVisionOverlays = false,
   backgroundRemoved = false,
   smartCropActive = false,
+  smartFramePresentation = "crop",
+  smartFrameBackgroundPosition = "50% 50%",
   captionAvoidanceActive = false,
   setFitMode,
   captionsEnabled,
@@ -156,6 +158,7 @@ export function PreviewStage({
 }) {
   const [overlaySnapGuides, setOverlaySnapGuides] = useState([]);
   const previewImageRef = useRef(null);
+  const smartBackgroundVideoRef = useRef(null);
   const depthCanvasRef = useRef(null);
   const lastReportedVideoTimeRef = useRef(-Infinity);
   const [isFocusPreviewOpen, setIsFocusPreviewOpen] = useState(false);
@@ -169,6 +172,17 @@ export function PreviewStage({
   const baseRenderedVisualSrc = previewVisualRenderSrc || previewVisualSrc;
   const activeObjectFit = visualObjectFit || fitMode;
   const activeObjectPosition = visualObjectPosition || "50% 50%";
+  const smartContainActive = smartCropActive && smartFramePresentation === "safe-contain";
+
+  const syncSmartBackgroundVideo = (sourceVideo) => {
+    const backgroundVideo = smartBackgroundVideoRef.current;
+    if (!backgroundVideo || !sourceVideo) return;
+    if (Math.abs(backgroundVideo.currentTime - sourceVideo.currentTime) > 0.04) {
+      backgroundVideo.currentTime = sourceVideo.currentTime;
+    }
+    if (sourceVideo.paused) backgroundVideo.pause();
+    else void backgroundVideo.play().catch(() => {});
+  };
   const visualTransform = resolveVisualTransform(visualEffects?.keyframes, visualLocalTime, visualEffects?.baseTransform);
   const visualAnimation = resolveVisualClipAnimation(visualEffects?.animation, visualLocalTime, visualEffects?.duration);
   const visualMask = visualEffects?.mask ?? {};
@@ -637,12 +651,30 @@ export function PreviewStage({
                   if (visualTransformEditable) startVisualTransform(event, "move");
                 }}
               >
+                {smartContainActive && previewVisualType === "image" ? <img
+                  className="smart-frame-fill-background"
+                  src={renderedVisualSrc}
+                  alt=""
+                  crossOrigin="anonymous"
+                  style={{ objectPosition: smartFrameBackgroundPosition }}
+                /> : null}
+                {smartContainActive && previewVisualType === "video" ? <video
+                  ref={smartBackgroundVideoRef}
+                  className="smart-frame-fill-background"
+                  src={previewVisualSrc}
+                  crossOrigin="anonymous"
+                  muted
+                  playsInline
+                  preload="metadata"
+                  aria-hidden="true"
+                  style={{ objectPosition: smartFrameBackgroundPosition }}
+                /> : null}
                 {previewVisualType === "image" ? <img
                   ref={previewImageRef}
                   src={renderedVisualSrc}
                   alt={t("currentMediaAlt")}
                   crossOrigin="anonymous"
-                  style={{ ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
+                  style={{ ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined }}
                 /> : null}
                 {previewVisualType === "video" ? <video
                   key={previewVisualSrc}
@@ -653,13 +685,17 @@ export function PreviewStage({
                   muted={previewVisualMuted}
                   playsInline
                   preload="metadata"
-                  onTimeUpdate={(event) => onPreviewVideoTimeUpdate?.(event.currentTarget.currentTime)}
+                  onTimeUpdate={(event) => {
+                    syncSmartBackgroundVideo(event.currentTarget);
+                    onPreviewVideoTimeUpdate?.(event.currentTarget.currentTime);
+                  }}
                   onSeeked={(event) => {
+                    syncSmartBackgroundVideo(event.currentTarget);
                     lastReportedVideoTimeRef.current = event.currentTarget.currentTime;
                     onPreviewVideoTimeUpdate?.(event.currentTarget.currentTime);
                   }}
                   style={{
-                    ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition,
+                    ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined,
                     WebkitMaskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     maskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     WebkitMaskSize: previewVisionMaskUrl ? activeObjectFit : undefined,
