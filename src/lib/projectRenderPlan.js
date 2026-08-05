@@ -50,11 +50,12 @@ function resolveVisualPath(segment, media, extractedFiles) {
   return path;
 }
 
-function addAudioTrack({ args, filters, inputs, segments, mediaEntry, extractedFiles, duration, prefix, defaultVolume = 1 }) {
-  if (!segments.length || !mediaEntry?.path) return [];
-  const path = extractedFiles.get(mediaEntry.path);
-  if (!path) throw renderError("MISSING_MEDIA", `Portable media is missing for ${prefix}`);
+function addAudioTrack({ args, filters, inputs, segments, mediaEntry, mediaEntries = [], extractedFiles, duration, prefix, defaultVolume = 1 }) {
+  if (!segments.length) return [];
   return segments.map((segment, index) => {
+    const segmentEntry = mediaEntries.find((entry) => [segment.id, segment.archiveMediaId].includes(entry.id)) || mediaEntry;
+    const path = segmentEntry?.path ? extractedFiles.get(segmentEntry.path) : null;
+    if (!path) throw renderError("MISSING_MEDIA", `Portable media is missing for ${prefix} clip: ${segment.id}`);
     const inputIndex = inputs.count++;
     args.push("-i", path);
     const rate = Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
@@ -97,7 +98,7 @@ export function buildFfmpegRenderPlan({ project, media = {}, extractedFiles, set
 
   const visible = project.trackVisibility || {};
   const audioLabels = [];
-  if (visible.audio !== false) audioLabels.push(...addAudioTrack({ args, filters, inputs, segments: project.audioSegments || [], mediaEntry: media.audio, extractedFiles, duration, prefix: "voice" }));
+  if (visible.audio !== false) audioLabels.push(...addAudioTrack({ args, filters, inputs, segments: project.audioSegments || [], mediaEntry: media.audio, mediaEntries: media.audioSegments || [], extractedFiles, duration, prefix: "voice" }));
   if (visible.music !== false) audioLabels.push(...addAudioTrack({ args, filters, inputs, segments: project.musicSegments || [], mediaEntry: media.music, extractedFiles, duration, prefix: "music", defaultVolume: Number(project.musicVolume) || 0.35 }));
   if (audioLabels.length) filters.push(`${audioLabels.join("")}amix=inputs=${audioLabels.length}:duration=longest:normalize=0,atrim=duration=${duration}[aout]`);
 

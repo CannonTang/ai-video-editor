@@ -1,4 +1,4 @@
 interface:
   display_name: "AI Video Editing with Timeline Studio"
-  short_description: "Automate editable video timelines, captions, and voiceovers"
-  default_prompt: "Use $edit-timeline-studio to edit these assets, verify the result end to end, and improve the workflow from observed friction."
+  short_description: "Professional media analysis, automatic editing, and delivery"
+  default_prompt: "Use $edit-timeline-studio to analyze the supplied images, video, speech, and motion; infer the editing scenario; ask only material questions; stabilize, track, and enhance deliberately; then deliver and verify both an editable .timeline project and a rendered result video in the output directory."

@@ -190,9 +190,8 @@ function importAsset(project, operation) {
     const start = Object.hasOwn(operation, "start") ? finiteNonNegative(operation.start, "start") : 0;
     const segment = { id, name: operation.name || id, start, duration, sourceStart: 0, sourceDuration: duration, playbackRate: 1, volume: operation.volume ?? (operation.track === "music" ? 0.35 : 1), fadeIn: 0, fadeOut: 0, muted: operation.muted === true, integrity };
     if (operation.track === "audio") {
-      if ((project.audioSegments || []).length && operation.replace !== true) throw Object.assign(new Error("Voiceover media already exists; set replace: true to replace it"), { code: "MEDIA_SLOT_OCCUPIED" });
-      project.audioSegments = [segment];
-      project.audioDuration = duration;
+      project.audioSegments = operation.replace === true ? [segment] : [...(project.audioSegments || []), segment];
+      project.audioDuration = project.audioSegments.reduce((end, item) => Math.max(end, (Number(item.start) || 0) + (Number(item.duration) || 0)), 0);
     } else {
       project.musicSegments = [segment];
       project.musicName = segment.name;

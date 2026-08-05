@@ -4,6 +4,7 @@ import { decodeWaveform, downloadBlob } from "../lib/media.js";
 import { createProjectArchive, readProjectArchive, readProjectFileAsText, resolveProjectVisualMedia } from "../lib/projectArchive.js";
 import { createCaptionSegments, getImageThumbnailCount, getVisualSegmentsTotal } from "../lib/timeline.js";
 import { normalizeSmartFrame } from "../lib/smartFrame.js";
+import { normalizeTrackLocks, normalizeTrackVisibility } from "../lib/projectTrackState.js";
 
 export function useProjectFiles(deps) {
   const commandStateRef = useRef({ schemaVersion: 1, revision: 0, appliedOperationIds: [] });
@@ -33,6 +34,7 @@ export function useProjectFiles(deps) {
       deps.notify("正在打包工程与媒体素材…");
       const archive = await createProjectArchive({
         project: getProjectSnapshot(), visualSegments: [...deps.visualSegments, ...deps.visualOverlaySegments],
+        audioSegments: deps.audioSegments,
         audio: deps.audioBlob ? { blob: deps.audioBlob, name: "ai-voiceover" } : null,
         sourceAudio: deps.sourceAudioBlob ? { blob: deps.sourceAudioBlob, name: deps.sourceAudioName || "source-audio" } : null,
         music: deps.musicBlob ? { blob: deps.musicBlob, name: deps.musicName || "background-music" } : null,
@@ -64,7 +66,7 @@ export function useProjectFiles(deps) {
         if (legacy?.format !== "timeline-studio-project" || !legacy.project) throw archiveError;
         archive = { payload: { ...legacy, media: { visuals: [] } }, visualMedia: new Map(), audio: null, sourceAudio: null, music: null, legacy: true };
       }
-      const { payload, visualMedia, audio, sourceAudio, music } = archive;
+      const { payload, visualMedia, audioSegmentMedia, audio, sourceAudio, music } = archive;
       const data = payload.project;
       commandStateRef.current = data.commandState || { schemaVersion: 1, revision: 0, appliedOperationIds: [] };
       deps.setTimelineHorizon(DEFAULT_TIMELINE_DURATION_SECONDS);
@@ -83,7 +85,7 @@ export function useProjectFiles(deps) {
       deps.setFitMode(data.fitMode || "contain"); deps.setCaptionPosition(data.captionPosition || "bottom");
       deps.setCaptionPlacement(data.captionPlacement || { x: 50, y: 78 }); deps.setCaptionSize(Number(data.captionSize) || 14);
       deps.setCaptionStyle(data.captionStyle || deps.captionStyle); deps.setCaptionsEnabled(data.captionsEnabled !== false);
-      deps.setTrackVisibility(data.trackVisibility || deps.trackVisibility); deps.setTrackLocks(data.trackLocks || deps.trackLocks); deps.setTimelineZoom(Number(data.timelineZoom) || 1);
+      deps.setTrackVisibility(normalizeTrackVisibility(data.trackVisibility)); deps.setTrackLocks(normalizeTrackLocks(data.trackLocks)); deps.setTimelineZoom(Number(data.timelineZoom) || 1);
       deps.setSelectedFilterId(data.selectedFilterId || "none"); deps.setSelectedTransitionId(data.selectedTransitionId || "none");
       deps.setSelectedStickerId(data.selectedStickerId || "none"); deps.setStickerSegments(Array.isArray(data.stickerSegments) ? data.stickerSegments : []);
       const visuals = Array.isArray(data.visualSegments) ? data.visualSegments.map((segment) => {
@@ -105,13 +107,26 @@ export function useProjectFiles(deps) {
       }).filter(Boolean) : [];
       deps.setVisualOverlaySegments(overlays); deps.setSelectedVisualOverlayId("");
       deps.setImageClipCount(getImageThumbnailCount(getVisualSegmentsTotal(visuals))); deps.setCurrentVisualAsset(visuals[0] || null);
-      if (audio) {
+      deps.audioSegments.forEach((segment) => { if (segment.url?.startsWith("blob:")) URL.revokeObjectURL(segment.url); });
+      if (Array.isArray(data.audioSegments) && data.audioSegments.length && (audioSegmentMedia?.size || audio)) {
+        let legacyDecoded = null;
+        const restoredAudioSegments = (await Promise.all(data.audioSegments.map(async (segment) => {
+          const blob = audioSegmentMedia?.get(segment.id)?.blob || audio;
+          if (!blob) return null;
+          const decoded = blob === audio
+            ? (legacyDecoded ||= await decodeWaveform(blob))
+            : await decodeWaveform(blob);
+          return { ...segment, blob, url: URL.createObjectURL(blob), peaks: decoded.peaks };
+        }))).filter(Boolean);
+        deps.setAudioSegments(restoredAudioSegments);
+        deps.setSelectedAudioSegmentId(restoredAudioSegments[0]?.id || "");
+      } else if (audio) {
         const decoded = await decodeWaveform(audio);
-        if (Array.isArray(data.audioSegments) && data.audioSegments.length) {
-          const url = URL.createObjectURL(audio);
-          deps.setAudioSegments(data.audioSegments.map((segment) => ({ ...segment, blob: audio, url, peaks: decoded.peaks })));
-        } else deps.replaceAudio(audio, Number(data.audioDuration) || decoded.duration, decoded.peaks, "已恢复工程配音");
-      } else deps.clearAudioTrack("");
+        deps.replaceAudio(audio, Number(data.audioDuration) || decoded.duration, decoded.peaks, "已恢复工程配音");
+      } else {
+        deps.setAudioSegments([]);
+        deps.setSelectedAudioSegmentId("");
+      }
       if (sourceAudio) { const decoded = await decodeWaveform(sourceAudio); deps.replaceSourceAudio(sourceAudio, Number(data.sourceAudioDuration) || decoded.duration, decoded.peaks, data.sourceAudioName || "source-audio", "", Number(data.sourceAudioStart) || 0, data.sourceAudioAssetId || "", { focusAudio: false }); } else deps.clearSourceAudioTrack("");
       if (music) {
         const decoded = await decodeWaveform(music);

@@ -147,7 +147,7 @@ export function revokeVisionObjectUrls(value) {
   (Array.isArray(value) ? value : value ? [value] : []).forEach((url) => URL.revokeObjectURL(url));
 }
 export function getTimelineTrackLocalTime(time, start = 0, duration = 0) { return Math.max(0, Math.min(duration || 0, time - start)); }
-export function isTimelineTimeInsideTrack(time, start = 0, duration = 0) { return duration > 0 && time >= start && time <= start + duration; }
+export function isTimelineTimeInsideTrack(time, start = 0, duration = 0) { return duration > 0 && time >= start && time < start + duration; }
 
 export function requestTimelineMediaPlay(media) {
   if (!media || media.__timelinePlayPending) return;

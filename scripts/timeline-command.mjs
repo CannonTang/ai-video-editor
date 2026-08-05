@@ -175,16 +175,20 @@ async function main() {
     for (const imported of appliedImports) files[imported.manifest.path] = imported.bytes;
     const previousVisualMedia = Array.isArray(payload.media?.visuals) ? payload.media.visuals : [];
     const visualImports = appliedImports.filter((item) => item.track === "visuals");
-    const voiceImport = appliedImports.find((item) => item.track === "audio");
+    const voiceImports = appliedImports.filter((item) => item.track === "audio");
     const musicImport = appliedImports.find((item) => item.track === "music");
+    const previousVoiceMedia = Array.isArray(payload.media?.audioSegments) ? payload.media.audioSegments : [];
+    const replacesVoice = plan.operations.some((operation) => operation.type === "asset.import" && operation.track === "audio" && operation.replace === true && result.appliedOperationIds.includes(operation.id));
     const nextPayload = {
       ...payload,
+      version: Math.max(3, Number(payload.version) || 1),
       exportedAt: new Date().toISOString(),
       project: result.project,
       media: {
         ...(payload.media || {}),
         visuals: [...previousVisualMedia, ...visualImports.map((item) => item.manifest)],
-        ...(voiceImport ? { audio: voiceImport.manifest } : {}),
+        audioSegments: [...(replacesVoice ? [] : previousVoiceMedia), ...voiceImports.map((item) => item.manifest)],
+        ...(replacesVoice ? { audio: null } : {}),
         ...(musicImport ? { music: musicImport.manifest } : {}),
       },
     };

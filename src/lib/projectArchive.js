@@ -1,7 +1,8 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { normalizeTrackLocks, normalizeTrackVisibility } from "./projectTrackState.js";
 
 export const PROJECT_ARCHIVE_FORMAT = "timeline-studio-archive";
-export const PROJECT_ARCHIVE_VERSION = 2;
+export const PROJECT_ARCHIVE_VERSION = 3;
 const PROJECT_FILE = "project.json";
 
 export function resolveProjectVisualMedia(visualMedia, segment) {
@@ -49,9 +50,9 @@ async function blobForSource(source, blob) {
 }
 
 /** Create a portable .timeline archive with media binaries and project metadata. */
-export async function createProjectArchive({ project, visualSegments = [], audio, sourceAudio, music }) {
+export async function createProjectArchive({ project, visualSegments = [], audioSegments = [], audio, sourceAudio, music }) {
   const files = {};
-  const media = { visuals: [], audio: null, sourceAudio: null, music: null };
+  const media = { visuals: [], audioSegments: [], audio: null, sourceAudio: null, music: null };
 
   for (let index = 0; index < visualSegments.length; index += 1) {
     const segment = visualSegments[index];
@@ -63,18 +64,33 @@ export async function createProjectArchive({ project, visualSegments = [], audio
     media.visuals.push({ id: segment.id, path, name: segment.name || "素材", type: blob.type, size: blob.size });
   }
 
+  for (let index = 0; index < audioSegments.length; index += 1) {
+    const segment = audioSegments[index];
+    const blob = await blobForSource(segment?.url, segment?.blob);
+    if (!segment?.id || !blob) continue;
+    const path = `media/audio/voice-${String(index + 1).padStart(3, "0")}-${safeName(segment.name, "voiceover")}.${extensionFor(blob, "wav")}`;
+    files[path] = new Uint8Array(await blob.arrayBuffer());
+    media.audioSegments.push({ id: segment.id, path, name: segment.name || "配音", type: blob.type, size: blob.size });
+  }
+
   for (const [key, track] of Object.entries({ audio, sourceAudio, music })) {
+    if (key === "audio" && media.audioSegments.length) continue;
     if (!(track?.blob instanceof Blob)) continue;
     const path = `media/audio/${key}-${safeName(track.name, key)}.${extensionFor(track.blob, "webm")}`;
     files[path] = new Uint8Array(await track.blob.arrayBuffer());
     media[key] = { path, name: track.name || key, type: track.blob.type, size: track.blob.size };
   }
 
+  const normalizedProject = {
+    ...project,
+    trackVisibility: normalizeTrackVisibility(project?.trackVisibility),
+    trackLocks: normalizeTrackLocks(project?.trackLocks),
+  };
   const payload = {
     format: PROJECT_ARCHIVE_FORMAT,
     version: PROJECT_ARCHIVE_VERSION,
     exportedAt: new Date().toISOString(),
-    project,
+    project: normalizedProject,
     media,
   };
   files[PROJECT_FILE] = strToU8(JSON.stringify(payload));
@@ -93,6 +109,7 @@ export async function readProjectArchive(file) {
   return {
     payload,
     visualMedia: new Map((payload.media?.visuals || []).map((entry) => [entry.id, { ...entry, blob: getBlob(entry) }])),
+    audioSegmentMedia: new Map((payload.media?.audioSegments || []).map((entry) => [entry.id, { ...entry, blob: getBlob(entry) }])),
     audio: getBlob(payload.media?.audio),
     sourceAudio: getBlob(payload.media?.sourceAudio),
     music: getBlob(payload.media?.music),

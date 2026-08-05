@@ -1,12 +1,5 @@
 import { useState } from "react";
-
-const DEFAULT_TRACK_VISIBILITY = {
-  image: true, caption: true, sticker: true, source: true, audio: true, music: true,
-};
-
-const DEFAULT_TRACK_LOCKS = {
-  image: false, overlay: false, caption: false, sticker: false, source: false, audio: false, music: false,
-};
+import { DEFAULT_TRACK_LOCKS, DEFAULT_TRACK_VISIBILITY } from "../lib/projectTrackState.js";
 
 export function useEditorUiState() {
   const [status, setStatus] = useState("ready");

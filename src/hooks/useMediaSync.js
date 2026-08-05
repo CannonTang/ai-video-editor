@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, shouldCorrectPreviewMediaTime } from "../lib/editorRuntime.js";
 import { getLinkedSourceAudioState } from "../lib/sourceAudioSync.js";
-import { normalizeVisualPlaybackRate } from "../lib/visualEffects.js";
 
 export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTime, playbackRate = 1 }) {
   if (!media) return;
@@ -107,33 +106,11 @@ export function useMediaSync(d) {
         d.estimatedDuration,
         d.visualPlaybackStartTimeRef.current + (now - d.visualPlaybackStartedAtRef.current) / 1000,
       );
-      const video = d.previewVideoRef.current;
-      const visualRange = d.previewVisualRange;
-      const visualSegment = d.previewVisualSegment;
-      const sourceStart = Math.max(0, Number(visualSegment?.sourceStart) || 0);
-      const playbackRate = normalizeVisualPlaybackRate(visualSegment?.playbackRate);
-      const mediaTimelineTime = video && visualRange && d.previewVisualType === "video"
-        ? visualRange.start + (Math.max(sourceStart, Number(video.currentTime) || 0) - sourceStart) / playbackRate
-        : Number.NaN;
-      const useVideoClock = Boolean(
-        video &&
-        visualRange &&
-        d.previewVisualType === "video" &&
-        !video.paused &&
-        !video.ended &&
-        wallClockTime >= visualRange.start &&
-        wallClockTime < visualRange.end &&
-        Number.isFinite(mediaTimelineTime),
-      );
-      const next = useVideoClock
-        ? Math.min(d.estimatedDuration, visualRange.end, Math.max(visualRange.start, mediaTimelineTime))
-        : wallClockTime;
-      if (useVideoClock) {
-        // Rebase the fallback clock continuously so a decode stall or segment
-        // boundary resumes from the frame the user actually saw.
-        d.visualPlaybackStartTimeRef.current = next;
-        d.visualPlaybackStartedAtRef.current = now;
-      }
+      // The timeline is the monotonic master clock. A video element can stall
+      // just before `ended` while decoding its tail; using that media time as
+      // the clock pins the playhead inside one clip and appears to loop it.
+      // Video/audio elements are synchronized to this clock, never vice versa.
+      const next = wallClockTime;
       d.currentTimeRef.current = next;
       if (now - d.visualPlaybackLastUpdateRef.current > PLAYBACK_UI_FRAME_MS || next >= d.estimatedDuration) {
         d.visualPlaybackLastUpdateRef.current = now;

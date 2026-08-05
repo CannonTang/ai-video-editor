@@ -17,7 +17,7 @@
 - Import and export through visible file controls
 - Pure timeline helper functions in `src/lib/`
 - Versioned `project.inspect`, `track.inspect`, `clip.inspect`, `transcript.inspect`, field-level `project.diff`, and `project.run` commands, with legacy `inspect`/`run` aliases
-- Transactional, revision-checked, idempotent edits for probed and hashed visual/audio import to Visuals, Music, or the portable Voiceover slot; timed edits, captions, Visuals/Overlays, transitions, validated properties, track state, and ratio
+- Transactional, revision-checked, idempotent edits for probed and hashed visual/audio import to Visuals, Music, or multiple portable Voiceover clips; timed edits, captions, Visuals/Overlays, transitions, validated properties, track state, and ratio
 - Portable `.timeline` output that preserves archived media entries while replacing only versioned project metadata
 - Transactional local `project.render` for the portable Visuals + Voiceover + Music subset, with ffprobe verification and explicit rejection of unsupported composition features
 
@@ -40,19 +40,18 @@ Observed browser-path constraints:
 ## Missing for reliable Agent editing
 
 1. Full browser-renderer parity in the headless command runner; the first H.264/AAC Visuals + Voiceover + Music path and ffprobe-backed import probing are available.
-2. Broader command coverage for multi-asset Voiceover storage, generation, and render.
+2. Broader command coverage for Voiceover generation and advanced render controls; multi-asset Voiceover storage and rendering are available.
 3. A fully serializable editor core independent of React setters, DOM nodes, Blob URLs, and browser-only refs; the first shared reducers now live in `src/lib/projectCommandEngine.js`.
 4. Persisted undo checkpoints; transactions, revision preconditions, idempotency keys, structured errors, and field-level dry-run diffs are available.
 5. Richer non-caption analysis inspection; project, track, clip, and caption transcript reads are available.
 6. Progress events and cancellation for ASR, TTS, vision, avatar generation, and export.
-7. Content-addressed deduplication and per-segment portable media references beyond the current hashed import paths and single Voiceover binary slot.
+7. Content-addressed deduplication beyond the current hashed import paths; per-segment portable Voiceover media references are available.
 8. Agent-focused integration tests that apply a command plan, reopen the project, exercise both the supported headless render subset and browser-render parity cases, decode, and verify the result.
 
 ## Recommended delivery order
 
-1. Evolve the archive from one Voiceover binary slot to per-segment portable audio references.
-2. Add vision/ASR analysis-record inspection beyond serialized caption transcript data.
-3. Add persisted undo checkpoints around the existing command transaction.
-4. Expand `project.render` with captions, stickers, overlays, transitions, effects, source audio, progress events, and cancellation diagnostics.
-5. Add MCP as a thin transport adapter over the same registry.
-6. Prefer the CLI from this Skill when an operation is supported, retaining browser control as the compatibility path.
+1. Add vision/ASR analysis-record inspection beyond serialized caption transcript data.
+2. Add persisted undo checkpoints around the existing command transaction.
+3. Expand `project.render` with captions, stickers, overlays, transitions, effects, source audio, progress events, and cancellation diagnostics.
+4. Add MCP as a thin transport adapter over the same registry.
+5. Prefer the CLI from this Skill when an operation is supported, retaining browser control as the compatibility path.
