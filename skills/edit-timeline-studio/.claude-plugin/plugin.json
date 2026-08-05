@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "timeline-studio",
   "displayName": "Timeline Studio",
-  "version": "0.2.0",
-  "description": "Create, edit, caption, voice, assemble, validate, and export editable Timeline Studio video projects for automatic editing and local rendering.",
+  "version": "0.9.1",
+  "description": "Professionally auto-edit footage, products, brands, and website walkthroughs into editable Timeline Studio projects with natural voiceover, linked captions, portable media, stable motion, and verified rendering.",
   "author": {
     "name": "MartinDelophy",
     "url": "https://github.com/MartinDelophy"
