@@ -54,11 +54,23 @@ Preserve the original prompt and normalize inferred, confirmed, and defaulted de
   "pace": "compact",
   "tone": "clear",
   "narrationLanguage": "zh-CN",
-  "voiceProfile": {"genderPresentation": "female", "speakerId": "owned-voice-id", "style": "confident-warm"},
+  "voiceProfile": {
+    "genderPresentation": "female",
+    "speakerId": "owned-voice-id",
+    "style": "confident-warm"
+  },
   "outputDirectory": "/absolute/path/to/delivery",
-  "generationPolicy": {"needed": false, "approvedModel": null, "identityLocks": []},
-  "enhancementPolicy": {"stabilize": "when-needed", "primaryEffectPerShot": 1, "supportingEffectPerShot": 1},
-  "websiteCoverage": {"manifestStatus": "complete", "authenticationScope": "user-signed-in", "claimEvidencePolicy": "verified-or-labeled"},
+  "generationPolicy": { "needed": false, "approvedModel": null, "identityLocks": [] },
+  "enhancementPolicy": {
+    "stabilize": "when-needed",
+    "primaryEffectPerShot": 1,
+    "supportingEffectPerShot": 1
+  },
+  "websiteCoverage": {
+    "manifestStatus": "complete",
+    "authenticationScope": "user-signed-in",
+    "claimEvidencePolicy": "verified-or-labeled"
+  },
   "mustKeep": ["upload", "edit", "export result"],
   "mustAvoid": ["private account details"],
   "captionPolicy": "complete-language-aware",
@@ -104,9 +116,11 @@ Do not treat silence removal as automatic approval to cut. Protect breaths that 
 
 ## 6. Caption as an editorial pass
 
-Generate or revise captions only from the final spoken edit. Segment by meaning, syntax, breath, and shot context rather than fixed character counts. Keep captions readable, avoid very brief flashes, use at most two lines unless the user's format requires otherwise, and flag reading-rate outliers instead of silently dropping words. Preserve names, numbers, product terms, and uncertainty from low-confidence transcription for review.
+Generate or revise captions only from the final spoken edit. The constraint is conditional: when captions are configured, none may be a silent text layer; when captions are absent, decide whether voiceover is needed from the brief and content rather than generating it automatically. Transcription captions must bind to their existing source-speech clip, while every Agent-authored narration, explanatory, promotional, or text-led caption requires generated or recorded voiceover first. Do not synthesize a second voice over already-spoken source dialogue. When no authorized speech route is available, do not create the caption.
 
-Verify caption timing after every source-time edit. Check safe placement against faces, hands, product controls, screen UI, and existing overlays.
+Lock the speech performance before caption segmentation. Split captions by meaning, syntax, breath, and shot context rather than fixed character counts. Keep captions readable, avoid very brief flashes, use at most two lines unless the user's format requires otherwise, and flag reading-rate outliers instead of silently dropping words. Preserve names, numbers, product terms, and uncertainty from low-confidence transcription for review.
+
+Verify caption timing after every source-time edit. Require exactly one matching audible speech clip and `audioClipId` for each visible caption, with the caption interval contained by the spoken interval. Check safe placement against faces, hands, product controls, screen UI, and existing overlays.
 
 ## 7. Verify the finished edit
 
