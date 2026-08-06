@@ -5,8 +5,8 @@ import {
 } from "../lib/modelSources.js";
 
 export const VOICE_MODEL_REPOSITORY = "timeline-studio-voice-models";
-export const VOICE_MODEL_HUGGING_FACE_REVISION = "f6aa4cf8fb440352b9f36c637dd310d047011e52";
-export const VOICE_MODEL_MODELSCOPE_REVISION = "14a0656f5a111a0052dfca586fbe2ceb18b54adf";
+export const VOICE_MODEL_HUGGING_FACE_REVISION = "d9e0542e0e4e8fcfb849240f7e8e7fa8147df1a3";
+export const VOICE_MODEL_MODELSCOPE_REVISION = "226b24270b69b38781a35566c7d442061f9e3b81";
 
 const mirrorOptions = (path, preference) => ({
   repository: VOICE_MODEL_REPOSITORY,

@@ -34,6 +34,8 @@ export function createAudioTrackActions(d) {
       sourceKind: options.sourceKind || (options.voiceId ? "ai-voice" : "upload"),
       voiceId: options.voiceId || "",
       voiceName: options.voiceName || "",
+      cloneVoiceProfileId: options.cloneVoiceProfileId || "",
+      cloneVoiceProfileName: options.cloneVoiceProfileName || "",
       assetId: options.assetId || "",
     };
     if (options.replaceSegmentId) {
@@ -179,10 +181,14 @@ export function createAudioTrackActions(d) {
     const decoded = await decodeWaveform(blob);
     const captionSegment = options.captionSegment;
     const identity = {
-      sourceKind: "ai-voice",
+      sourceKind: options.sourceKind || "ai-voice",
       voiceId: d.selectedVoiceId,
-      voiceName: d.selectedVoice.name,
-      name: d.selectedVoice.name,
+      voiceName: options.cloneVoiceProfileName
+        ? `${options.cloneVoiceProfileName} · ${d.selectedVoice.name}`
+        : d.selectedVoice.name,
+      name: options.cloneVoiceProfileName || d.selectedVoice.name,
+      cloneVoiceProfileId: options.cloneVoiceProfileId || "",
+      cloneVoiceProfileName: options.cloneVoiceProfileName || "",
     };
     const audioSegment = replaceAudio(blob, decoded.duration, decoded.peaks, nextStatusText, captionSegment ? {
       start: captionSegment.start || 0,

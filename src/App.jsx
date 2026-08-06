@@ -29,6 +29,7 @@ import { useMediaSync } from "./hooks/useMediaSync.js";
 import { useVideoExport } from "./hooks/useVideoExport.js";
 import { useVoiceRecorder } from "./hooks/useVoiceRecorder.js";
 import { useVoiceGeneration } from "./hooks/useVoiceGeneration.js";
+import { useVoiceProfiles } from "./hooks/useVoiceProfiles.js";
 import { useAutoCaptions } from "./hooks/useAutoCaptions.js";
 import { useAutoEdit } from "./hooks/useAutoEdit.js";
 import { useSourceAudioExtraction } from "./hooks/useSourceAudioExtraction.js";
@@ -184,6 +185,7 @@ export function App() {
   const [userAssets, setUserAssets] = useState([]);
   const { notify, toast } = useToast(2600, uiLanguage || "zh");
   const [previewVideoMediaTime, setPreviewVideoMediaTime] = useState(0);
+  const sourceVoiceColorOriginalRef = useRef(null);
   const [visionRecords, setVisionRecords] = useState({});
   const [depthRecords, setDepthRecords] = useState({});
   const [visionJob, setVisionJob] = useState({
@@ -247,6 +249,11 @@ export function App() {
     visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
   });
   const t = useMemo(() => createTranslator(activeLanguage), [activeLanguage]);
+  const {
+    addVoiceProfile, removeVoiceProfile, selectedVoiceProfileId, setSelectedVoiceProfileId,
+    toggleVoiceProfileFavorite, voiceProfiles,
+  } = useVoiceProfiles({ favoriteVoiceIds, setFavoriteVoiceIds, notify, t });
+  const selectedVoiceProfile = voiceProfiles.find((profile) => profile.id === selectedVoiceProfileId) ?? null;
   const handleCancelExport = () => {
     const controller = exportAbortControllerRef.current;
     if (!controller || controller.signal.aborted) return;
@@ -634,7 +641,7 @@ export function App() {
     : selectedTrack === "music" && musicBlob
       ? { ...(selectedMusicSegment ?? musicSegments[0] ?? { id: "music-audio", start: musicStart, duration: musicDuration, sourceStart: 0, sourceDuration: musicDuration, playbackRate: 1 }), blob: musicBlob, name: musicName || t("musicTrack"), segmentId: selectedMusicSegment?.id || musicSegments[0]?.id || "music-audio", track: "music", volume: musicVolume, canChangeSpeed: true }
       : selectedTrack === "source" && sourceAudioBlob
-        ? { ...(selectedSourceAudioPiece ?? {}), blob: sourceAudioBlob, name: sourceAudioName, start: selectedSourceAudioPiece?.start ?? sourceAudioStart, sourceStart: selectedSourceAudioPiece?.sourceStart ?? 0, duration: selectedSourceAudioPiece?.duration ?? sourceAudioDuration, sourceDuration: selectedSourceAudioPiece?.sourceDuration ?? sourceAudioDuration, playbackRate: selectedSourceAudioPiece?.playbackRate ?? 1, segmentId: selectedSourceAudioSegmentId || "source-audio", track: "source", volume: sourceAudioVolume, canChangeStart: !sourceAudioLinked, canChangeSpeed: Boolean(sourceAudioLinked && selectedSourceAudioPiece) }
+        ? { ...(selectedSourceAudioPiece ?? {}), blob: sourceAudioBlob, name: sourceAudioName, start: selectedSourceAudioPiece?.start ?? sourceAudioStart, sourceStart: selectedSourceAudioPiece?.sourceStart ?? 0, duration: selectedSourceAudioPiece?.duration ?? sourceAudioDuration, sourceDuration: selectedSourceAudioPiece?.sourceDuration ?? sourceAudioDuration, playbackRate: selectedSourceAudioPiece?.playbackRate ?? 1, segmentId: selectedSourceAudioSegmentId || "source-audio", track: "source", volume: sourceAudioVolume, canChangeStart: !sourceAudioLinked, canChangeSpeed: Boolean(sourceAudioLinked && selectedSourceAudioPiece), voiceColorOriginalBlob: sourceVoiceColorOriginalRef.current?.blob || null }
         : null;
   const separateSelectedAudioVocals = () => selectedAudioToolTarget?.track === "source"
     ? separateSourceVocals()
@@ -708,9 +715,9 @@ export function App() {
     setUserAssets, t,
   });
 
-  const { startVoiceRecording, stopVoiceRecording, useRecordedVoice } = useVoiceRecorder({
-    notify, recordingState, replaceAudio, setActiveTool, setProgress,
-    setRecordedVoices, setRecordingElapsed, setRecordingState, setSelectedTrack,
+  const { startVoiceRecording, stopVoiceRecording } = useVoiceRecorder({
+    notify, recordingState, setActiveTool, setProgress,
+    setRecordedVoices, setRecordingElapsed, setRecordingState,
     setStatus, setStatusText, setVoiceTab, t, voiceRecorderChunksRef,
     voiceRecorderRef, voiceRecorderStartedAtRef, voiceRecorderStreamRef,
     voiceRecorderTimerRef,
@@ -718,13 +725,80 @@ export function App() {
 
   const generateVoiceover = useVoiceGeneration({
     commitAudio, notify, script, selectedVoice, setProgress, setStatus,
-    setStatusText, setVoiceTab, speed, status, t,
+    setStatusText, setVoiceTab, speed, status, t, selectedVoiceProfile,
   });
 
   const { deleteAudioSegment, toggleAudioSegmentReverse, updateAudioSegment } = createAudioClipActions({
     audioSegmentRefs, audioSegments, notify, setAudioSegments, setCaptionSegments,
     setSelectedAudioSegmentId, setTimelineHorizon, t,
   });
+  const handleVoiceColorAssetReady = async ({ blob, decoded, profileName, sourceName }) => {
+    const id = crypto.randomUUID(); const src = URL.createObjectURL(blob); imageUrlRefs.current.add(src);
+    const asset = { id, type: "audio", kind: "voiceover", name: `${sourceName || t("audioClip")} · ${profileName}`,
+      meta: `${t("voiceColorTab", "音色")} · ${decoded.duration.toFixed(1)}s`, src, previewSrc: src, blob,
+      duration: decoded.duration, peaks: decoded.peaks, generated: true, provider: "OpenVoice V2 · ONNX" };
+    setUserAssets((items) => [asset, ...items]); setSelectedLibraryAssetId(id);
+    notify(t("voiceColorSavedToAssets", "音色迁移结果已保存到我的素材")); return asset;
+  };
+  const applyVoiceColorToSelectedAudio = ({ blob, decoded, profileName, segment }) => {
+    const url = URL.createObjectURL(blob); imageUrlRefs.current.add(url);
+    const target = audioSegments.find((item) => item.id === segment.id);
+    const targetTrack = segment.track || (target ? "audio" : selectedTrack);
+    if (targetTrack === "audio") {
+      if (!target) { URL.revokeObjectURL(url); imageUrlRefs.current.delete(url); notify(t("audioClipMissing")); return false; }
+      audioSegmentRefs.current.get(segment.id)?.pause?.();
+      if (target.voiceColorOriginalBlob && target.url && target.url !== target.voiceColorOriginalUrl) {
+        URL.revokeObjectURL(target.url); imageUrlRefs.current.delete(target.url);
+      }
+      setAudioSegments((items) => items.map((item) => item.id === segment.id ? {
+        ...item,
+        voiceColorOriginalBlob: item.voiceColorOriginalBlob || item.blob,
+        voiceColorOriginalUrl: item.voiceColorOriginalUrl || item.url,
+        voiceColorOriginalPeaks: item.voiceColorOriginalPeaks || item.peaks,
+        voiceColorOriginalName: item.voiceColorOriginalName || item.name,
+        voiceColorOriginalSourceKind: item.voiceColorOriginalSourceKind || item.sourceKind,
+        blob, url, peaks: decoded.peaks, name: `${item.voiceColorOriginalName || item.name} · ${profileName}`,
+        voiceName: profileName, sourceKind: "cloned-voiceover", cloneVoiceProfileName: profileName,
+      } : item));
+    } else if (targetTrack === "source") {
+      sourceAudioRef.current?.pause?.();
+      if (!sourceVoiceColorOriginalRef.current) sourceVoiceColorOriginalRef.current = {
+        blob: sourceAudioBlob, url: sourceAudioUrl, peaks: sourceAudioPeaks, name: sourceAudioName, duration: sourceAudioDuration,
+      };
+      else if (sourceAudioUrl && sourceAudioUrl !== sourceVoiceColorOriginalRef.current.url) {
+        URL.revokeObjectURL(sourceAudioUrl); imageUrlRefs.current.delete(sourceAudioUrl);
+      }
+      sourceAudioUrlRef.current = url; setSourceAudioBlob(blob); setSourceAudioUrl(url); setSourceAudioPeaks(decoded.peaks);
+      setSourceAudioName(`${sourceVoiceColorOriginalRef.current.name || t("sourceTrack")} · ${profileName}`);
+    } else { URL.revokeObjectURL(url); imageUrlRefs.current.delete(url); return false; }
+    notify(t("voiceColorClipReplaced", "已替换当前片段，可随时恢复原始声音"));
+    return true;
+  };
+  const restoreSelectedAudioVoiceColor = (segment) => {
+    const target = audioSegments.find((item) => item.id === segment.id);
+    const targetTrack = segment.track || (target ? "audio" : selectedTrack);
+    if (targetTrack === "audio") {
+      if (!target?.voiceColorOriginalBlob) return false;
+      audioSegmentRefs.current.get(segment.id)?.pause?.();
+      if (target.url && target.url !== target.voiceColorOriginalUrl) {
+        URL.revokeObjectURL(target.url); imageUrlRefs.current.delete(target.url);
+      }
+      setAudioSegments((items) => items.map((item) => item.id === segment.id ? {
+        ...item, blob: item.voiceColorOriginalBlob, url: item.voiceColorOriginalUrl,
+        peaks: item.voiceColorOriginalPeaks, name: item.voiceColorOriginalName,
+        sourceKind: item.voiceColorOriginalSourceKind, voiceColorOriginalBlob: null,
+        voiceColorOriginalUrl: "", voiceColorOriginalPeaks: null, voiceColorOriginalName: "", voiceColorOriginalSourceKind: "",
+      } : item));
+    } else if (targetTrack === "source" && sourceVoiceColorOriginalRef.current) {
+      sourceAudioRef.current?.pause?.();
+      const original = sourceVoiceColorOriginalRef.current; sourceAudioUrlRef.current = original.url;
+      if (sourceAudioUrl && sourceAudioUrl !== original.url) { URL.revokeObjectURL(sourceAudioUrl); imageUrlRefs.current.delete(sourceAudioUrl); }
+      setSourceAudioBlob(original.blob); setSourceAudioUrl(original.url); setSourceAudioPeaks(original.peaks);
+      setSourceAudioName(original.name); setSourceAudioDuration(original.duration); sourceVoiceColorOriginalRef.current = null;
+    } else return false;
+    notify(t("voiceColorOriginalRestored", "已恢复原始声音"));
+    return true;
+  };
   const updateSelectedTrackAudioSegment = (id, patch) => {
     if (selectedTrack === "audio") return updateAudioSegment(id, patch);
     if (selectedTrack === "music") {
@@ -1157,7 +1231,8 @@ export function App() {
           previewVisionOptions, previewVisualSrc, previewVisualType, progress, script,
           seekTo, segments, selectTool, selectedCaptionSegment, selectedFilterId,
           selectedLibraryAssetId, selectedSegmentId, selectedStickerId, selectedTransitionId,
-          selectedVoice, setCaptionSegments, setCaptionSize, setCaptionStyle, setCaptionsEnabled, setIsDragging,
+          selectedVoice: selectedVoiceProfile ? { ...selectedVoice, name: selectedVoiceProfile.name } : selectedVoice,
+          setCaptionSegments, setCaptionSize, setCaptionStyle, setCaptionsEnabled, setIsDragging,
           setMediaTab, setMusicVolume, setSelectedAudioSegmentId, setSelectedFilterId, setSelectedSegmentId,
           setSelectedStickerId, setSelectedTrack, setSelectedTransitionId, setSourceAudioVolume, setVoiceTab,
           sourceAudioBlob, sourceAudioDuration, sourceAudioLinked, sourceAudioName, sourceAudioVolume, status, t,
@@ -1305,12 +1380,17 @@ export function App() {
           downloadBlob={downloadBlob}
           favoriteVoiceIds={favoriteVoiceIds}
           setFavoriteVoiceIds={setFavoriteVoiceIds}
+          voiceProfiles={voiceProfiles}
+          addVoiceProfile={addVoiceProfile}
+          removeVoiceProfile={removeVoiceProfile}
+          toggleVoiceProfileFavorite={toggleVoiceProfileFavorite}
+          selectedVoiceProfileId={selectedVoiceProfileId}
+          setSelectedVoiceProfileId={setSelectedVoiceProfileId}
           recordedVoices={recordedVoices}
           recordingState={recordingState}
           recordingElapsed={recordingElapsed}
           startVoiceRecording={startVoiceRecording}
           stopVoiceRecording={stopVoiceRecording}
-          useRecordedVoice={useRecordedVoice}
           historyItems={historyItems}
           useHistoryItem={useHistoryItem}
           setHistoryItems={setHistoryItems}
@@ -1373,6 +1453,9 @@ export function App() {
           updateAudioSegment={updateAudioSegment}
           toggleAudioSegmentReverse={toggleAudioSegmentReverse}
           deleteAudioSegment={deleteAudioSegment}
+          onVoiceColorAssetReady={handleVoiceColorAssetReady}
+          onApplyVoiceColor={applyVoiceColorToSelectedAudio}
+          onRestoreVoiceColor={restoreSelectedAudioVoiceColor}
           selectedVisualSegment={selectedVisualSegment}
           selectedStickerSegment={selectedStickerSegment}
           updateStickerSegment={updateSelectedStickerSegment}
@@ -1554,6 +1637,7 @@ export function App() {
             voice: t("aiVoice"),
             audio: t("mobileClipAudio"),
             fade: t("mobileClipFade"),
+            "voice-color": t("voiceColorTab", "音色"),
             sticker: t("stickerProperties"),
           }[mobileInspectorSection]) || (mobilePanelOrigin === "audio-clip"
             ? t("audioClipProperties")

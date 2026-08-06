@@ -5,6 +5,19 @@ import { drawCaptionLayout, getCaptionTextLayout } from "../lib/captionLayout.js
 
 const FALLBACK_PREVIEW_FRAME = { width: 640, height: 360 };
 
+function getCaptionRasterScale() {
+  if (typeof window === "undefined") return 2;
+  // Canvas text on Windows uses grayscale antialiasing instead of ClearType.
+  // A 2x minimum backing store keeps downloaded fonts crisp at 100–150% OS
+  // scaling, while the upper bound avoids waste at extreme browser zoom.
+  return Math.max(2, Math.min(4, Number(window.devicePixelRatio) || 1));
+}
+
+function snapToPhysicalPixel(value, devicePixelRatio) {
+  const ratio = Math.max(1, Number(devicePixelRatio) || 1);
+  return Math.round(value * ratio) / ratio;
+}
+
 export function CaptionOverlay({
   text,
   captionSize,
@@ -45,15 +58,20 @@ export function CaptionOverlay({
     };
   }, [captionStyle?.fontId, text]);
   const layout = useMemo(
-    () =>
-      getCaptionTextLayout({
+    () => {
+      // Font pixels change after the asynchronous face load even when the
+      // selected font id and text stay the same, so this revision deliberately
+      // invalidates the cached measurements.
+      void fontRevision;
+      return getCaptionTextLayout({
         text,
         captionSize,
         captionStyle,
         referenceFrame: renderFrame,
         renderFrame,
-      }),
-    [captionSize, captionStyle, fontRevision, renderFrame.height, renderFrame.width, text],
+      });
+    },
+    [captionSize, captionStyle, fontRevision, renderFrame, text],
   );
 
   useEffect(() => {
@@ -62,18 +80,33 @@ export function CaptionOverlay({
       return;
     }
 
-    const pixelRatio = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    canvas.width = Math.max(1, Math.ceil(layout.width * pixelRatio));
-    canvas.height = Math.max(1, Math.ceil(layout.height * pixelRatio));
+    const rasterScale = getCaptionRasterScale();
+    canvas.width = Math.max(1, Math.round(layout.width * rasterScale));
+    canvas.height = Math.max(1, Math.round(layout.height * rasterScale));
     canvas.style.width = `${layout.width}px`;
     canvas.style.height = `${layout.height}px`;
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { alpha: true });
     if (!context) {
       return;
     }
-    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    // Use the real backing-store ratio after integer rounding. Scaling by the
+    // requested ratio can leave a fractional unused strip that the browser
+    // resamples across the complete canvas, softening glyph edges.
+    context.setTransform(canvas.width / layout.width, 0, 0, canvas.height / layout.height, 0, 0);
+    if ("fontKerning" in context) context.fontKerning = "normal";
+    if ("textRendering" in context) context.textRendering = "optimizeLegibility";
     drawCaptionLayout(context, layout);
   }, [layout]);
+
+  const devicePixelRatio = typeof window === "undefined" ? 1 : Math.max(1, Number(window.devicePixelRatio) || 1);
+  const placementX = Number(placement?.x);
+  const placementY = Number(placement?.y);
+  const left = Number.isFinite(placementX)
+    ? `${snapToPhysicalPixel((renderFrame.width * placementX) / 100, devicePixelRatio)}px`
+    : `${placementX || 50}%`;
+  const top = Number.isFinite(placementY)
+    ? `${snapToPhysicalPixel((renderFrame.height * placementY) / 100, devicePixelRatio)}px`
+    : `${placementY || 78}%`;
 
   return (
     <button
@@ -85,8 +118,8 @@ export function CaptionOverlay({
         width: `${layout.width}px`,
         height: `${layout.height}px`,
         borderRadius: `${layout.metrics.radius}px`,
-        left: `${placement.x}%`,
-        top: `${placement.y}%`,
+        left,
+        top,
       }}
       onPointerDown={onPointerDown}
       onDoubleClick={onDoubleClick}

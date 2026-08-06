@@ -40,8 +40,8 @@ const MIRRORED_REPOSITORIES = new Set([
 ]);
 const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
-const VOICE_MODEL_HUGGING_FACE_REVISION = "f6aa4cf8fb440352b9f36c637dd310d047011e52";
-const VOICE_MODEL_MODELSCOPE_REVISION = "14a0656f5a111a0052dfca586fbe2ceb18b54adf";
+const VOICE_MODEL_HUGGING_FACE_REVISION = "d9e0542e0e4e8fcfb849240f7e8e7fa8147df1a3";
+const VOICE_MODEL_MODELSCOPE_REVISION = "226b24270b69b38781a35566c7d442061f9e3b81";
 const DEPTH_MODEL_HUGGING_FACE_REVISION = "a0806c6fb9484894dcb78df523156d244461515d";
 const DEPTH_MODEL_MODELSCOPE_REVISION = "4cc757f80330e22cb8f82b628c53ceca6307fd12";
 function hasCacheableExtension(pathname) {
@@ -184,6 +184,31 @@ async function cacheFirst(request, event) {
 
   const response = await fetch(request);
   if (response.ok || response.type === "opaque") {
+    const requestUrl = new URL(request.url);
+    if (requestUrl.pathname.includes("timeline-studio-voice-models")) {
+      try {
+        const estimate = await self.navigator?.storage?.estimate?.();
+        const requiredBytes = Number(response.headers.get("content-length")) || 0;
+        const remainingBytes = Math.max(0, (estimate?.quota || 0) - (estimate?.usage || 0));
+        if (requiredBytes && estimate?.quota && remainingBytes < requiredBytes * 1.15) {
+          const keys = await cache.keys();
+          const currentIdentity = canonicalModelIdentity(requestUrl);
+          const currentFamily = currentIdentity.split("/")[3] || "";
+          const staleVoiceKeys = keys.filter((key) => {
+            const keyUrl = new URL(key.url);
+            if (!keyUrl.pathname.includes("timeline-studio-voice-models")) return false;
+            const identity = canonicalModelIdentity(keyUrl) || keyUrl.pathname.split("timeline-studio-voice-models/").at(-1) || "";
+            return !currentFamily || !identity.includes(`/${currentFamily}/`);
+          });
+          await Promise.all(staleVoiceKeys.map((key) => cache.delete(key)));
+          await caches.delete("kokoro-voices").catch(() => false);
+          await caches.delete("timeline-studio-voice-models-v2").catch(() => false);
+        }
+      } catch {
+        // Capacity checks are advisory. A failed estimate must never block the
+        // live response or expose a storage error to the editor.
+      }
+    }
     // Keep the service worker alive until the large model shard is durably
     // committed. The live response remains streaming and is not blocked.
     event.waitUntil(cache.put(cacheRequest, response.clone()).catch(async (error) => {

@@ -22,6 +22,7 @@
 
 ## 项目动态
 
+- **2026 年 8 月 5 日 — v0.9.1 Agent Skill：** 通过 skills.sh 与 GitHub Skill 安装链路正式发布专业自动剪辑工作流。Skill 现在会区分口播整理、产品/教程、多镜头集锦、多说话人对话和网站演示等场景；基于图像、语音、OCR 与运动证据制定剪辑方案；指导稳定、跟踪与克制的增强；保留按句拆分的可移植配音片段；并要求已完成的剪辑同时交付经过验证的可编辑 `.timeline` 项目与成片视频。
 - **2026 年 7 月 29 日 — 效果工作区：** 人物描边正在开发中；物体描边、光流跟踪和摇摆运动是下一阶段计划。
 - **2026 年 7 月 28 日 — v0.8.0：** 完善贡献者入门与版本文档。
 - 在公开 [Roadmap](ROADMAP.md) 查看计划与 TODO，在 [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) 查看已发布功能，在 [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) 跟踪具体任务和缺陷。

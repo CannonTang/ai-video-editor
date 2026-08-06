@@ -31,6 +31,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { formatTime, getSegmentStartTime } from "../lib/timeline.js";
+import { decodeWaveform } from "../lib/media.js";
+import { cancelOpenVoiceTasks, convertVoiceBlob, extractVoiceEmbedding } from "../lib/openVoiceRuntime.js";
 import { LIVE_PORTRAIT_WEB_MODEL } from "../config/livePortrait.js";
 import { probeLivePortraitWebEnvironment } from "../lib/livePortraitWeb.js";
 import {
@@ -57,7 +59,7 @@ import {
   updateVectorPart,
 } from "../lib/vectorDocument.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
-import { AiMusicGenerator, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { AiMusicGenerator, FavoriteVoicesPanel, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 import { SmartFramePanel } from "./SmartFramePanel.jsx";
 import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
@@ -720,43 +722,114 @@ function CaptionContextPanel({
   );
 }
 
-function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegmentReverse, deleteAudioSegment, downloadBlob, requestedSection = "" }) {
+function AudioVoiceColorSection({ t, segment, voiceProfiles = [], onAssetReady, onApply, onRestore }) {
+  const fileInputRef = useRef(null);
+  const recorderRef = useRef(null);
+  const recorderStreamRef = useRef(null);
+  const recorderChunksRef = useRef([]);
+  const [profileId, setProfileId] = useState(voiceProfiles[0]?.id || "");
+  const [reference, setReference] = useState(null);
+  const [authorized, setAuthorized] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [job, setJob] = useState({ state: "idle", progress: 0, phase: "", error: "" });
+  const [result, setResult] = useState(null);
+  const [applied, setApplied] = useState(Boolean(segment.voiceColorOriginalBlob));
+  const resultUrl = useMemo(() => result?.blob ? URL.createObjectURL(result.blob) : "", [result]);
+  const selectedProfile = voiceProfiles.find((profile) => profile.id === profileId) || null;
+
+  useEffect(() => {
+    if (!profileId && voiceProfiles[0]?.id) setProfileId(voiceProfiles[0].id);
+  }, [profileId, voiceProfiles]);
+  useEffect(() => () => { if (resultUrl) URL.revokeObjectURL(resultUrl); }, [resultUrl]);
+  useEffect(() => () => recorderStreamRef.current?.getTracks?.().forEach((track) => track.stop()), []);
+  useEffect(() => setApplied(Boolean(segment.voiceColorOriginalBlob)), [segment.id, segment.voiceColorOriginalBlob]);
+
+  const chooseReference = (blob, name, sourceKind) => {
+    setReference({ blob, name, sourceKind }); setProfileId(""); setAuthorized(false); setResult(null); setJob({ state: "idle", progress: 0, phase: "", error: "" });
+  };
+  const toggleRecording = async () => {
+    if (recording) { recorderRef.current?.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream); recorderChunksRef.current = []; recorderStreamRef.current = stream; recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => { if (event.data?.size) recorderChunksRef.current.push(event.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        stream.getTracks().forEach((track) => track.stop()); recorderStreamRef.current = null; recorderRef.current = null; setRecording(false);
+        if (blob.size) chooseReference(blob, t("voiceColorRecordedReference", "录制参考声音"), "recording");
+      };
+      recorder.start(250); setRecording(true);
+    } catch {
+      setJob({ state: "error", progress: 0, phase: "", error: t("recordingPermissionDenied") });
+    }
+  };
+  const runConversion = async () => {
+    if (!segment?.blob || (!selectedProfile?.embedding && (!reference?.blob || !authorized))) return;
+    setJob({ state: "running", progress: 3, phase: t("voiceColorPreparing", "准备音色"), error: "" }); setResult(null);
+    try {
+      const embedding = selectedProfile?.embedding || await extractVoiceEmbedding(reference.blob, (event) => setJob((current) => ({ ...current, progress: Math.min(35, Math.round((event.progress || 0) * 0.35)), phase: event.phase || t("cloneEncoding", "提取音色") })));
+      const blob = await convertVoiceBlob(segment.blob, embedding, {
+        onProgress: (event) => setJob((current) => ({ ...current, progress: 35 + Math.round((event.progress || 0) * 0.65), phase: event.phase || t("voiceColorConverting", "迁移音色") })),
+      });
+      const decoded = await decodeWaveform(blob, 96);
+      const profileName = selectedProfile?.name || reference?.name?.replace(/\.[^.]+$/, "") || t("myCloneVoice", "克隆音色");
+      const asset = await onAssetReady?.({ blob, decoded, profileName, sourceName: segment.name, sourceSegment: segment });
+      setResult({ blob, decoded, profileName, assetId: asset?.id || "" });
+      setJob({ state: "ready", progress: 100, phase: t("voiceColorReady", "音色迁移完成"), error: "" });
+    } catch (error) {
+      if (error?.name === "AbortError") return setJob({ state: "idle", progress: 0, phase: "", error: "" });
+      setJob({ state: "error", progress: 0, phase: "", error: error instanceof Error ? error.message : t("voiceColorFailed", "音色迁移失败") });
+    }
+  };
+  const cancel = () => { cancelOpenVoiceTasks(); setJob({ state: "idle", progress: 0, phase: "", error: "" }); };
+  const applyResult = () => {
+    if (!result) return;
+    const didApply = onApply?.({ ...result, segment });
+    if (didApply !== false) setApplied(true);
+  };
+  const restoreOriginal = () => {
+    const didRestore = onRestore?.(segment);
+    if (didRestore !== false) setApplied(false);
+  };
+
+  return <div className="audio-voice-color-section">
+    <input ref={fileInputRef} hidden type="file" accept="audio/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) chooseReference(file, file.name, "upload"); event.target.value = ""; }} />
+    <div className="voice-color-source"><span>{t("voiceColorSource", "当前源音频")}</span><strong>{segment.name || t("audioClip")}</strong><em>{formatTime(segment.duration)}</em></div>
+    <div className="voice-color-target">
+      <strong className="voice-color-target-label">{t("voiceColorTarget", "目标音色")}</strong>
+      {voiceProfiles.length ? <div className="voice-color-profile-grid">
+        {voiceProfiles.map((profile) => <button type="button" className={profileId === profile.id ? "is-selected" : ""} key={profile.id} onClick={() => { setProfileId(profile.id); setReference(null); setAuthorized(false); setResult(null); }}><Waveform size={16} weight="duotone" /><span>{profile.name}</span><CheckCircle size={14} weight={profileId === profile.id ? "fill" : "regular"} /></button>)}
+      </div> : <p className="voice-color-empty-target">{t("voiceColorChooseTemporary", "上传或录制参考声音")}</p>}
+      <div className="voice-color-reference-actions"><button type="button" onClick={() => fileInputRef.current?.click()}><UploadSimple size={16} />{t("uploadVoice", "上传声音")}</button><button type="button" className={recording ? "is-recording" : ""} onClick={toggleRecording}><Waveform size={16} />{recording ? t("stopRecording") : t("recordVoice")}</button></div>
+      {reference ? <div className="voice-color-reference"><strong>{reference.name}</strong><span>{t("voiceColorTemporaryReference", "仅用于本次音色迁移")}</span></div> : null}
+      {reference ? <label className="clone-consent"><input type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} /><span>{t("cloneConsent")}</span></label> : null}
+    </div>
+    {job.state === "running" ? <div className="voice-generation-loading voice-color-progress" role="status"><i className="voice-generation-spinner" /><div><strong>{job.phase}</strong><span>{t("cloneLocalHint", "声音只在当前浏览器中处理")}</span></div><em>{job.progress}%</em><div className="progress-track"><span style={{ width: `${job.progress}%` }} /></div></div> : null}
+    {job.error ? <div className="clone-inline-error">{job.error}</div> : null}
+    {resultUrl ? <div className="voice-color-result"><span><CheckCircle size={17} weight="fill" /><strong>{t("voiceColorSavedToAssets", "结果已保存到我的素材")}</strong></span><audio controls preload="metadata" src={resultUrl} /></div> : null}
+    <div className="voice-color-actions">
+      {job.state === "running" ? <button type="button" onClick={cancel}>{t("cancel")}</button> : <button type="button" disabled={!selectedProfile?.embedding && (!reference?.blob || !authorized)} onClick={runConversion}>{result ? t("voiceColorRetry", "重新转换") : t("voiceColorPreview", "试听迁移")}</button>}
+      <button type="button" className={`is-primary ${applied ? "is-applied" : ""}`} disabled={!result || applied} onClick={applyResult}>{applied ? t("voiceColorApplied", "已替换") : t("voiceColorReplaceClip", "替换当前片段")}</button>
+    </div>
+    {applied || segment.voiceColorOriginalBlob ? <button className="voice-color-restore" type="button" onClick={restoreOriginal}>{t("voiceColorRestoreOriginal", "恢复原始声音")}</button> : null}
+  </div>;
+}
+
+function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegmentReverse, deleteAudioSegment, downloadBlob, requestedSection = "", voiceProfiles, onVoiceColorAssetReady, onApplyVoiceColor, onRestoreVoiceColor }) {
   const [activeTab, setActiveTab] = useState("audio");
   const isVoiceClip = segment.track === "audio";
-  const trackLabel = segment.track === "music" ? t("musicTrack") : segment.track === "source" ? t("sourceTrack") : t("voiceTrack");
-  const sourceKind = segment.track === "music"
-    ? "music"
-    : segment.track === "source"
-      ? "source"
-      : segment.sourceKind === "ai-voice" || segment.voiceId
-        ? "ai-voice"
-        : segment.sourceKind || "voiceover";
-  const sourceLabel = {
-    "ai-voice": t("audioSourceAiVoice"),
-    upload: t("audioSourceUpload"),
-    recording: t("audioSourceRecording"),
-    separated: t("audioSourceSeparated"),
-    voiceover: trackLabel,
-    music: t("musicTrack"),
-    source: t("sourceTrack"),
-  }[sourceKind] || trackLabel;
-  const displayName = sourceKind === "ai-voice"
-    ? segment.voiceName || segment.name || t("audioClip")
-    : segment.name || t("audioClip");
-  const shownTab = requestedSection === "fade" ? "fade" : requestedSection === "audio" ? "audio" : activeTab;
+  const canVoiceColor = segment.track !== "music" && Boolean(segment.blob);
+  const shownTab = requestedSection === "voice-color" ? "voice-color" : requestedSection === "fade" ? "fade" : requestedSection === "audio" ? "audio" : activeTab;
   const canFade = segment.track !== "source";
   useEffect(() => {
-    if (requestedSection === "audio" || requestedSection === "fade") setActiveTab(requestedSection);
+    if (["audio", "fade", "voice-color"].includes(requestedSection)) setActiveTab(requestedSection);
   }, [requestedSection, segment.id]);
   return (
     <div className="audio-clip-context-panel">
-      <div className={`audio-identity-hero is-${sourceKind}`}>
-        <span>{sourceKind === "ai-voice" ? <Sparkle size={22} weight="duotone" /> : sourceKind === "upload" ? <UploadSimple size={22} weight="duotone" /> : <Waveform size={22} weight="duotone" />}</span>
-        <div><small>{sourceLabel}</small><strong>{displayName}</strong><em>{formatTime(segment.duration)}</em></div>
-      </div>
-      {!requestedSection && canFade ? <div className="audio-context-tabs" role="tablist" aria-label={t("audioClipProperties")}>
+      {!requestedSection && (canFade || canVoiceColor) ? <div className={`audio-context-tabs ${canVoiceColor && canFade ? "has-three-tabs" : ""}`} role="tablist" aria-label={t("audioClipProperties")}>
         <button className={shownTab === "audio" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "audio"} onClick={() => setActiveTab("audio")}>{t("mobileClipAudio")}</button>
-        <button className={shownTab === "fade" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "fade"} onClick={() => setActiveTab("fade")}>{t("mobileClipFade")}</button>
+        {canFade ? <button className={shownTab === "fade" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "fade"} onClick={() => setActiveTab("fade")}>{t("mobileClipFade")}</button> : null}
+        {canVoiceColor ? <button className={shownTab === "voice-color" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "voice-color"} onClick={() => setActiveTab("voice-color")}>{t("voiceColorTab", "音色")}</button> : null}
       </div> : null}
       {shownTab === "audio" ? <div className="audio-context-section">
         {segment.canChangeStart !== false ? <label className="audio-property-row">
@@ -788,7 +861,8 @@ function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegm
           <input aria-label={t("fadeOut")} type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeOut ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeOut: Number(event.target.value) })} />
         </label>
       </div> : null}
-      {shownTab === "audio" || !requestedSection ? <div className="audio-context-actions">
+      {shownTab === "voice-color" && canVoiceColor ? <AudioVoiceColorSection t={t} segment={segment} voiceProfiles={voiceProfiles} onAssetReady={onVoiceColorAssetReady} onApply={onApplyVoiceColor} onRestore={onRestoreVoiceColor} /> : null}
+      {shownTab === "audio" ? <div className="audio-context-actions">
         {isVoiceClip ? <button className={`panel-secondary ${segment.reversed ? "is-active" : ""}`} type="button" disabled={segment.reversing} onClick={() => toggleAudioSegmentReverse(segment.id)}>
           {segment.reversing ? t("audioReversing") : segment.reversed ? t("audioReverseRestore") : t("audioReverse")}
         </button> : null}
@@ -1156,12 +1230,17 @@ export function VoicePanel({
   downloadBlob,
   favoriteVoiceIds,
   setFavoriteVoiceIds,
+  voiceProfiles,
+  addVoiceProfile,
+  removeVoiceProfile,
+  toggleVoiceProfileFavorite,
+  selectedVoiceProfileId,
+  setSelectedVoiceProfileId,
   recordedVoices,
   recordingState,
   recordingElapsed,
   startVoiceRecording,
   stopVoiceRecording,
-  useRecordedVoice,
   historyItems,
   useHistoryItem,
   setHistoryItems,
@@ -1220,6 +1299,9 @@ export function VoicePanel({
   updateAudioSegment,
   toggleAudioSegmentReverse,
   deleteAudioSegment,
+  onVoiceColorAssetReady,
+  onApplyVoiceColor,
+  onRestoreVoiceColor,
   selectedVisualSegment,
   selectedStickerSegment,
   updateStickerSegment,
@@ -1314,6 +1396,7 @@ export function VoicePanel({
     voice: t("aiVoice"),
     audio: t("mobileClipAudio"),
     fade: t("mobileClipFade"),
+    "voice-color": t("voiceColorTab", "音色"),
     sticker: t("stickerProperties"),
     effects: t("effects"),
     outline: t("effectOutline"),
@@ -1392,6 +1475,7 @@ export function VoicePanel({
           {[
             ["synthesis", t("voiceSynthesis")],
             ["mine", t("myVoices")],
+            ["favorites", t("favoriteVoicesTab", "收藏声音")],
             ["history", t("history")],
           ].map(([id, label]) => (
             <button
@@ -1588,6 +1672,12 @@ export function VoicePanel({
               downloadBlob={downloadBlob}
               favoriteVoiceIds={favoriteVoiceIds}
               setFavoriteVoiceIds={setFavoriteVoiceIds}
+              voiceProfiles={voiceProfiles}
+              selectedVoiceProfileId={selectedVoiceProfileId}
+              setSelectedVoiceProfileId={setSelectedVoiceProfileId}
+              toggleVoiceProfileFavorite={toggleVoiceProfileFavorite}
+              selectedVoiceProfile={voiceProfiles.find((profile) => profile.id === selectedVoiceProfileId)}
+              clearSelectedVoiceProfile={() => setSelectedVoiceProfileId("")}
               t={t}
             />
           </div>
@@ -1595,7 +1685,7 @@ export function VoicePanel({
 
         {isAvatarContext ? <AvatarContextPanel t={t} hasVisual={hasVisual} visualType={visualType} audioBlob={audioBlob} audioDuration={audioDuration} captionSegments={captionSegments} selectedVoice={selectedVoice} avatarJob={avatarJob} generateAvatarAcceptanceFrame={generateAvatarAcceptanceFrame} /> : null}
 
-        {isAudioClipContext ? <AudioClipContextPanel t={t} segment={{ ...audioPropertySegment, id: audioPropertySegment.id || audioPropertySegment.segmentId }} updateAudioSegment={selectedTrack === "audio" ? updateAudioSegment : updateSelectedTrackAudioSegment} toggleAudioSegmentReverse={toggleAudioSegmentReverse} deleteAudioSegment={selectedTrack === "audio" ? deleteAudioSegment : deleteSelectedTrackAudioSegment} downloadBlob={downloadBlob} requestedSection={mobileInspectorSection} /> : null}
+        {isAudioClipContext ? <AudioClipContextPanel t={t} segment={{ ...audioPropertySegment, id: audioPropertySegment.id || audioPropertySegment.segmentId, track: audioPropertySegment.track || selectedTrack }} updateAudioSegment={selectedTrack === "audio" ? updateAudioSegment : updateSelectedTrackAudioSegment} toggleAudioSegmentReverse={toggleAudioSegmentReverse} deleteAudioSegment={selectedTrack === "audio" ? deleteAudioSegment : deleteSelectedTrackAudioSegment} downloadBlob={downloadBlob} requestedSection={mobileInspectorSection} voiceProfiles={voiceProfiles} onVoiceColorAssetReady={onVoiceColorAssetReady} onApplyVoiceColor={onApplyVoiceColor} onRestoreVoiceColor={onRestoreVoiceColor} /> : null}
 
         {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "synthesis" ? (
           <VoiceSynthesisPanel
@@ -1622,25 +1712,48 @@ export function VoicePanel({
             downloadBlob={downloadBlob}
             favoriteVoiceIds={favoriteVoiceIds}
             setFavoriteVoiceIds={setFavoriteVoiceIds}
+            voiceProfiles={voiceProfiles}
+            selectedVoiceProfileId={selectedVoiceProfileId}
+            setSelectedVoiceProfileId={setSelectedVoiceProfileId}
+            toggleVoiceProfileFavorite={toggleVoiceProfileFavorite}
+            selectedVoiceProfile={voiceProfiles.find((profile) => profile.id === selectedVoiceProfileId)}
+            clearSelectedVoiceProfile={() => setSelectedVoiceProfileId("")}
             t={t}
           />
         ) : null}
 
         {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "mine" ? (
           <MyVoicesPanel
-            favoriteVoiceIds={favoriteVoiceIds}
-            setFavoriteVoiceIds={setFavoriteVoiceIds}
-            setSelectedVoiceId={setSelectedVoiceId}
-            selectedVoiceId={selectedVoiceId}
             notify={notify}
             t={t}
+            selectedVoice={selectedVoice}
+            voiceProfiles={voiceProfiles}
+            addVoiceProfile={addVoiceProfile}
+            removeVoiceProfile={removeVoiceProfile}
+            toggleVoiceProfileFavorite={toggleVoiceProfileFavorite}
+            selectedVoiceProfileId={selectedVoiceProfileId}
+            setSelectedVoiceProfileId={setSelectedVoiceProfileId}
             recordedVoices={recordedVoices}
             recordingState={recordingState}
             recordingElapsed={recordingElapsed}
             startVoiceRecording={startVoiceRecording}
             stopVoiceRecording={stopVoiceRecording}
-            useRecordedVoice={useRecordedVoice}
             downloadBlob={downloadBlob}
+          />
+        ) : null}
+
+        {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext && voiceTab === "favorites" ? (
+          <FavoriteVoicesPanel
+            favoriteVoiceIds={favoriteVoiceIds}
+            setFavoriteVoiceIds={setFavoriteVoiceIds}
+            selectedVoiceId={selectedVoiceId}
+            setSelectedVoiceId={setSelectedVoiceId}
+            voiceProfiles={voiceProfiles}
+            selectedVoiceProfileId={selectedVoiceProfileId}
+            setSelectedVoiceProfileId={setSelectedVoiceProfileId}
+            toggleVoiceProfileFavorite={toggleVoiceProfileFavorite}
+            notify={notify}
+            t={t}
           />
         ) : null}
 
@@ -1657,7 +1770,7 @@ export function VoicePanel({
 
       {audioSegments.map((segment) => (
         <audio
-          key={segment.id}
+          key={`${segment.id}:${segment.url}`}
           ref={(node) => {
             if (node) audioSegmentRefs.current.set(segment.id, node);
             else audioSegmentRefs.current.delete(segment.id);
@@ -1668,6 +1781,7 @@ export function VoicePanel({
       ))}
       {sourceAudioUrl ? (
         <audio
+          key={sourceAudioUrl}
           data-track="source-audio"
           ref={sourceAudioRef}
           src={sourceAudioUrl}

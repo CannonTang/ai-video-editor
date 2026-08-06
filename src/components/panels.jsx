@@ -52,6 +52,8 @@ import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL
 import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
 import { Popover } from "./ui.jsx";
 import { SubjectEffectsWorkspace } from "./SubjectEffectsPanel.jsx";
+import { convertVoiceBlob, extractVoiceEmbedding } from "../lib/openVoiceRuntime.js";
+import { getVoiceCloneTestSentence, synthesizeBaseVoice } from "../lib/baseVoiceSynthesis.js";
 
 export function LanguageIntro({ t, closing, onChoose }) {
   return (
@@ -1922,13 +1924,26 @@ export function VoiceSynthesisPanel({
   downloadBlob,
   favoriteVoiceIds,
   setFavoriteVoiceIds,
+  voiceProfiles,
+  selectedVoiceProfileId,
+  setSelectedVoiceProfileId,
+  toggleVoiceProfileFavorite,
+  selectedVoiceProfile,
+  clearSelectedVoiceProfile,
   t,
 }) {
   const voiceLanguages = useMemo(() => [...new Set(VOICES.map((voice) => voice.language))], []);
   const voiceSampleRef = useRef(null);
   const previousVoiceSampleIdRef = useRef(selectedVoiceId);
+  const cloneSampleUrl = useMemo(
+    () => selectedVoiceProfile?.testBlob ? URL.createObjectURL(selectedVoiceProfile.testBlob) : "",
+    [selectedVoiceProfile],
+  );
 
-  const selectAndPlayVoiceSample = (voice) => {
+  useEffect(() => () => { if (cloneSampleUrl) URL.revokeObjectURL(cloneSampleUrl); }, [cloneSampleUrl]);
+
+  const selectAndPlayVoiceSample = (voice, preserveClone = false) => {
+    if (!preserveClone) clearSelectedVoiceProfile();
     previousVoiceSampleIdRef.current = voice.id;
     flushSync(() => setSelectedVoiceId(voice.id));
     const player = voiceSampleRef.current;
@@ -1940,6 +1955,13 @@ export function VoiceSynthesisPanel({
     player.play()
       .then(() => { player.dataset.autoplayStarted = "true"; })
       .catch((error) => { player.dataset.autoplayError = error.name || "PlaybackError"; });
+  };
+
+  const selectCloneProfile = (profile) => {
+    flushSync(() => setSelectedVoiceProfileId(profile.id));
+    setVolume((current) => Math.abs(current - 1) < 0.001 ? 1.2 : current);
+    const player = voiceSampleRef.current;
+    if (player) { player.pause(); player.load(); }
   };
 
   useEffect(() => {
@@ -1985,7 +2007,7 @@ export function VoiceSynthesisPanel({
                       setVoiceFilter(filter);
                       if (filter !== "all") {
                         const firstVoiceForLanguage = VOICES.find((voice) => voice.language === filter);
-                        if (firstVoiceForLanguage) selectAndPlayVoiceSample(firstVoiceForLanguage);
+                        if (firstVoiceForLanguage) selectAndPlayVoiceSample(firstVoiceForLanguage, true);
                       }
                       setShowVoiceFilter(false);
                     }}
@@ -2000,9 +2022,24 @@ export function VoiceSynthesisPanel({
       </div>
 
       <div className="voice-list">
+        {voiceProfiles.map((profile) => (
+          <button
+            className={`voice-card clone-voice-card ${profile.id === selectedVoiceProfileId ? "is-selected" : ""}`}
+            type="button"
+            key={profile.id}
+            onClick={() => selectCloneProfile(profile)}
+          >
+            <span className="avatar"><Waveform size={17} weight="bold" /></span>
+            <span>
+              <strong>{profile.name}</strong>
+              <em>{t("cloneVoiceMultilingual", "多语言 · 克隆音色")}</em>
+            </span>
+            <small>{t("cloneVoiceBadge", "克隆")}</small>
+          </button>
+        ))}
         {filteredVoices.map((voice) => (
           <button
-            className={`voice-card ${voice.id === selectedVoiceId ? "is-selected" : ""}`}
+            className={`voice-card ${voice.id === selectedVoiceId && !selectedVoiceProfile ? "is-selected" : ""}`}
             type="button"
             key={voice.id}
             onClick={() => selectAndPlayVoiceSample(voice)}
@@ -2022,31 +2059,33 @@ export function VoiceSynthesisPanel({
       </div>
 
       <div className="model-row">
-        <span title={selectedVoice.detail}>{selectedVoice.detail}</span>
+        <span title={selectedVoice.detail}>{selectedVoiceProfile ? `${t("cloneBaseVoice", "基础语言声音")} · ${selectedVoice.name}` : selectedVoice.detail}</span>
         <button
           type="button"
-          onClick={() =>
-            setFavoriteVoiceIds((ids) =>
-              ids.includes(selectedVoiceId) ? ids.filter((id) => id !== selectedVoiceId) : [...ids, selectedVoiceId],
-            )
-          }
+          onClick={() => selectedVoiceProfile
+            ? toggleVoiceProfileFavorite(selectedVoiceProfile.id)
+            : setFavoriteVoiceIds((ids) => ids.includes(selectedVoiceId) ? ids.filter((id) => id !== selectedVoiceId) : [...ids, selectedVoiceId])}
         >
-          {favoriteVoiceIds.includes(selectedVoiceId) ? t("saved") : t("favorite")}
+          {selectedVoiceProfile
+            ? selectedVoiceProfile.favorite ? t("saved") : t("favorite")
+            : favoriteVoiceIds.includes(selectedVoiceId) ? t("saved") : t("favorite")}
         </button>
       </div>
 
       <div className="voice-sample-preview">
         <div>
           <strong>{t("voiceSampleTitle", "音色样音")}</strong>
-          <span>{selectedVoice.name} · {t("voiceSampleHint", "切换音色后试听对应的预生成样音")}</span>
+          <span>{selectedVoiceProfile
+            ? `${selectedVoiceProfile.name} · ${t("cloneLanguageFlow", "先合成所选语言，再转换为此音色")}`
+            : `${selectedVoice.name} · ${t("voiceSampleHint", "切换音色后试听对应的预生成样音")}`}</span>
         </div>
         <audio
           ref={voiceSampleRef}
           data-testid="voice-sample-player"
-          data-voice-id={selectedVoice.id}
+          data-voice-id={selectedVoiceProfile?.id || selectedVoice.id}
           controls
           preload="metadata"
-          src={selectedVoice.sampleUrl}
+          src={cloneSampleUrl || selectedVoice.sampleUrl}
         />
       </div>
 
@@ -2063,7 +2102,8 @@ export function VoiceSynthesisPanel({
           <label htmlFor="volume">{t("volume")}</label>
           <span>{Math.round(volume * 100)}%</span>
         </div>
-        <input id="volume" type="range" min="0" max="1" step="0.01" value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
+        <input id="volume" type="range" min="0" max="4" step="0.05" value={volume} onChange={(event) => setVolume(Number(event.target.value))} />
+        {volume > 1 ? <small className="voice-gain-hint">{t("voiceGainLimiterHint", "高增益已启用限幅保护")}</small> : null}
       </div>
 
       {status === "generating" ? (
@@ -2100,30 +2140,88 @@ export function VoiceSynthesisPanel({
 }
 
 export function MyVoicesPanel({
-  favoriteVoiceIds,
-  setFavoriteVoiceIds,
-  setSelectedVoiceId,
-  selectedVoiceId,
   notify,
   t,
+  selectedVoice,
+  voiceProfiles,
+  addVoiceProfile,
+  removeVoiceProfile,
+  selectedVoiceProfileId,
+  setSelectedVoiceProfileId,
+  toggleVoiceProfileFavorite,
   recordedVoices,
   recordingState,
   recordingElapsed,
   startVoiceRecording,
   stopVoiceRecording,
-  useRecordedVoice: onUseRecordedVoice,
   downloadBlob,
 }) {
-  const favorites = VOICES.filter((voice) => favoriteVoiceIds.includes(voice.id));
   const isRecording = recordingState === "recording";
   const isProcessingRecording = recordingState === "processing";
+  const fileInputRef = useRef(null);
+  const [draft, setDraft] = useState(null);
+  const [authorized, setAuthorized] = useState(false);
+  const [cloneState, setCloneState] = useState("idle");
+  const [cloneProgress, setCloneProgress] = useState(0);
+  const [clonePhase, setClonePhase] = useState("");
+  const [testBlob, setTestBlob] = useState(null);
+  const [embedding, setEmbedding] = useState(null);
+  const latestRecordingIdRef = useRef(recordedVoices[0]?.id || "");
+  const testUrl = useMemo(() => testBlob ? URL.createObjectURL(testBlob) : "", [testBlob]);
+  const referenceUrl = useMemo(() => draft?.blob ? URL.createObjectURL(draft.blob) : "", [draft]);
+
+  useEffect(() => () => { if (testUrl) URL.revokeObjectURL(testUrl); }, [testUrl]);
+  useEffect(() => () => { if (referenceUrl) URL.revokeObjectURL(referenceUrl); }, [referenceUrl]);
+
+  const chooseReference = (blob, name, sourceKind) => {
+    setDraft({ blob, name, sourceKind }); setAuthorized(false); setTestBlob(null); setEmbedding(null); setCloneState("idle");
+  };
+  useEffect(() => {
+    const latest = recordedVoices[0];
+    if (!latest || latest.id === latestRecordingIdRef.current) return;
+    latestRecordingIdRef.current = latest.id;
+    chooseReference(latest.blob, latest.name, "recording");
+  }, [recordedVoices]);
+  const runCloneTest = async () => {
+    if (!draft?.blob || !authorized || cloneState === "running") return;
+    setCloneState("running"); setCloneProgress(3); setClonePhase(t("cloneChecking", "检查参考声音"));
+    try {
+      const nextEmbedding = await extractVoiceEmbedding(draft.blob, (event) => {
+        setCloneProgress(Math.min(48, Math.round((event.progress || 0) * 0.55))); setClonePhase(event.phase || t("cloneEncoding", "提取音色"));
+      });
+      const { blob: baseBlob } = await synthesizeBaseVoice({
+        voice: selectedVoice, text: getVoiceCloneTestSentence(selectedVoice), speed: 1, notify, t,
+        onStatus: (statusKey) => setClonePhase(t(statusKey)),
+        onProgress: (progress) => setCloneProgress(48 + Math.round(Math.min(100, progress) * 0.18)),
+      });
+      const converted = await convertVoiceBlob(baseBlob, nextEmbedding, {
+        onProgress: (event) => { setCloneProgress(66 + Math.round((event.progress || 0) * 0.34)); setClonePhase(event.phase || t("cloneConverting", "生成克隆试听")); },
+      });
+      setEmbedding(nextEmbedding); setTestBlob(converted); setCloneProgress(100); setCloneState("ready");
+    } catch (error) {
+      console.error(error); setCloneState("error"); setClonePhase(error instanceof Error ? error.message : t("cloneFailed", "克隆试听失败"));
+    }
+  };
+  const saveClone = async () => {
+    if (!draft || !embedding || !testBlob || cloneState !== "ready") return;
+    const now = new Date().toISOString();
+    const profile = { id: crypto.randomUUID(), name: draft.name.replace(/\.[^.]+$/, "") || t("myCloneVoice", "我的克隆声音"),
+      sourceKind: draft.sourceKind, referenceBlob: draft.blob, testBlob, embedding: Float32Array.from(embedding),
+      favorite: false, authorized: true, createdAt: now, updatedAt: now };
+    await addVoiceProfile(profile); setSelectedVoiceProfileId(profile.id); setDraft(null); setTestBlob(null); setEmbedding(null); setAuthorized(false); setCloneState("idle");
+    notify(t("cloneSaved", "克隆声音已保存到“克隆声音”"));
+  };
 
   return (
     <div className="history-panel">
+      <input ref={fileInputRef} hidden type="file" accept="audio/*" onChange={(event) => {
+        const file = event.target.files?.[0]; if (file) chooseReference(file, file.name, "upload"); event.target.value = "";
+      }} />
+      <div className="voice-source-grid">
       <div className={`record-card ${isRecording ? "is-recording" : ""}`}>
         <div>
-          <strong>{t("recordVoice")}</strong>
-          <span>{isRecording ? `${t("recording")} · ${formatClock(recordingElapsed)}` : t("noRecordings")}</span>
+          <strong>{t("recordReferenceVoice", "录制参考声音")}</strong>
+          <span>{isRecording ? `${t("recording")} · ${formatClock(recordingElapsed)}` : t("recordReferenceHint", "录制自己的声音，完成后直接进入克隆试听。")}</span>
         </div>
         <button
           type="button"
@@ -2134,6 +2232,25 @@ export function MyVoicesPanel({
           {isRecording ? t("stopRecording") : isProcessingRecording ? t("generating") : t("startRecording")}
         </button>
       </div>
+
+      <button className="record-card upload-voice-card" type="button" onClick={() => fileInputRef.current?.click()}>
+        <div><strong>{t("uploadVoice", "上传声音")}</strong><span>{t("uploadVoiceHint", "选择清晰的单人语音作为参考")}</span></div>
+        <CloudArrowUp size={22} weight="bold" />
+      </button>
+      </div>
+
+      {draft ? (
+        <section className="clone-enrollment-card">
+          <header><div><strong>{t("cloneTestTitle", "克隆试听")}</strong><span>{draft.name}</span></div><button type="button" onClick={() => setDraft(null)}><X size={15} /></button></header>
+          <div className="clone-test-language"><span>{t("cloneTestLanguage", "测试语言")}</span><strong>{selectedVoice.language}</strong><em>{getVoiceCloneTestSentence(selectedVoice)}</em></div>
+          <audio controls preload="metadata" src={referenceUrl} />
+          <label className="clone-consent"><input type="checkbox" checked={authorized} onChange={(event) => setAuthorized(event.target.checked)} /><span>{t("cloneConsent", "我确认已获得该声音的授权，并仅用于合法、非误导用途。")}</span></label>
+          {cloneState === "running" ? <div className="voice-generation-loading clone-generation-loading" role="status" aria-live="polite"><i className="voice-generation-spinner" aria-hidden="true" /><div><strong>{clonePhase}</strong><span>{t("cloneLocalHint", "声音只在当前浏览器中处理")}</span></div><em>{cloneProgress}%</em><div className="progress-track"><span style={{ width: `${cloneProgress}%` }} /></div></div> : null}
+          {cloneState === "error" ? <div className="clone-inline-error">{clonePhase}</div> : null}
+          {testUrl ? <div className="clone-ab-preview"><span>{t("cloneListenBeforeSave", "请先试听克隆结果，确认满意后再保存")}</span><audio controls preload="metadata" src={testUrl} /></div> : null}
+          <div className="clone-actions"><button type="button" disabled={!authorized || cloneState === "running"} onClick={runCloneTest}>{testBlob ? t("cloneRetest", "重新测试") : t("cloneTest", "测试克隆")}</button><button type="button" className="is-primary" disabled={!testBlob || cloneState !== "ready"} onClick={saveClone}>{t("saveToMyVoices", "保存到我的声音")}</button></div>
+        </section>
+      ) : null}
 
       {recordedVoices.length ? (
         <>
@@ -2146,8 +2263,8 @@ export function MyVoicesPanel({
                   {recording.createdAt} · {formatTime(recording.duration)}
                 </span>
               </div>
-              <button type="button" onClick={() => onUseRecordedVoice(recording)}>
-                {t("use")}
+              <button type="button" onClick={() => chooseReference(recording.blob, recording.name, "recording")}>
+                {t("useAsReference", "作为参考")}
               </button>
               <button
                 type="button"
@@ -2160,35 +2277,32 @@ export function MyVoicesPanel({
         </>
       ) : null}
 
-      <div className="panel-subtitle">{t("favoriteVoice")}</div>
-      {favorites.length ? (
-        favorites.map((voice) => (
-          <div className={`history-item ${selectedVoiceId === voice.id ? "is-selected" : ""}`} key={voice.id}>
+      <div className="panel-subtitle">{t("savedCloneVoices", "已保存的克隆声音")}</div>
+      {voiceProfiles.length ? voiceProfiles.map((profile) => (
+          <div className={`history-item ${selectedVoiceProfileId === profile.id ? "is-selected" : ""}`} key={profile.id}>
             <div>
-              <strong>{voice.name}</strong>
-              <span>
-                {voice.language} · {voice.detail}
-              </span>
+              <strong>{profile.name}</strong><span>{profile.sourceKind === "recording" ? t("recordVoice", "录制声音") : t("uploadVoice", "上传声音")}</span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedVoiceId(voice.id);
-                notify("已切换到收藏声音");
-              }}
-            >
-              {t("use")}
-            </button>
-            <button type="button" onClick={() => setFavoriteVoiceIds((ids) => ids.filter((id) => id !== voice.id))}>
-              {t("remove")}
-            </button>
+            <button type="button" onClick={() => { setSelectedVoiceProfileId(profile.id); notify(t("cloneSelected", "已选择克隆音色")); }}>{t("use")}</button>
+            <button type="button" onClick={() => toggleVoiceProfileFavorite(profile.id)}>{profile.favorite ? t("saved") : t("favorite")}</button>
+            <button type="button" onClick={() => removeVoiceProfile(profile.id)}>{t("delete")}</button>
           </div>
-        ))
-      ) : (
-        <div className="empty-state">{t("noFavoriteVoices")}</div>
-      )}
+        )) : <div className="empty-state">{t("noCloneVoices", "上传或录制参考声音，通过试听后会显示在这里。")}</div>}
     </div>
   );
+}
+
+export function FavoriteVoicesPanel({ favoriteVoiceIds, setFavoriteVoiceIds, selectedVoiceId, setSelectedVoiceId,
+  voiceProfiles, selectedVoiceProfileId, setSelectedVoiceProfileId, toggleVoiceProfileFavorite, notify, t }) {
+  const builtIns = VOICES.filter((voice) => favoriteVoiceIds.includes(voice.id));
+  const clones = voiceProfiles.filter((profile) => profile.favorite);
+  return <div className="history-panel">
+    <div className="panel-subtitle">{t("builtInVoices", "内置声音")}</div>
+    {builtIns.map((voice) => <div className={`history-item ${selectedVoiceId === voice.id && !selectedVoiceProfileId ? "is-selected" : ""}`} key={voice.id}><div><strong>{voice.name}</strong><span>{voice.language} · {voice.detail}</span></div><button type="button" onClick={() => { setSelectedVoiceId(voice.id); setSelectedVoiceProfileId(""); notify(t("voiceSelected", "已切换声音")); }}>{t("use")}</button><button type="button" onClick={() => setFavoriteVoiceIds((ids) => ids.filter((id) => id !== voice.id))}>{t("remove")}</button></div>)}
+    <div className="panel-subtitle">{t("cloneVoices", "克隆声音")}</div>
+    {clones.map((profile) => <div className={`history-item ${selectedVoiceProfileId === profile.id ? "is-selected" : ""}`} key={profile.id}><div><strong>{profile.name}</strong><span>{t("browserLocalVoice", "保存在当前浏览器")}</span></div><button type="button" onClick={() => setSelectedVoiceProfileId(profile.id)}>{t("use")}</button><button type="button" onClick={() => toggleVoiceProfileFavorite(profile.id)}>{t("remove")}</button></div>)}
+    {!builtIns.length && !clones.length ? <div className="empty-state">{t("noFavoriteVoices")}</div> : null}
+  </div>;
 }
 
 export function HistoryPanel({ historyItems, useHistoryItem: onUseHistoryItem, setHistoryItems, downloadBlob, t }) {

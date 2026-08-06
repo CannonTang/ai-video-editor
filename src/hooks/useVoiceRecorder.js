@@ -9,12 +9,10 @@ export function useVoiceRecorder(d) {
       const decoded = await decodeWaveform(blob); const createdAt = formatSavedTime();
       const recording = { id: crypto.randomUUID(), blob, name: `${d.t("recordVoice")} ${createdAt}`,
         duration: decoded.duration, peaks: decoded.peaks, createdAt, extension };
-      d.replaceAudio(blob, decoded.duration, decoded.peaks, d.t("recordingReady"), {
-        sourceKind: "recording",
-        name: recording.name,
-      });
       d.setRecordedVoices((items) => [recording, ...items.slice(0, 8)]);
-      d.setSelectedTrack("audio"); d.setActiveTool("audio"); d.setVoiceTab("mine"); d.notify(d.t("recordingReady"));
+      d.setActiveTool("audio"); d.setVoiceTab("mine"); d.setStatus("ready");
+      d.setStatusText(d.t("recordingReadyForClone", "录音已就绪，请完成克隆试听"));
+      d.notify(d.t("recordingReadyForClone", "录音已就绪，请完成克隆试听"));
     } catch (error) {
       console.error(error); d.setStatus("error"); d.setStatusText(error instanceof Error ? error.message : d.t("recordingPermissionDenied"));
       d.notify(d.t("recordingPermissionDenied"));
@@ -30,7 +28,7 @@ export function useVoiceRecorder(d) {
       d.voiceRecorderStreamRef.current = stream; d.voiceRecorderChunksRef.current = []; d.voiceRecorderRef.current = recorder;
       d.voiceRecorderStartedAtRef.current = performance.now(); d.setRecordingElapsed(0); d.setRecordingState("recording");
       d.setStatus("generating"); d.setStatusText(d.t("recording")); d.setProgress(0);
-      d.setSelectedTrack("audio"); d.setActiveTool("audio"); d.setVoiceTab("mine");
+      d.setActiveTool("audio"); d.setVoiceTab("mine");
       recorder.ondataavailable = (event) => { if (event.data?.size) d.voiceRecorderChunksRef.current.push(event.data); };
       recorder.onstop = () => {
         const blob = new Blob(d.voiceRecorderChunksRef.current, { type: recorder.mimeType || format?.mimeType || "audio/webm" });
@@ -51,12 +49,5 @@ export function useVoiceRecorder(d) {
     const recorder = d.voiceRecorderRef.current; if (!recorder || recorder.state === "inactive") return;
     d.setRecordingState("processing"); recorder.stop();
   };
-  const useRecordedVoice = (recording) => {
-    d.replaceAudio(recording.blob, recording.duration, recording.peaks, recording.name, {
-      sourceKind: "recording",
-      name: recording.name,
-    });
-    d.setSelectedTrack("audio"); d.setActiveTool("audio"); d.setVoiceTab("mine"); d.notify(d.t("recordingReady"));
-  };
-  return { startVoiceRecording, stopVoiceRecording, useRecordedVoice };
+  return { startVoiceRecording, stopVoiceRecording };
 }
