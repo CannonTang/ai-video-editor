@@ -40,6 +40,10 @@ Build shots as `establish -> guide -> acquire -> hold -> release`. Allow at most
 
 Drive focus boxes, leaders, spotlights, crops, and cursor gestures from the same current subject geometry. Release or omit an effect when confidence falls; never keep following the wrong target. Retake or reject footage that cannot be stabilized to the required quality rather than hiding it with motion graphics.
 
+Keep one primary emphasis per shot. Prefer an eased keyframed crop with a still reading hold over a persistent rectangle when the target is static and high-resolution. Use a box only for precise spatial disambiguation, and never show multiple competing boxes unless the narration explicitly compares those regions. Time every acquire, hold, and release from the final narration rather than stretching the narration to match a prebuilt visual template.
+
+Choose the attention treatment from the evidence type: magnify small or dense evidence, underline an exact word/label/number, and frame the verified boundary of a control, card, result, product region, or other spatial unit. Prefer one treatment. When magnification is necessary, allow one supporting underline or frame only after the crop reaches its fixed destination. Remove the supporting mark before releasing the crop or cutting away. Never underline and frame the same target, stack all three treatments, or reuse coordinates that were not transformed through the final crop and scale.
+
 ## 6. Apply category finishing priorities
 
 - `talking-head`: protect meaning and expression; stabilize/reframe faces; use restrained depth and keyword emphasis.

@@ -40,6 +40,24 @@ Allow at most one motivated camera move in a shot. Use eased keyframes to a fixe
 
 Reject handheld simulation, micro-jitter, repeated punch-ins, elastic overshoot, competing gestures, unanchored boxes, scroll-and-zoom combinations that fight each other, or constant Ken Burns movement. A gesture must point to evidence or explain a relationship; decorative motion alone is not a valid interaction cue.
 
+Use one primary attention target per shot. Do not draw several focus boxes at once or outline a broad page region when the narration names one control, result, score, or card. Prefer a stable keyframed crop when magnification alone can explain the target: establish the full page, ease to one fixed crop, stop completely for reading, then ease back to context or cut. A useful default is a 0.5–0.9 second push, a 2–5 second motionless hold sized to the spoken phrase, and a 0.5–0.9 second release. Do not keep a box visible for the entire scene or the entire video.
+
+Use a focus box only when it adds information that magnification, cursor approach, spotlight, underline, or page state does not. Bind it to verified DOM bounds or a frame-specific measured region, use modest padding, and inspect the rendered frame at delivery size. Reject boxes that include neighboring cards, miss the target edge, obscure text, compete with captions, or remain after the narration has moved on.
+
+### Choose magnification, underline, or framing deliberately
+
+Classify the evidence before styling it:
+
+- Use `magnify` when the target is correct but too small or dense to read at delivery size. Ease to one fixed crop, normally about 1.05–1.20× for a high-resolution website capture, then stop completely. Increase beyond that only when the source remains sharp and sufficient context survives.
+- Use `underline` for an exact title, label, menu item, number, score, status, or short phrase. Measure the visible text bounds, animate the line left-to-right after the camera settles, offset it below the glyphs without striking through them, and match one established brand accent.
+- Use `frame` for the exact spatial boundary of a control, field, button, card, chart, selected result, or grouped region whose enclosure matters. Derive the rectangle from current DOM geometry or a verified frame-specific region, add restrained padding, and keep the stroke clear of the content.
+
+Combine treatments only when they solve different problems. Prefer `magnify`, `underline`, or `frame` alone. Allow `magnify + underline` for small textual evidence and `magnify + frame` for a small bounded control or result. Do not underline and frame the same target, and do not stack all three. For a comparison, emphasize targets sequentially; show two simultaneous frames only when the narration explicitly compares both at that moment.
+
+Sequence a combined beat as `establish -> magnify -> stop -> reveal underline/frame -> hold -> remove underline/frame -> release/cut`. Never animate a line or frame while the camera is still moving. The secondary treatment should acquire just before the corresponding spoken phrase, remain motionless while it is read, and disappear when the narration leaves the evidence.
+
+At 1080p, start with a 2–4 px underline or frame stroke and roughly 6–14 px of frame padding, then adjust from the real target size and brand style. Preserve rounded corners when they communicate the underlying component boundary. Verify geometry on the rendered delivery frame; source coordinates are invalid after crop, scale, responsive reflow, or zoom unless they are transformed through the same composition.
+
 ## 5. Moving footage, focus boxes, and zooms
 
 Use DOM geometry when the target remains a page element. Use the editor's optical-flow capability when the target moves inside video or canvas content. Initialize from a high-confidence keyframe or semantic region, then propagate the region through the shot.
@@ -84,6 +102,10 @@ Normalize the voice brief as:
 
 Generate narration before final motion timing. Align cursor arrival, interaction, focus-box acquisition, zoom hold, and visible result to the corresponding spoken phrase. Verify names and product terms by listening to the rendered audio, not only by inspecting text.
 
+Treat voice generation as the timing master. Generate the intended speaker at a natural model pace first, preserve sentence and paragraph pauses, then measure the final audio and derive scene boundaries from spoken clauses. For professional English narration, prefer a calm conversational cadence around 125–155 words per minute unless the user requests another style. Do not globally accelerate or stretch a finished voice merely to force an approximate duration; keep post-generation tempo changes within a subtle correction range (normally no more than about 3–5%). If an exact cap still fails, shorten or rewrite the script and regenerate the voice.
+
+Listen to the full result before editing picture. Reject a voice for rushed delivery, uniform sentence rhythm, missing breaths or pauses, clipped word endings, unstable loudness, incorrect product pronunciation, or synthetic discontinuities between chunks. Use punctuation-aware chunks with consistent speaker state and short natural silence between sentences. Let the picture run longer than the initial estimate when the user's duration is approximate and natural delivery needs it.
+
 ## 8. Visual direction and rhythm
 
 Write a scene-level hierarchy before editing: primary subject, supporting evidence, motion cue, narration claim, and exit motivation. Establish a coherent palette from the site and one accent system for callouts. Vary shot scale and motion purpose; do not place the same rectangle and zoom on every scene.
@@ -100,6 +122,11 @@ Reject and redo a scene when any of these fails:
 - a crop exposes insufficient source resolution;
 - the page plane, cursor, focus frame, or callout visibly shakes, drifts, overshoots, or keeps moving while evidence should be read;
 - pointer, scroll, playback, box, or zoom timing contradicts the narration;
+- more than one primary focus target competes in a shot, or a focus box is broader than the named evidence;
+- an underline misses its text, crosses glyphs, spans unrelated words, or animates while the camera moves;
+- a frame uses stale pre-crop coordinates, encloses neighboring UI, or combines redundantly with an underline on the same target;
+- magnification makes the source soft, removes necessary context, or is paired with more than one secondary attention treatment;
+- narration was globally sped up to meet an approximate duration, sounds rushed, or lacks natural phrase and sentence pauses;
 - optical-flow tracking jitters, drifts, switches identity, or loses the target;
 - overlays obscure the active control, result, face, or caption safe area;
 - iconography is generic, irrelevant, inconsistent, or visibly lower quality than the page;

@@ -3,7 +3,7 @@
   "name": "timeline-studio",
   "displayName": "Timeline Studio",
   "version": "0.9.1",
-  "description": "Professionally auto-edit footage, products, brands, and website walkthroughs into editable Timeline Studio projects with natural voiceover, linked captions, portable media, stable motion, and verified rendering.",
+  "description": "Professionally auto-edit and replicate reference-video timing, filters, motion, framing, highlights, and tension into editable Timeline Studio projects with verified rendering.",
   "author": {
     "name": "MartinDelophy",
     "url": "https://github.com/MartinDelophy"
@@ -14,6 +14,8 @@
   "keywords": [
     "video-editing",
     "automatic-video-editing",
+    "editing-style-replication",
+    "highlight-editing",
     "ai-video",
     "timeline",
     "captions",

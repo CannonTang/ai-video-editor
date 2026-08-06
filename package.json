@@ -17,6 +17,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "agent": "node scripts/timeline-command.mjs",
+    "skill:doctor": "node skills/edit-timeline-studio/scripts/setup-host.mjs --check",
+    "skill:setup": "node skills/edit-timeline-studio/scripts/setup-host.mjs --install",
     "preview": "vite preview --host 0.0.0.0",
     "lint": "eslint .",
     "format": "prettier --write .",

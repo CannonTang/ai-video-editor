@@ -36,6 +36,16 @@ The command runner reads and writes `.timeline` projects, supports deterministic
 npx skills add MartinDelophy/ai-video-editor --skill edit-timeline-studio
 ```
 
+Skill installation copies the workflow but deliberately does not modify the host. On first local use, run the read-only dependency doctor:
+
+```bash
+node scripts/setup-host.mjs --check
+```
+
+If Node.js is missing, start with `sh scripts/bootstrap-host.sh --check` on macOS/Linux or `scripts/bootstrap-host.ps1` in Windows PowerShell. Both show an explicit language-runtime plan before their opt-in install mode.
+
+If tools are missing, review the printed plan and explicitly authorize the interactive installer with `node scripts/setup-host.mjs --install`. It installs only declared media tools and pinned Python analysis packages in an isolated Timeline Studio runtime. It never bundles model downloads, GPU drivers, credentials, or paid services. See [host environment setup](references/host-environment.md).
+
 Claude Code and Codex can also install through GitHub CLI:
 
 ```bash
