@@ -5816,11 +5816,11 @@ button:disabled {
 
 .voice-panel > .tabs.compact {
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .voice-panel > .tabs.compact button {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .voice-tab-body {
@@ -6500,13 +6500,13 @@ button:disabled {
 
 .voice-source-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 10px;
 }
 
 .voice-source-grid .record-card {
   min-width: 0;
-  min-height: 96px;
+  min-height: 84px;
 }
 
 .voice-source-grid .record-card:not(.upload-voice-card) {
@@ -6625,6 +6625,29 @@ button:disabled {
 .history-item button:hover {
   color: #061515;
   background: #33e6d3;
+}
+
+.clone-profile-item {
+  grid-template-columns: 1fr;
+}
+
+.clone-profile-copy {
+  min-width: 0;
+}
+
+.clone-profile-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.clone-profile-actions button {
+  min-width: 62px;
+  white-space: nowrap;
+}
+
+.clone-profile-actions {
+  width: 100%;
 }
 
 @keyframes record-pulse {

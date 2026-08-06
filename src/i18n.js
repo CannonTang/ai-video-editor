@@ -44,6 +44,53 @@ const VOICE_COLOR_COPY = {
   ru: { cloneTestLanguage: "Язык проверки", voiceColorTab: "Тембр", voiceColorSource: "Текущий исходный звук", voiceColorTarget: "Целевой голос", voiceColorChooseTemporary: "Загрузить или записать образец", voiceColorRecordedReference: "Записанный образец", voiceColorTemporaryReference: "Только для этого преобразования", voiceColorPreparing: "Подготовка голоса", voiceColorConverting: "Перенос тембра", voiceColorReady: "Перенос завершён", voiceColorFailed: "Ошибка переноса", voiceColorSavedToAssets: "Результат сохранён в Мои материалы", voiceColorRetry: "Преобразовать снова", voiceColorPreview: "Прослушать перенос", voiceColorReplaceClip: "Заменить текущий клип", voiceColorApplied: "Заменено", voiceColorRestoreOriginal: "Восстановить исходный голос", voiceColorClipReplaced: "Клип заменён; исходник можно восстановить", voiceColorOriginalRestored: "Исходный голос восстановлен" },
 };
 
+const VOICE_CLONE_COPY = {
+  zh: {
+    voiceSynthesis: "语音合成", myVoices: "声音克隆", favoriteVoicesTab: "收藏声音", history: "历史记录", recordReferenceVoice: "录制样音", recordReferenceHint: "录一段短音频，用于试听并保存克隆音色。", uploadVoice: "上传样音", uploadVoiceHint: "选择清晰的单人录音。", savedCloneVoices: "已保存的克隆声音", noCloneVoices: "录制或上传样音，试听满意后保存到这里。",
+    cloneTestTitle: "克隆试听", cloneChecking: "检查样音", cloneEncoding: "提取音色", cloneConverting: "生成克隆试听", cloneFailed: "克隆试听失败", cloneLocalHint: "声音仅在当前浏览器处理", cloneListenBeforeSave: "请先试听结果，再保存此声音", cloneRetest: "重新测试", cloneTest: "测试声音", saveToMyVoices: "保存声音", cloneSaved: "克隆声音已保存", cloneSelected: "已选择克隆声音", useAsReference: "用作样音", myCloneVoice: "我的克隆声音",
+  },
+  en: {
+    voiceSynthesis: "Synthesis", myVoices: "Cloning", favoriteVoicesTab: "Favorites", history: "History", recordReferenceVoice: "Record a sample", recordReferenceHint: "Record a short sample to test and save a cloned voice.", uploadVoice: "Upload a sample", uploadVoiceHint: "Use a clear, single-speaker recording.", savedCloneVoices: "Saved cloned voices", noCloneVoices: "Record or upload a sample, test it, and save it here.",
+    cloneTestTitle: "Clone preview", cloneChecking: "Checking voice sample", cloneEncoding: "Extracting voice color", cloneConverting: "Creating clone preview", cloneFailed: "Clone preview failed", cloneLocalHint: "Your voice stays in this browser", cloneListenBeforeSave: "Listen to the result before saving this voice", cloneRetest: "Test again", cloneTest: "Test voice", saveToMyVoices: "Save voice", cloneSaved: "Cloned voice saved", cloneSelected: "Cloned voice selected", useAsReference: "Use as sample", myCloneVoice: "My cloned voice",
+  },
+  ja: {
+    voiceSynthesis: "音声合成", myVoices: "音声クローン", favoriteVoicesTab: "お気に入り", history: "履歴", recordReferenceVoice: "音声を録音", recordReferenceHint: "短い音声を録音して、クローン音声を試聴・保存します。", uploadVoice: "音声を追加", uploadVoiceHint: "明瞭な一人話者の録音を選択します。", savedCloneVoices: "保存したクローン音声", noCloneVoices: "音声を録音または追加し、試聴後に保存できます。",
+    cloneTestTitle: "クローン試聴", cloneChecking: "音声を確認中", cloneEncoding: "声色を抽出中", cloneConverting: "試聴音声を生成中", cloneFailed: "試聴の生成に失敗しました", cloneLocalHint: "音声はこのブラウザー内で処理されます", cloneListenBeforeSave: "保存前に結果を試聴してください", cloneRetest: "再テスト", cloneTest: "音声をテスト", saveToMyVoices: "音声を保存", cloneSaved: "クローン音声を保存しました", cloneSelected: "クローン音声を選択しました", useAsReference: "サンプルに使用", myCloneVoice: "マイクローン音声",
+  },
+  ko: {
+    voiceSynthesis: "음성 합성", myVoices: "음성 복제", favoriteVoicesTab: "즐겨찾기", history: "기록", recordReferenceVoice: "샘플 녹음", recordReferenceHint: "짧은 샘플을 녹음해 복제 음성을 듣고 저장하세요.", uploadVoice: "샘플 업로드", uploadVoiceHint: "한 명의 선명한 녹음을 사용하세요.", savedCloneVoices: "저장된 복제 음성", noCloneVoices: "샘플을 녹음하거나 올린 뒤 테스트하고 저장하세요.",
+    cloneTestTitle: "복제 미리 듣기", cloneChecking: "음성 샘플 확인 중", cloneEncoding: "음색 추출 중", cloneConverting: "미리 듣기 생성 중", cloneFailed: "미리 듣기 생성 실패", cloneLocalHint: "음성은 이 브라우저에서만 처리됩니다", cloneListenBeforeSave: "저장하기 전에 결과를 들어보세요", cloneRetest: "다시 테스트", cloneTest: "음성 테스트", saveToMyVoices: "음성 저장", cloneSaved: "복제 음성이 저장되었습니다", cloneSelected: "복제 음성이 선택되었습니다", useAsReference: "샘플로 사용", myCloneVoice: "내 복제 음성",
+  },
+  es: {
+    voiceSynthesis: "Síntesis", myVoices: "Clonación", favoriteVoicesTab: "Favoritos", history: "Historial", recordReferenceVoice: "Grabar muestra", recordReferenceHint: "Graba una muestra breve para probar y guardar la voz.", uploadVoice: "Subir muestra", uploadVoiceHint: "Usa una grabación clara de una sola persona.", savedCloneVoices: "Voces clonadas guardadas", noCloneVoices: "Graba o sube una muestra, pruébala y guárdala aquí.",
+    cloneTestTitle: "Vista previa", cloneChecking: "Comprobando la muestra", cloneEncoding: "Extrayendo el timbre", cloneConverting: "Creando la vista previa", cloneFailed: "No se pudo crear la vista previa", cloneLocalHint: "La voz permanece en este navegador", cloneListenBeforeSave: "Escucha el resultado antes de guardarlo", cloneRetest: "Probar de nuevo", cloneTest: "Probar voz", saveToMyVoices: "Guardar voz", cloneSaved: "Voz clonada guardada", cloneSelected: "Voz clonada seleccionada", useAsReference: "Usar como muestra", myCloneVoice: "Mi voz clonada",
+  },
+  fr: {
+    voiceSynthesis: "Synthèse", myVoices: "Clonage vocal", favoriteVoicesTab: "Favoris", history: "Historique", recordReferenceVoice: "Enregistrer un extrait", recordReferenceHint: "Enregistrez un court extrait pour tester et sauvegarder la voix.", uploadVoice: "Importer un extrait", uploadVoiceHint: "Utilisez un enregistrement clair avec une seule voix.", savedCloneVoices: "Voix clonées enregistrées", noCloneVoices: "Enregistrez ou importez un extrait, testez-le puis sauvegardez-le ici.",
+    cloneTestTitle: "Aperçu du clone", cloneChecking: "Vérification de l’extrait", cloneEncoding: "Extraction du timbre", cloneConverting: "Création de l’aperçu", cloneFailed: "Échec de l’aperçu", cloneLocalHint: "La voix reste dans ce navigateur", cloneListenBeforeSave: "Écoutez le résultat avant de sauvegarder", cloneRetest: "Retester", cloneTest: "Tester la voix", saveToMyVoices: "Sauvegarder", cloneSaved: "Voix clonée sauvegardée", cloneSelected: "Voix clonée sélectionnée", useAsReference: "Utiliser l’extrait", myCloneVoice: "Ma voix clonée",
+  },
+  de: {
+    voiceSynthesis: "Sprachsynthese", myVoices: "Stimme klonen", favoriteVoicesTab: "Favoriten", history: "Verlauf", recordReferenceVoice: "Stimmprobe aufnehmen", recordReferenceHint: "Kurze Probe aufnehmen, testen und als Klonstimme speichern.", uploadVoice: "Stimmprobe laden", uploadVoiceHint: "Eine klare Aufnahme mit nur einer Stimme verwenden.", savedCloneVoices: "Gespeicherte Klonstimmen", noCloneVoices: "Probe aufnehmen oder laden, testen und hier speichern.",
+    cloneTestTitle: "Klon-Vorschau", cloneChecking: "Stimmprobe wird geprüft", cloneEncoding: "Stimmfarbe wird extrahiert", cloneConverting: "Vorschau wird erstellt", cloneFailed: "Vorschau fehlgeschlagen", cloneLocalHint: "Die Stimme bleibt in diesem Browser", cloneListenBeforeSave: "Ergebnis vor dem Speichern anhören", cloneRetest: "Erneut testen", cloneTest: "Stimme testen", saveToMyVoices: "Stimme speichern", cloneSaved: "Klonstimme gespeichert", cloneSelected: "Klonstimme ausgewählt", useAsReference: "Als Probe verwenden", myCloneVoice: "Meine Klonstimme",
+  },
+  pt: {
+    voiceSynthesis: "Síntese", myVoices: "Clonar voz", favoriteVoicesTab: "Favoritos", history: "Histórico", recordReferenceVoice: "Gravar amostra", recordReferenceHint: "Grave uma amostra curta para testar e salvar a voz.", uploadVoice: "Enviar amostra", uploadVoiceHint: "Use uma gravação clara de uma única pessoa.", savedCloneVoices: "Vozes clonadas salvas", noCloneVoices: "Grave ou envie uma amostra, teste e salve aqui.",
+    cloneTestTitle: "Prévia da clonagem", cloneChecking: "Verificando a amostra", cloneEncoding: "Extraindo o timbre", cloneConverting: "Criando a prévia", cloneFailed: "Falha ao criar a prévia", cloneLocalHint: "A voz permanece neste navegador", cloneListenBeforeSave: "Ouça o resultado antes de salvar", cloneRetest: "Testar novamente", cloneTest: "Testar voz", saveToMyVoices: "Salvar voz", cloneSaved: "Voz clonada salva", cloneSelected: "Voz clonada selecionada", useAsReference: "Usar como amostra", myCloneVoice: "Minha voz clonada",
+  },
+  th: {
+    voiceSynthesis: "สังเคราะห์เสียง", myVoices: "โคลนเสียง", favoriteVoicesTab: "รายการโปรด", history: "ประวัติ", recordReferenceVoice: "อัดเสียงตัวอย่าง", recordReferenceHint: "อัดเสียงสั้น ๆ เพื่อทดสอบและบันทึกเสียงโคลน", uploadVoice: "อัปโหลดตัวอย่าง", uploadVoiceHint: "ใช้เสียงพูดคนเดียวที่ชัดเจน", savedCloneVoices: "เสียงโคลนที่บันทึกไว้", noCloneVoices: "อัดหรืออัปโหลดตัวอย่าง ทดสอบ แล้วบันทึกไว้ที่นี่",
+    cloneTestTitle: "ฟังตัวอย่างเสียงโคลน", cloneChecking: "กำลังตรวจสอบเสียง", cloneEncoding: "กำลังแยกโทนเสียง", cloneConverting: "กำลังสร้างเสียงตัวอย่าง", cloneFailed: "สร้างเสียงตัวอย่างไม่สำเร็จ", cloneLocalHint: "เสียงจะถูกประมวลผลในเบราว์เซอร์นี้เท่านั้น", cloneListenBeforeSave: "ฟังผลลัพธ์ก่อนบันทึกเสียง", cloneRetest: "ทดสอบอีกครั้ง", cloneTest: "ทดสอบเสียง", saveToMyVoices: "บันทึกเสียง", cloneSaved: "บันทึกเสียงโคลนแล้ว", cloneSelected: "เลือกเสียงโคลนแล้ว", useAsReference: "ใช้เป็นตัวอย่าง", myCloneVoice: "เสียงโคลนของฉัน",
+  },
+  vi: {
+    voiceSynthesis: "Tổng hợp giọng", myVoices: "Nhân bản giọng", favoriteVoicesTab: "Yêu thích", history: "Lịch sử", recordReferenceVoice: "Thu âm mẫu", recordReferenceHint: "Thu một mẫu ngắn để nghe thử và lưu giọng nhân bản.", uploadVoice: "Tải mẫu lên", uploadVoiceHint: "Dùng bản thu rõ ràng chỉ có một người nói.", savedCloneVoices: "Giọng nhân bản đã lưu", noCloneVoices: "Thu hoặc tải mẫu lên, nghe thử rồi lưu tại đây.",
+    cloneTestTitle: "Nghe thử giọng", cloneChecking: "Đang kiểm tra mẫu", cloneEncoding: "Đang trích xuất âm sắc", cloneConverting: "Đang tạo bản nghe thử", cloneFailed: "Không thể tạo bản nghe thử", cloneLocalHint: "Giọng nói chỉ được xử lý trong trình duyệt này", cloneListenBeforeSave: "Hãy nghe kết quả trước khi lưu", cloneRetest: "Thử lại", cloneTest: "Thử giọng", saveToMyVoices: "Lưu giọng", cloneSaved: "Đã lưu giọng nhân bản", cloneSelected: "Đã chọn giọng nhân bản", useAsReference: "Dùng làm mẫu", myCloneVoice: "Giọng nhân bản của tôi",
+  },
+  ru: {
+    voiceSynthesis: "Синтез речи", myVoices: "Клонирование", favoriteVoicesTab: "Избранное", history: "История", recordReferenceVoice: "Записать образец", recordReferenceHint: "Запишите короткий образец, чтобы проверить и сохранить голос.", uploadVoice: "Загрузить образец", uploadVoiceHint: "Используйте чистую запись одного человека.", savedCloneVoices: "Сохранённые клоны", noCloneVoices: "Запишите или загрузите образец, проверьте и сохраните его здесь.",
+    cloneTestTitle: "Прослушивание клона", cloneChecking: "Проверка образца", cloneEncoding: "Извлечение тембра", cloneConverting: "Создание примера", cloneFailed: "Не удалось создать пример", cloneLocalHint: "Голос обрабатывается только в этом браузере", cloneListenBeforeSave: "Прослушайте результат перед сохранением", cloneRetest: "Проверить снова", cloneTest: "Проверить голос", saveToMyVoices: "Сохранить голос", cloneSaved: "Клон голоса сохранён", cloneSelected: "Клон голоса выбран", useAsReference: "Использовать образец", myCloneVoice: "Мой клон голоса",
+  },
+};
+
 const TIMELINE_SELECTION_COPY = {
   zh: { timelineSelectionTools: "选择工具", timelineSelect: "选择", timelineSelectLeft: "向左全选", timelineSelectRight: "向右全选", timelineSelectedLeft: "已向左选择 {count} 个片段", timelineSelectedRight: "已向右选择 {count} 个片段", timelineMovingSelection: "移动选中片段", timelineRangeMoved: "已移动 {count} 个片段", timelineLockedSelectionSkipped: "锁定轨道中的片段不能加入多选" },
   en: { timelineSelectionTools: "Selection tools", timelineSelect: "Select", timelineSelectLeft: "Select all left", timelineSelectRight: "Select all right", timelineSelectedLeft: "Selected {count} clips to the left", timelineSelectedRight: "Selected {count} clips to the right", timelineMovingSelection: "Moving selected clips", timelineRangeMoved: "Moved {count} clips", timelineLockedSelectionSkipped: "Clips on locked tracks cannot be added to a multi-selection" },
@@ -2128,7 +2175,7 @@ export const UI_COPY = {
     preparingExport: "Preparing export",
     aiVoice: "AI Voice",
     voiceSynthesis: "Voice synthesis",
-    myVoices: "Clone voice",
+    myVoices: "Voice cloning",
     favoriteVoicesTab: "Favorite voices",
     history: "History",
     modelReady: "Model ready",
@@ -2148,12 +2195,12 @@ export const UI_COPY = {
     generationProgress: "Generation progress",
     favoriteVoice: "Favorite voice",
     uploadVoice: "Upload voice",
-    uploadVoiceHint: "Choose a clear single-speaker recording as the reference",
+    uploadVoiceHint: "Use a clear, single-speaker recording.",
     cloneTarget: "Clone target voice",
     cloneStageTwo: "Step 2: Converting to the cloned voice",
     cloneConsent: "I confirm that I am authorized to use this voice for lawful, non-misleading purposes.",
-    recordReferenceVoice: "Record reference voice",
-    recordReferenceHint: "Record your voice, then continue directly to the clone test. It will not be added to the timeline.",
+    recordReferenceVoice: "Record a sample",
+    recordReferenceHint: "Record a short sample to test and save a cloned voice.",
     recordingReadyForClone: "Recording ready — continue to the clone test",
     cloneLanguageFlow: "Synthesize the selected language, then convert it to this voice",
     cloneVoiceMultilingual: "Multilingual · cloned voice",
@@ -3062,7 +3109,7 @@ export function createTranslator(languageId) {
   const projectChromeCopy = PROJECT_CHROME_COPY[languageId] ?? PROJECT_CHROME_COPY.en;
   const coreLabelCopy = CORE_LABEL_COPY[languageId] ?? CORE_LABEL_COPY.en;
   const specializedCopy = Object.assign({}, ...[
-    EXPORT_RENDER_COPY, MEDIA_COMPATIBILITY_COPY, COMMUNITY_LINKS_COPY, VOICE_COLOR_COPY, TIMELINE_SELECTION_COPY, FACE_SWAP_COPY, VECTOR_LIBRARY_COPY, PROJECT_CHROME_COPY, CORE_LABEL_COPY, MOBILE_DRAWER_COPY, MOBILE_CLIP_ACTION_COPY,
+    EXPORT_RENDER_COPY, MEDIA_COMPATIBILITY_COPY, COMMUNITY_LINKS_COPY, VOICE_COLOR_COPY, VOICE_CLONE_COPY, TIMELINE_SELECTION_COPY, FACE_SWAP_COPY, VECTOR_LIBRARY_COPY, PROJECT_CHROME_COPY, CORE_LABEL_COPY, MOBILE_DRAWER_COPY, MOBILE_CLIP_ACTION_COPY,
     VISUAL_EDITOR_COPY, TRANSITION_EDITOR_COPY, ASSET_PREVIEW_COPY, ASSET_DROP_COPY,
     AUTO_CAPTION_STATUS_COPY, VISUAL_PANEL_TITLE_COPY, VISUAL_MASK_SHAPE_COPY,
     VISUAL_KEYFRAME_ACTION_COPY, VISUAL_TAB_COPY, SOURCE_AUDIO_SYNC_COPY,

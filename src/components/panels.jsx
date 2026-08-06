@@ -2279,13 +2279,15 @@ export function MyVoicesPanel({
 
       <div className="panel-subtitle">{t("savedCloneVoices", "已保存的克隆声音")}</div>
       {voiceProfiles.length ? voiceProfiles.map((profile) => (
-          <div className={`history-item ${selectedVoiceProfileId === profile.id ? "is-selected" : ""}`} key={profile.id}>
-            <div>
+          <div className={`history-item clone-profile-item ${selectedVoiceProfileId === profile.id ? "is-selected" : ""}`} key={profile.id}>
+            <div className="clone-profile-copy">
               <strong>{profile.name}</strong><span>{profile.sourceKind === "recording" ? t("recordVoice", "录制声音") : t("uploadVoice", "上传声音")}</span>
             </div>
-            <button type="button" onClick={() => { setSelectedVoiceProfileId(profile.id); notify(t("cloneSelected", "已选择克隆音色")); }}>{t("use")}</button>
-            <button type="button" onClick={() => toggleVoiceProfileFavorite(profile.id)}>{profile.favorite ? t("saved") : t("favorite")}</button>
-            <button type="button" onClick={() => removeVoiceProfile(profile.id)}>{t("delete")}</button>
+            <div className="clone-profile-actions">
+              <button type="button" onClick={() => { setSelectedVoiceProfileId(profile.id); notify(t("cloneSelected", "已选择克隆音色")); }}>{t("use")}</button>
+              <button type="button" onClick={() => toggleVoiceProfileFavorite(profile.id)}>{profile.favorite ? t("saved") : t("favorite")}</button>
+              <button type="button" onClick={() => removeVoiceProfile(profile.id)}>{t("delete")}</button>
+            </div>
           </div>
         )) : <div className="empty-state">{t("noCloneVoices", "上传或录制参考声音，通过试听后会显示在这里。")}</div>}
     </div>
