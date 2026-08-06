@@ -169,6 +169,8 @@ function packagePlan(report) {
         reason: "Automatic Windows setup currently requires winget.",
         plan,
       };
+    if (missing.has("node"))
+      plan.push(["winget", ["install", "--id", "OpenJS.NodeJS.LTS", "--exact"]]);
     if (missing.has("ffmpeg") || missing.has("ffprobe"))
       plan.push(["winget", ["install", "--id", "Gyan.FFmpeg", "--exact"]]);
     if (missing.has("python"))
@@ -247,4 +249,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-if (missing.has("node")) plan.push(["winget", ["install", "--id", "OpenJS.NodeJS.LTS", "--exact"]]);
