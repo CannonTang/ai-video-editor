@@ -49,6 +49,8 @@ The standalone `validate_edit_plan.mjs` checks transport shape only. `project.di
 
 Use [../docs/command-reference.md](../docs/command-reference.md) for required fields and current media-import limits. Do not invent operation types not listed there.
 
+Caption operations must preserve the speech-link invariant. `caption.add` and `caption.update` require a valid `audioClipId` unless the same transaction links the caption to an audible speech clip. Existing source dialogue may be linked directly; Agent-authored text requires a generated or recorded voiceover asset first. Reject unlinking that would leave a visible caption silent, linking to non-speech or silent audio, duplicate voiceover over the transcribed source speech, and caption ranges outside the linked spoken interval.
+
 ## Planned operations
 
 - `caption.generate`

@@ -65,6 +65,8 @@ Write both sibling deliverables for every completed video-editing task:
 
 Planning, diagnosis, and an explicit editor-only handoff are exempt. A completed-video request is not successful when only one artifact exists. Reopen the `.timeline`, verify media links and timeline state, decode the full video, and compare duration, dimensions, frame count, visible effects/captions, and expected audio. Return both absolute paths.
 
+Only when captions are configured, verify one audible linked speech clip covers every visible caption interval. Existing source dialogue may serve as that speech; new Agent-written text must have generated or recorded voiceover. A caption-free edit may be silent, music-led, source-sound-led, or voiced according to the brief. Reject silent text-only captions, orphan `audioClipId` values, duplicate voiceover over source speech, or caption timing that begins before or ends after its spoken content.
+
 ## 8. Reject low-quality completion
 
-Reject delivery for visible shake, tracking drift, subject switching, blur at delivery size, unsafe stabilization crop, generated identity changes, unsupported claims, mistimed emphasis, unreadable captions, decorative effect stacking, or a preview/export mismatch. Technical export success alone is not a quality pass.
+Reject delivery for visible shake, tracking drift, subject switching, blur at delivery size, unsafe stabilization crop, generated identity changes, unsupported claims, mistimed emphasis, unreadable or silent captions, missing caption-to-speech links, decorative effect stacking, or a preview/export mismatch. Technical export success alone is not a quality pass.
