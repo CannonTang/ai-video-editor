@@ -20,6 +20,12 @@ Timeline Studio is a local-first browser video editor plus an Agent Skill for cr
 
 Use it when a user asks an Agent to make a vertical short from images, synchronize captions with narration, prepare localized versions, modify an existing editable project, or verify a browser video-editing workflow.
 
+## What can it produce?
+
+Explore reproducible before/after examples and editing recipes:
+
+→ [AI Video Editing Skills Handbook](https://github.com/MartinDelophy/timeline-studio-handbook)
+
 ## What it can automate
 
 - Inspect, dry-run, and transactionally modify a portable `.timeline` archive through a versioned JSON command plan.
