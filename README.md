@@ -27,6 +27,7 @@ Users are solely responsible for any legal liability arising from violations of 
 
 ## Project updates
 
+- **August 7, 2026 — v0.9.2 cross-platform Agent Skill:** synchronized the complete `edit-timeline-studio` package across GitHub Releases, GitHub Skill installation, skills.sh, Codex, Claude Code, GitHub Copilot, and Gemini CLI. This release adds reference-video reconstruction, highlight and tension shaping, promotion narrative planning, provider-neutral footage sourcing, local model routing, explicit host dependency setup, Chinese/English voiceover preparation, and audio timing and loudness validation.
 - **August 5, 2026 — v0.9.1 Agent Skill:** published the professional auto-editing workflow through skills.sh and GitHub Skill installation. The Skill now classifies raw footage, product/tutorial videos, multi-shot highlights, multi-speaker conversations, and website walkthroughs; plans from multimodal image, speech, OCR, and motion evidence; guides stabilization, tracking, and deliberate enhancement; preserves sentence-level portable voiceover clips; and requires both a verified editable `.timeline` project and rendered video for completed edits.
 - **July 31, 2026 — Face swap:** replace the identity in a selected visual clip with browser-local face detection, tracking, and preview.
 - **July 28, 2026 — v0.8.0:** contributor onboarding and release documentation were refreshed.
@@ -142,7 +143,7 @@ gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent clau
 gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent codex --scope user
 ```
 
-To install the tested release instead of following the latest release, add `--pin v0.9.1`. Preview the Skill before installing with:
+To install the tested release instead of following the latest release, add `--pin v0.9.2`. Preview the Skill before installing with:
 
 ```bash
 gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio
