@@ -1944,6 +1944,7 @@ export function VoiceSynthesisPanel({
 
   const selectAndPlayVoiceSample = (voice, preserveClone = false) => {
     if (!preserveClone) clearSelectedVoiceProfile();
+    if (voice.id !== selectedVoiceId) setSpeed(voice.defaultSpeed ?? 1);
     previousVoiceSampleIdRef.current = voice.id;
     flushSync(() => setSelectedVoiceId(voice.id));
     const player = voiceSampleRef.current;

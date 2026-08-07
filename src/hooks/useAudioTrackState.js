@@ -4,7 +4,7 @@ import { DEFAULT_TIMELINE_DURATION_SECONDS, VOICES } from "../config/editor.js";
 
 export function useAudioTrackState() {
   const [selectedVoiceId, setSelectedVoiceId] = useState(VOICES[0].id);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(VOICES[0].defaultSpeed ?? 1);
   const [volume, setVolume] = useState(1);
   const [audioSegments, setAudioSegments] = useState([]);
   const [selectedAudioSegmentId, setSelectedAudioSegmentId] = useState("");

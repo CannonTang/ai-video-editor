@@ -58,7 +58,7 @@ function normalizeNumbers(text) {
 }
 
 function splitSyllable(syllable) {
-  const match = /^([a-züv:]+)([1-5])$/i.exec(syllable);
+  const match = /^([a-züv:]+)([0-5])$/i.exec(syllable);
   if (!match) return null;
   let base = match[1].toLowerCase().replaceAll("u:", "v").replaceAll("ü", "v");
   const initial = INITIALS.find((candidate) => base.startsWith(candidate)) ?? "Ø";
@@ -69,7 +69,7 @@ function splitSyllable(syllable) {
     else if (final === "uan") final = "van";
     else if (final === "un") final = "vn";
   }
-  return [initial, final, match[2]];
+  return [initial, final, match[2] === "0" ? "5" : match[2]];
 }
 
 export function phonemizeXiaoYa(text, phonemeIdMap) {
@@ -168,12 +168,13 @@ async function loadPinyinVoice(voiceId, onProgress) {
 
 function createPinyinFeeds(input, config) {
   const ids = phonemizeXiaoYa(input.text.trim(), config.phoneme_id_map);
+  const speed = Math.max(0.7, Math.min(1.3, Number(input.speed) || 1));
   return {
     input: new ort.Tensor("int64", BigInt64Array.from(ids, BigInt), [1, ids.length]),
     input_lengths: new ort.Tensor("int64", BigInt64Array.from([ids.length], BigInt), [1]),
     scales: new ort.Tensor("float32", Float32Array.from([
       config.inference.noise_scale,
-      config.inference.length_scale,
+      config.inference.length_scale / speed,
       config.inference.noise_w,
     ]), [3]),
   };

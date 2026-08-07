@@ -15,6 +15,16 @@ const args = new Set(process.argv.slice(2));
 const install = args.has("--install");
 const json = args.has("--json");
 const assumeYes = args.has("--yes");
+const capabilityArgIndex = process.argv.indexOf("--capability");
+const requestedCapability =
+  capabilityArgIndex >= 0 ? process.argv[capabilityArgIndex + 1] : null;
+if (requestedCapability && !manifest.optionalCapabilities?.[requestedCapability]) {
+  console.error(`Unknown capability: ${requestedCapability}`);
+  process.exit(2);
+}
+const capability = requestedCapability
+  ? manifest.optionalCapabilities[requestedCapability]
+  : null;
 const dataRoot =
   process.platform === "win32"
     ? process.env.LOCALAPPDATA || os.homedir()
@@ -26,6 +36,14 @@ const venvPython =
   process.platform === "win32"
     ? path.join(venvDir, "Scripts", "python.exe")
     : path.join(venvDir, "bin", "python");
+const capabilityVenvDir = capability
+  ? path.join(runtimeRoot, capability.runtimeDirectory)
+  : null;
+const capabilityPython = capabilityVenvDir
+  ? process.platform === "win32"
+    ? path.join(capabilityVenvDir, "Scripts", "python.exe")
+    : path.join(capabilityVenvDir, "bin", "python")
+  : null;
 
 function run(command, commandArgs, options = {}) {
   return spawnSync(command, commandArgs, { encoding: "utf8", ...options });
@@ -57,6 +75,73 @@ function compareVersions(actual, minimum) {
     if ((left[index] || 0) < (right[index] || 0)) return false;
   }
   return true;
+}
+
+function compatibleCapabilityPython() {
+  if (!capability) return null;
+  for (const command of ["python3.11", "python3.10", "python3.9", "python3", "python"]) {
+    const detected = commandVersion([command], ["--version"]);
+    if (
+      detected.available &&
+      compareVersions(detected.version, capability.pythonMinimumVersion) &&
+      compareVersions(capability.pythonMaximumVersion, detected.version)
+    )
+      return detected;
+  }
+  return null;
+}
+
+function inspectCapability() {
+  if (!capability) return null;
+  const candidates = [capabilityPython].filter(Boolean);
+  for (const python of candidates) {
+    if (path.isAbsolute(python) && !existsSync(python)) continue;
+    const detected = commandVersion([python], ["--version"]);
+    const inRange =
+      detected.available &&
+      compareVersions(detected.version, capability.pythonMinimumVersion) &&
+      compareVersions(capability.pythonMaximumVersion, detected.version);
+    if (!inRange) continue;
+    const code = [
+      "import importlib, json, pathlib",
+      `items = ${JSON.stringify(capability.imports)}`,
+      "out = []",
+      "for item in items:",
+      "    try:",
+      "        importlib.import_module(item)",
+      "        out.append({'import': item, 'available': True})",
+      "    except Exception as exc:",
+      "        out.append({'import': item, 'available': False, 'error': str(exc)})",
+      "try:",
+      "    import unidic",
+      "    dictionary_ready = pathlib.Path(unidic.DICDIR, 'dicrc').is_file()",
+      "except Exception:",
+      "    dictionary_ready = False",
+      "print(json.dumps({'imports': out, 'dictionaryReady': dictionary_ready}))",
+    ].join("\n");
+    const result = run(python, ["-c", code]);
+    if (result.status !== 0) continue;
+    const details = JSON.parse(result.stdout);
+    return {
+      id: requestedCapability,
+      purpose: capability.purpose,
+      python,
+      version: detected.version,
+      imports: details.imports,
+      dictionaryReady: details.dictionaryReady,
+      satisfied:
+        details.dictionaryReady && details.imports.every((item) => item.available),
+    };
+  }
+  return {
+    id: requestedCapability,
+    purpose: capability.purpose,
+    python: capabilityPython,
+    version: null,
+    imports: capability.imports.map((item) => ({ import: item, available: false })),
+    dictionaryReady: false,
+    satisfied: false,
+  };
 }
 
 function inspect() {
@@ -97,13 +182,18 @@ function inspect() {
     pythonPackages = { python, satisfied: packages.every((item) => item.available), packages };
     if (pythonPackages.satisfied) break;
   }
+  const optionalCapability = inspectCapability();
   return {
     schemaVersion: 1,
     platform: process.platform,
     runtimeRoot,
     commands,
     pythonPackages,
-    satisfied: commands.every((item) => item.satisfied) && pythonPackages.satisfied,
+    optionalCapability,
+    satisfied:
+      commands.every((item) => item.satisfied) &&
+      pythonPackages.satisfied &&
+      (!optionalCapability || optionalCapability.satisfied),
     neverAutomatic: manifest.neverAutomatic,
   };
 }
@@ -126,6 +216,13 @@ function printReport(report) {
   }
   if (!report.pythonPackages.packages.length)
     console.log("✗ Python analysis packages: unavailable");
+  if (report.optionalCapability) {
+    console.log(
+      `${report.optionalCapability.satisfied ? "✓" : "✗"} ${report.optionalCapability.id}: ${report.optionalCapability.satisfied ? "ready" : "unavailable"} — ${report.optionalCapability.purpose}`,
+    );
+    if (!report.optionalCapability.dictionaryReady)
+      console.log("  ✗ UniDic language resources: unavailable");
+  }
   console.log(`Runtime: ${report.runtimeRoot}`);
   console.log(
     report.satisfied
@@ -136,6 +233,7 @@ function printReport(report) {
 
 function packagePlan(report) {
   const missing = new Set(report.commands.filter((item) => !item.satisfied).map((item) => item.id));
+  const capabilityPythonMissing = Boolean(capability && !compatibleCapabilityPython());
   const plan = [];
   if (process.platform === "darwin") {
     if (!commandVersion(["brew"]).available)
@@ -147,6 +245,7 @@ function packagePlan(report) {
     if (missing.has("node")) plan.push(["brew", ["install", "node@22"]]);
     if (missing.has("ffmpeg") || missing.has("ffprobe")) plan.push(["brew", ["install", "ffmpeg"]]);
     if (missing.has("python")) plan.push(["brew", ["install", "python@3.11"]]);
+    else if (capabilityPythonMissing) plan.push(["brew", ["install", "python@3.11"]]);
   } else if (process.platform === "linux") {
     if (!commandVersion(["apt-get"]).available)
       return {
@@ -157,7 +256,11 @@ function packagePlan(report) {
     const packages = [];
     if (missing.has("node")) packages.push("nodejs", "npm");
     if (missing.has("ffmpeg") || missing.has("ffprobe")) packages.push("ffmpeg");
-    if (missing.has("python")) packages.push("python3", "python3-venv", "python3-pip");
+    if (missing.has("python") && capability)
+      packages.push("python3.11", "python3.11-venv", "python3-pip");
+    else if (missing.has("python")) packages.push("python3", "python3-venv", "python3-pip");
+    else if (capabilityPythonMissing)
+      packages.push("python3.11", "python3.11-venv", "python3-pip");
     if (packages.length) {
       plan.push(["sudo", ["apt-get", "update"]]);
       plan.push(["sudo", ["apt-get", "install", "-y", ...packages]]);
@@ -174,6 +277,8 @@ function packagePlan(report) {
     if (missing.has("ffmpeg") || missing.has("ffprobe"))
       plan.push(["winget", ["install", "--id", "Gyan.FFmpeg", "--exact"]]);
     if (missing.has("python"))
+      plan.push(["winget", ["install", "--id", "Python.Python.3.11", "--exact"]]);
+    else if (capabilityPythonMissing)
       plan.push(["winget", ["install", "--id", "Python.Python.3.11", "--exact"]]);
   } else {
     return {
@@ -201,6 +306,13 @@ async function main() {
   console.log(
     `- install pinned packages from ${path.join(skillDir, "host-python-requirements.txt")}`,
   );
+  if (capability) {
+    console.log(`- create isolated ${requestedCapability} environment at ${capabilityVenvDir}`);
+    console.log(
+      `- install pinned packages from ${path.join(skillDir, capability.requirementsFile)}`,
+    );
+    console.log(`- run ${capabilityPython} ${capability.postInstall.join(" ")}`);
+  }
   console.log("Large models, drivers, credentials, and paid services are excluded.");
   if (!assumeYes) {
     if (!process.stdin.isTTY) {
@@ -240,6 +352,34 @@ async function main() {
     { stdio: "inherit" },
   );
   if (result.status !== 0) process.exit(result.status || 1);
+  if (capability) {
+    const detected = compatibleCapabilityPython();
+    if (!detected) {
+      console.error(
+        `${requestedCapability} requires Python ${capability.pythonMinimumVersion}–${capability.pythonMaximumVersion}, but no compatible interpreter is available after installation.`,
+      );
+      process.exit(2);
+    }
+    result = spawnSync(detected.command, ["-m", "venv", capabilityVenvDir], {
+      stdio: "inherit",
+    });
+    if (result.status !== 0) process.exit(result.status || 1);
+    result = spawnSync(
+      capabilityPython,
+      [
+        "-m",
+        "pip",
+        "install",
+        "--disable-pip-version-check",
+        "-r",
+        path.join(skillDir, capability.requirementsFile),
+      ],
+      { stdio: "inherit" },
+    );
+    if (result.status !== 0) process.exit(result.status || 1);
+    result = spawnSync(capabilityPython, capability.postInstall, { stdio: "inherit" });
+    if (result.status !== 0) process.exit(result.status || 1);
+  }
   const after = inspect();
   printReport(after);
   process.exit(after.satisfied ? 0 : 1);
