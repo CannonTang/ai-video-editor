@@ -80,7 +80,11 @@ export function useProjectFiles(deps) {
         });
       deps.markTimelineViewRestored?.(Boolean(captions.length || data.visualSegments?.length || audio || sourceAudio || music));
       deps.setCaptionSegments(captions); deps.setSelectedSegmentId(captions[0]?.id ?? "");
-      deps.setSelectedVoiceId(data.selectedVoiceId || VOICES[0].id); deps.setSpeed(Number(data.speed) || 1);
+      const importedVoice = VOICES.find((voice) => voice.id === data.selectedVoiceId) ?? VOICES[0];
+      deps.setSelectedVoiceId(importedVoice.id);
+      deps.setSpeed(Number.isFinite(Number(data.speed)) && Number(data.speed) > 0
+        ? Number(data.speed)
+        : importedVoice.defaultSpeed ?? 1);
       deps.setVolume(Number(data.volume) || 1); deps.setRatioId(RATIO_OPTIONS.some((option) => option.id === data.ratioId) ? data.ratioId : "16:9");
       deps.setFitMode(data.fitMode || "contain"); deps.setCaptionPosition(data.captionPosition || "bottom");
       deps.setCaptionPlacement(data.captionPlacement || { x: 50, y: 78 }); deps.setCaptionSize(Number(data.captionSize) || 14);

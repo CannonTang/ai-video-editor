@@ -41,6 +41,22 @@
       "purpose": "Local frame decoding, optical flow, shot, look, and repetition evidence"
     }
   ],
+  "optionalCapabilities": {
+    "voiceover": {
+      "runtimeDirectory": "voiceover-python",
+      "pythonMinimumVersion": "3.9.0",
+      "pythonMaximumVersion": "3.11.99",
+      "requirementsFile": "host-voiceover-requirements.txt",
+      "postInstall": ["-m", "unidic", "download"],
+      "imports": ["melo.api", "unidic"],
+      "purpose": "Generate Chinese narration with natural inline English through MeloTTS before picture timing and caption segmentation",
+      "source": {
+        "repository": "https://github.com/myshell-ai/MeloTTS",
+        "revision": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+        "license": "MIT"
+      }
+    }
+  },
   "neverAutomatic": [
     "GPU drivers or operating-system upgrades",
     "large AI model artifacts or model-family caches",

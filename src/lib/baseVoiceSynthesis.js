@@ -36,7 +36,7 @@ export async function synthesizeBaseVoice({ voice, text, speed = 1, onProgress, 
       if (event?.phase === "generating" || event?.backend) onStatus?.(event.backend === "webgpu" ? "ttsStatusGeneratingWebGpu" : "ttsStatusGeneratingWasm");
       if (event?.total) onProgress?.(Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100))));
     };
-    const input = { text: prepared.text, voiceId: voice.id };
+    const input = { text: prepared.text, voiceId: voice.id, speed };
     try { blob = await predictPiperVoice(tts, input, progress); }
     catch (error) {
       if (!isStorageQuotaError(error)) throw error;
