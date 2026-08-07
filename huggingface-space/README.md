@@ -42,4 +42,10 @@ local-first AI video editor. The full editor runs at
 [video-editor.ai-creator.top](https://video-editor.ai-creator.top/), and its
 source is available on [GitHub](https://github.com/MartinDelophy/ai-video-editor).
 
+## What can it produce?
+
+Explore reproducible before/after examples and editing recipes:
+
+→ [AI Video Editing Skills Handbook](https://github.com/MartinDelophy/timeline-studio-handbook)
+
 If this project helps you, please consider giving it a ⭐ Star. If you encounter a problem, please [open an Issue](https://github.com/MartinDelophy/ai-video-editor/issues).
