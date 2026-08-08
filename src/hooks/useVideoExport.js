@@ -18,6 +18,7 @@ import {
   createGeneratedExportMetadata,
   embedGeneratedMediaMetadata,
 } from "../lib/generatedMediaMetadata.js";
+import { filterTimedSegmentsByLaneVisibility } from "../lib/timeline.js";
 
 export function useVideoExport(d) {
   return useCallback(async (options = {}) => {
@@ -133,7 +134,9 @@ export function useVideoExport(d) {
         visualSegments: exportedVisualSegments,
         visualOverlaySegments: exportedOverlaySegments,
       });
-      const voiceAudioSegments = exportAudio && d.trackVisibility.audio ? d.audioSegments : [];
+      const voiceAudioSegments = exportAudio
+        ? filterTimedSegmentsByLaneVisibility(d.audioSegments, d.trackVisibility)
+        : [];
       const visibleVoiceSegments = voiceAudioSegments.filter((segment) => (
         Math.max(0, Number(segment.start) || 0) < exportRange.end
         && Math.max(0, Number(segment.start) || 0) + Math.max(0, Number(segment.duration) || 0) > exportRange.start

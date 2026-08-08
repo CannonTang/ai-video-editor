@@ -1,4 +1,5 @@
 import { saveLanguagePreference } from "../i18n.js";
+import { normalizeVoiceId } from "../config/editor.js";
 import { revokeVisionObjectUrls } from "./editorRuntime.js";
 import { createCaptionSegments } from "./timeline.js";
 
@@ -57,7 +58,7 @@ export function createEditorCommandActions(d) {
     const nextSegments = createCaptionSegments(item.script);
     d.setCaptionSegments(nextSegments);
     d.setSelectedSegmentId(nextSegments[0]?.id ?? "");
-    d.setSelectedVoiceId(item.voiceId);
+    d.setSelectedVoiceId(normalizeVoiceId(item.voiceId));
     d.notify("历史配音已恢复到时间线");
   }
 

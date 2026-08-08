@@ -103,7 +103,7 @@ function inspectCapability() {
       compareVersions(capability.pythonMaximumVersion, detected.version);
     if (!inRange) continue;
     const code = [
-      "import importlib, json, pathlib",
+      "import importlib, json",
       `items = ${JSON.stringify(capability.imports)}`,
       "out = []",
       "for item in items:",
@@ -112,12 +112,7 @@ function inspectCapability() {
       "        out.append({'import': item, 'available': True})",
       "    except Exception as exc:",
       "        out.append({'import': item, 'available': False, 'error': str(exc)})",
-      "try:",
-      "    import unidic",
-      "    dictionary_ready = pathlib.Path(unidic.DICDIR, 'dicrc').is_file()",
-      "except Exception:",
-      "    dictionary_ready = False",
-      "print(json.dumps({'imports': out, 'dictionaryReady': dictionary_ready}))",
+      "print(json.dumps({'imports': out}))",
     ].join("\n");
     const result = run(python, ["-c", code]);
     if (result.status !== 0) continue;
@@ -128,9 +123,7 @@ function inspectCapability() {
       python,
       version: detected.version,
       imports: details.imports,
-      dictionaryReady: details.dictionaryReady,
-      satisfied:
-        details.dictionaryReady && details.imports.every((item) => item.available),
+      satisfied: details.imports.every((item) => item.available),
     };
   }
   return {
@@ -139,7 +132,6 @@ function inspectCapability() {
     python: capabilityPython,
     version: null,
     imports: capability.imports.map((item) => ({ import: item, available: false })),
-    dictionaryReady: false,
     satisfied: false,
   };
 }
@@ -220,8 +212,6 @@ function printReport(report) {
     console.log(
       `${report.optionalCapability.satisfied ? "✓" : "✗"} ${report.optionalCapability.id}: ${report.optionalCapability.satisfied ? "ready" : "unavailable"} — ${report.optionalCapability.purpose}`,
     );
-    if (!report.optionalCapability.dictionaryReady)
-      console.log("  ✗ UniDic language resources: unavailable");
   }
   console.log(`Runtime: ${report.runtimeRoot}`);
   console.log(

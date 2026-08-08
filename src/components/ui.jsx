@@ -2,13 +2,14 @@ import { useEffect, useRef } from "react";
 import { X } from "@phosphor-icons/react";
 import { getWaveformDisplayPeaks, isWaveformPlaceholder } from "../lib/waveform.js";
 
-export function IconButton({ label, children, active = false, disabled = false, onClick }) {
+export function IconButton({ label, children, active = false, disabled = false, onClick, tooltip = false }) {
   return (
     <button
       className={`icon-button ${active ? "is-active" : ""}`}
       type="button"
       aria-label={label}
-      title={label}
+      title={tooltip ? undefined : label}
+      data-tooltip={tooltip ? label : undefined}
       disabled={disabled}
       onClick={onClick}
     >
@@ -17,12 +18,12 @@ export function IconButton({ label, children, active = false, disabled = false, 
   );
 }
 
-export function Popover({ children, onClose, closeLabel = "Close", className = "" }) {
+export function Popover({ children, onClose, closeLabel = "Close", className = "", anchorRef }) {
   const popoverRef = useRef(null);
 
   useEffect(() => {
     const closeOnOutsidePointer = (event) => {
-      if (!popoverRef.current?.contains(event.target)) onClose?.();
+      if (!popoverRef.current?.contains(event.target) && !anchorRef?.current?.contains(event.target)) onClose?.();
     };
     const closeOnEscape = (event) => {
       if (event.key === "Escape") onClose?.();
@@ -33,7 +34,7 @@ export function Popover({ children, onClose, closeLabel = "Close", className = "
       document.removeEventListener("pointerdown", closeOnOutsidePointer, true);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [onClose]);
+  }, [anchorRef, onClose]);
 
   return (
     <div ref={popoverRef} className={`popover ${className}`.trim()} role="dialog">

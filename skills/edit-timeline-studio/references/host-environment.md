@@ -44,21 +44,11 @@ The wrapper prefers the dedicated environment and falls back to a compatible exi
 
 ## Pre-voiceover environment
 
-Before generating any Agent-driven Chinese narration that contains inline English, check the dedicated MeloTTS capability instead of discovering its dependencies during synthesis:
+Agent-driven Chinese and mixed Chinese/English narration uses Timeline Studio's browser-local Kokoro multi-lang v1.1 FP16 sherpa-onnx worker. It needs no separate Python voiceover environment, MeloTTS package, or UniDic installation. Do not run or recommend `--capability voiceover`.
 
-```bash
-node scripts/setup-host.mjs --check --capability voiceover
-```
+The model remains a separately managed large artifact. Use only the owned, immutable Hugging Face and ModelScope voice-model revisions recorded in [voiceover-workflow.md](voiceover-workflow.md), let the editor's service worker own persistent browser caching, and keep the initialized inference worker alive for repeat generations. ModelScope is preferred for Chinese/domestic sessions, Hugging Face is the fallback, and both routes must resolve to one cache identity.
 
-If it is unavailable, show the printed plan and obtain explicit authorization before running:
-
-```bash
-node scripts/setup-host.mjs --install --capability voiceover
-```
-
-This creates a separate `voiceover-python` virtual environment, installs MeloTTS from the immutable upstream revision declared in `host-requirements.json`, downloads UniDic language resources, and verifies `melo.api`, `unidic`, and the installed dictionary. Keep it separate from the media-analysis environment because MeloTTS has a large, tightly coupled Python dependency graph. A successful package-manager exit is not readiness: the capability must pass the doctor before pre-voiceover generation starts.
-
-The runtime install is not permission to download mutable or unapproved voice checkpoints. Resolve MeloTTS model artifacts through an authorized, immutable source and report their license, size, revision, cache path, and provenance before acquisition. Do not let a synthesis call silently fetch an unpinned model. Keep browser OpenVoice V2 as a second-stage timbre converter only; it does not replace MeloTTS as the Chinese-and-English base-speech engine for Agent-driven pre-voiceover.
+The current Agent command layer does not synthesize TTS headlessly. When narration must be generated now, start the local editor and use its AI Voice workflow as the verified UI-only operation, then export and validate the resulting voice clips and portable project. Do not replace this missing adapter with an operating-system voice or an unowned runtime. OpenVoice V2 remains an optional second-stage timbre converter for an explicitly authorized saved clone profile.
 
 ## Platform behavior
 

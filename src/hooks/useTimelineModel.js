@@ -12,6 +12,7 @@ import {
 } from "../config/editor.js";
 import {
   getCaptionTimeline,
+  filterTimedSegmentsByLaneVisibility,
   getSegmentIndexAtTime,
   getTimedSegmentIndexAtTime,
   getTimedSegmentsEnd,
@@ -238,7 +239,7 @@ export function useTimelineModel(d) {
     previewVisualSrc && d.trackVisibility.image && d.imageDuration > 0,
   );
   const hasPlayableAudioTimeline = Boolean(
-    (d.trackVisibility.audio && audioBlob && audioUrl) ||
+    (filterTimedSegmentsByLaneVisibility(d.audioSegments, d.trackVisibility).length && audioBlob && audioUrl) ||
     (d.trackVisibility.source && d.sourceAudioBlob && d.sourceAudioUrl) ||
     (d.trackVisibility.music && d.musicBlob && d.musicUrl),
   );

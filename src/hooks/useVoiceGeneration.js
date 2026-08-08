@@ -1,7 +1,9 @@
 import { useCallback } from "react";
 import { isModelDownloadError } from "../lib/modelSources.js";
 import { isPiperSymbolError, isStorageQuotaError, TtsInputError } from "../lib/ttsText.js";
-import { applyVoiceOutputGain, convertVoiceBlob } from "../lib/openVoiceRuntime.js";
+import {
+  applyVoiceOutputGain, convertVoiceBlob, extractVoiceEmbedding, OPENVOICE_EMBEDDING_VERSION,
+} from "../lib/openVoiceRuntime.js";
 import { synthesizeBaseVoice } from "../lib/baseVoiceSynthesis.js";
 
 export function useVoiceGeneration(d) {
@@ -18,7 +20,24 @@ export function useVoiceGeneration(d) {
       if (d.selectedVoiceProfile?.embedding) {
         d.setStatusText(d.t("cloneStageTwo", "第 2 步：转换为克隆音色"));
         d.setProgress(0);
-        blob = await convertVoiceBlob(blob, d.selectedVoiceProfile.embedding, {
+        let targetEmbedding = d.selectedVoiceProfile.embedding;
+        if (
+          d.selectedVoiceProfile.embeddingVersion !== OPENVOICE_EMBEDDING_VERSION
+          && d.selectedVoiceProfile.referenceBlob
+        ) {
+          d.setStatusText(d.t("cloneEncoding", "重新提取音色"));
+          targetEmbedding = await extractVoiceEmbedding(d.selectedVoiceProfile.referenceBlob, (event) => {
+            if (event.phase) d.setStatusText(event.phase);
+            if (Number.isFinite(event.progress)) d.setProgress(Math.max(1, Math.min(45, Math.round(event.progress * 0.45))));
+          });
+          await d.addVoiceProfile?.({
+            ...d.selectedVoiceProfile,
+            embedding: Float32Array.from(targetEmbedding),
+            embeddingVersion: OPENVOICE_EMBEDDING_VERSION,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        blob = await convertVoiceBlob(blob, targetEmbedding, {
           seed: 2026,
           onProgress: (event) => {
             d.setStatusText(event.phase || d.t("cloneStageTwo", "第 2 步：转换为克隆音色"));

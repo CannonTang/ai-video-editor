@@ -52,7 +52,7 @@ import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL
 import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
 import { Popover } from "./ui.jsx";
 import { SubjectEffectsWorkspace } from "./SubjectEffectsPanel.jsx";
-import { convertVoiceBlob, extractVoiceEmbedding } from "../lib/openVoiceRuntime.js";
+import { convertVoiceBlob, extractVoiceEmbedding, OPENVOICE_EMBEDDING_VERSION } from "../lib/openVoiceRuntime.js";
 import { getVoiceCloneTestSentence, synthesizeBaseVoice } from "../lib/baseVoiceSynthesis.js";
 
 export function LanguageIntro({ t, closing, onChoose }) {
@@ -65,21 +65,11 @@ export function LanguageIntro({ t, closing, onChoose }) {
           <span />
         </div>
         <div className="language-intro-heading">
-          <p>{t("languageKicker")}</p>
-          <a
-            className="language-intro-badge"
-            href="https://toolindex.net/tools/timeline-studio?ref=badge"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Timeline Studio — Top 10 Video on Tool Index (opens in a new tab)"
-          >
-            <img
-              src="https://toolindex.net/badge/timeline-studio/score.svg"
-              alt="Timeline Studio - Top 10 Video on Tool Index"
-              width="200"
-              height="60"
-            />
-          </a>
+          <img src="/icons/timeline-studio-icon.svg" alt="" />
+          <span>
+            <strong>Timeline Studio</strong>
+            <small>{t("languageKicker")}</small>
+          </span>
         </div>
         <h1>
           <span className="language-title-en">Choose interface language</span>
@@ -97,7 +87,7 @@ export function LanguageIntro({ t, closing, onChoose }) {
             </button>
           ))}
         </div>
-        <small>{t("languageSaved")}</small>
+        <small className="language-intro-footnote">{t("languageSaved")}</small>
       </div>
     </div>
   );
@@ -2035,7 +2025,6 @@ export function VoiceSynthesisPanel({
               <strong>{profile.name}</strong>
               <em>{t("cloneVoiceMultilingual", "多语言 · 克隆音色")}</em>
             </span>
-            <small>{t("cloneVoiceBadge", "克隆")}</small>
           </button>
         ))}
         {filteredVoices.map((voice) => (
@@ -2045,8 +2034,8 @@ export function VoiceSynthesisPanel({
             key={voice.id}
             onClick={() => selectAndPlayVoiceSample(voice)}
           >
-            <span className="avatar">
-              <MicrophoneStage size={17} weight="fill" />
+            <span className="avatar voice-avatar" aria-hidden="true">
+              <img src={voice.avatarUrl} alt="" loading="lazy" />
             </span>
             <span>
               <strong>{voice.name}</strong>
@@ -2054,7 +2043,6 @@ export function VoiceSynthesisPanel({
                 {voice.language} · {voice.gender}
               </em>
             </span>
-            <small>{voice.badge}</small>
           </button>
         ))}
       </div>
@@ -2208,6 +2196,7 @@ export function MyVoicesPanel({
     const now = new Date().toISOString();
     const profile = { id: crypto.randomUUID(), name: draft.name.replace(/\.[^.]+$/, "") || t("myCloneVoice", "我的克隆声音"),
       sourceKind: draft.sourceKind, referenceBlob: draft.blob, testBlob, embedding: Float32Array.from(embedding),
+      embeddingVersion: OPENVOICE_EMBEDDING_VERSION,
       favorite: false, authorized: true, createdAt: now, updatedAt: now };
     await addVoiceProfile(profile); setSelectedVoiceProfileId(profile.id); setDraft(null); setTestBlob(null); setEmbedding(null); setAuthorized(false); setCloneState("idle");
     notify(t("cloneSaved", "克隆声音已保存到“克隆声音”"));

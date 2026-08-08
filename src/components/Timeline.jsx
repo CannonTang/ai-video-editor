@@ -36,10 +36,11 @@ import {
   TextT,
   Trash,
   Waveform,
+  X,
 } from "@phosphor-icons/react";
 
 import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, MAX_TIMELINE_DURATION_SECONDS, TRANSITIONS } from "../config/editor.js";
-import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
+import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getTimedSegmentLaneStateKey, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
 import { createMainVisualFromOverlay } from "../lib/visualOverlayTimeline.js";
 import {
@@ -177,6 +178,8 @@ export function Timeline({
   alignCaptionToAudio,
   linkCaptionAudio,
   unlinkCaptionAudio,
+  linkAllCaptionAudio,
+  unlinkAllCaptionAudio,
   alignAudioCaptions,
   linkAudioToCaption,
   unlinkAudioCaptions,
@@ -240,7 +243,6 @@ export function Timeline({
   setSelectedSegmentId,
   captionTargetDuration,
   sourceAudioLinked,
-  setSourceAudioLinked,
   linkedSourceAudioSegments,
   sourceAudioBlob,
   sourceAudioPeaks,
@@ -351,12 +353,12 @@ export function Timeline({
   };
   const selectTimelineRangeFromClip = (track, id) => {
     if (!isTimelineClipVisible(track, id)) return;
-    if (trackLocks[track]) return;
+    if (isTimelineClipLocked(track, id)) return;
     const anchor = timelineSelectableClips.find((clip) => clip.track === track && clip.id === id);
     if (!anchor) return;
     const next = new Set(
       timelineSelectableClips
-        .filter((clip) => !trackLocks[clip.track])
+        .filter((clip) => !isTimelineClipLocked(clip.track, clip.id))
         .filter((clip) => isTimelineClipVisible(clip.track, clip.id))
         .filter((clip) => timelineSelectionMode === "left" ? clip.start <= anchor.start : clip.start >= anchor.start)
         .map((clip) => timelineSelectionKey(clip.track, clip.id)),
@@ -373,7 +375,7 @@ export function Timeline({
   };
   const toggleTimelineClipInSelection = (track, id) => {
     if (!isTimelineClipVisible(track, id)) return;
-    if (trackLocks[track]) {
+    if (isTimelineClipLocked(track, id)) {
       notify(t("timelineLockedSelectionSkipped", "锁定轨道中的片段不能加入多选"));
       return;
     }
@@ -399,13 +401,13 @@ export function Timeline({
   };
   const startTimelineRangeDrag = (event, track, id, { toggleOnClick = false } = {}) => {
     if (!isTimelineClipVisible(track, id)) return false;
-    if (trackLocks[track]) return false;
+    if (isTimelineClipLocked(track, id)) return false;
     if (event.button !== 0 || timelineSelectionMode !== "select" || timelineRangeSelection.size < 2) return false;
     const pressedKey = timelineSelectionKey(track, id);
     if (!timelineRangeSelection.has(pressedKey)) return false;
     const selectedClips = timelineSelectableClips.filter((clip) =>
       timelineRangeSelection.has(timelineSelectionKey(clip.track, clip.id))
-      && !trackLocks[clip.track]
+      && !isTimelineClipLocked(clip.track, clip.id)
       && isTimelineClipVisible(clip.track, clip.id));
     if (selectedClips.length < 2) return false;
     event.preventDefault();
@@ -594,6 +596,12 @@ export function Timeline({
   const selectedMobileHasLinkedCaption = selectedMobileClipTrack === "caption"
     ? Boolean(selectedMobileCaptionSegment?.audioSegmentId)
     : selectedMobileAudioHasLinkedCaption;
+  const availableAudioIds = useMemo(() => new Set(audioSegments.map((segment) => segment.id)), [audioSegments]);
+  const batchLinkableCaptions = displayedCaptionSegments.filter((caption) => (
+    availableAudioIds.has(caption.audioSegmentId) || availableAudioIds.has(caption.detachedAudioSegmentId)
+  ));
+  const allBatchCaptionsLinked = batchLinkableCaptions.length > 0
+    && batchLinkableCaptions.every((caption) => availableAudioIds.has(caption.audioSegmentId));
   const canExtractSelectedMobileSourceAudio = selectedMobileVisualSegment?.type === "video"
     && !Number.isFinite(selectedMobileVisualSegment.sourceAudioOffset);
   const mobileClipActionIds = getMobileClipActionIds(selectedMobileClipTrack, {
@@ -704,6 +712,16 @@ export function Timeline({
       ? displayedCaptionSegments.find((segment) => segment.id === activeTimelineClipDrag.segmentId)
       : null;
   const packedAudioLanes = useMemo(() => packTimedSegmentsIntoLanes(audioSegments), [audioSegments]);
+  const getTimelineClipLockKey = (track, id) => track === "audio"
+    ? getTimedSegmentLaneStateKey(audioSegments, id)
+    : track;
+  const isTimelineRowLocked = (track, lockKey = track) => Boolean(
+    trackLocks[track] || (lockKey !== track && trackLocks[lockKey]),
+  );
+  const isTimelineClipLocked = (track, id) => isTimelineRowLocked(
+    track,
+    getTimelineClipLockKey(track, id),
+  );
   const showVoiceTrack = audioSegments.length > 0 || draggedAssetType === "audio";
   const audioLanes = showVoiceTrack ? (audioSegments.length ? packedAudioLanes : [[]]) : [];
   const stickerLanes = useMemo(
@@ -752,10 +770,13 @@ export function Timeline({
     ...(showStickerTrack ? stickerLanes.map((_, index) => ["sticker", `${t("stickerTrack")} ${index + 1}`, `sticker-${index}`]) : []),
     ...captionLanes.map((_, index) => ["caption", `${t("caption")} ${index + 1}`, `caption-${index}`, `caption-${index}`]),
     ...(showSourceTrack ? [["source", t("sourceTrack")]] : []),
-    ...audioLanes.map((_, index) => ["audio", `${t("voiceTrack")} ${index + 1}`, `audio-${index}`]),
+    ...audioLanes.map((_, index) => ["audio", `${t("voiceTrack")} ${index + 1}`, `audio-${index}`, `audio-${index}`, `audio-${index}`]),
     ...(showMusicTrack ? [["music", t("musicTrack")]] : []),
   ];
-  const isRowVisible = (track) => trackVisibility[track] ?? true;
+  const isRowVisible = (track) => {
+    const baseTrack = track.replace(/-\d+$/, "");
+    return trackVisibility[baseTrack] !== false && trackVisibility[track] !== false;
+  };
   const getTimelineRowVisibility = (track, visibilityKey = track) => {
     if (track !== "overlay") return isRowVisible(visibilityKey);
     const laneIndex = Number(String(visibilityKey).replace(/^overlay-/, ""));
@@ -779,13 +800,13 @@ export function Timeline({
     }
     toggleTrackVisibility(visibilityKey);
   };
-  const toggleTimelineRowLock = (track) => {
-    if (!trackLocks[track]) {
+  const toggleTimelineRowLock = (track, lockKey = track) => {
+    if (!isTimelineRowLocked(track, lockKey)) {
       setTimelineRangeSelection((current) => new Set(
         [...current].filter((key) => !key.startsWith(`${track}:`)),
       ));
     }
-    toggleTrackLock(track);
+    toggleTrackLock(lockKey);
   };
   const [rulerViewport, setRulerViewport] = useState({
     scrollLeft: 0,
@@ -877,7 +898,7 @@ export function Timeline({
     if (track === "source" && segmentId) setSelectedSourceAudioSegmentId(segmentId);
     if (track === "music" && segmentId) setSelectedMusicSegmentId?.(segmentId);
   };
-  const showTrackContextMenu = (event, track, segmentId = "", visibilityKey = track) => {
+  const showTrackContextMenu = (event, track, segmentId = "", visibilityKey = track, lockKey = track) => {
     event.preventDefault(); event.stopPropagation();
     selectContextTarget(track, segmentId);
     if (segmentId && window.matchMedia?.("(max-width: 760px)").matches) {
@@ -893,7 +914,7 @@ export function Timeline({
     setContextMenu({
       x: Math.max(10, Math.min(window.innerWidth - 234, event.clientX)),
       y: Math.max(10, Math.min(window.innerHeight - 258, event.clientY)),
-      track, visibilityKey, segmentId, targetTime, kind: segmentId ? "clip" : "track",
+      track, visibilityKey, lockKey, segmentId, targetTime, kind: segmentId ? "clip" : "track",
     });
   };
   const runContextAction = (action) => {
@@ -1587,13 +1608,15 @@ export function Timeline({
       window.removeEventListener("pointercancel", handlePointerEnd, { capture: true });
     };
   }, [trackScrollRef]);
-  const renderAssetDropSlot = (track) =>
-    assetDropTargetTrack === track ? (
+  const renderAssetDropSlot = (track) => {
+    const dropPercent = assetDropPosition?.track === track ? assetDropPosition.percent : 50;
+    return assetDropTargetTrack === track ? <>
+      {track !== "image" ? <i className="asset-drop-position-marker" style={{ "--drop-x": `${dropPercent}%` }} /> : null}
       <div
         className={`asset-drop-slot type-${assetDragPreview?.type || "asset"} mode-${track} ${
           assetDragPreview?.src ? "has-thumb" : ""
         }`}
-        style={{ "--drop-x": `${assetDropPosition?.track === track ? assetDropPosition.percent : 50}%` }}
+        style={{ "--drop-x": `${dropPercent}%` }}
       >
         {assetDragPreview?.src ? (
           <div className="asset-drop-slot-thumb">
@@ -1619,7 +1642,8 @@ export function Timeline({
               : t("assetImage")}
         </strong>
       </div>
-    ) : null;
+    </> : null;
+  };
   const renderStickerTrack = (lane, laneIndex) =>
     showStickerTrack ? (
       <div
@@ -1932,19 +1956,19 @@ export function Timeline({
     }}>
       <div className="timeline-tools">
         <div className="timeline-icon-group">
-          <IconButton label={t("undo")} onClick={undo}>
+          <IconButton label={t("undo")} tooltip onClick={undo}>
             <ArrowCounterClockwise size={17} />
           </IconButton>
-          <IconButton label={t("redo")} onClick={redo}>
+          <IconButton label={t("redo")} tooltip onClick={redo}>
             <ArrowClockwise size={17} />
           </IconButton>
-          <IconButton label={t("deleteTrack")} onClick={handleDeleteTrack}>
+          <IconButton label={t("deleteTrack")} tooltip onClick={handleDeleteTrack}>
             <Trash size={17} />
           </IconButton>
-          <IconButton label={t("duplicateTrack")} onClick={handleDuplicateTrack}>
+          <IconButton label={t("duplicateTrack")} tooltip onClick={handleDuplicateTrack}>
             <CopySimple size={17} />
           </IconButton>
-          <IconButton label={t("cutSegment")} onClick={handleCutTrack}>
+          <IconButton label={t("cutSegment")} tooltip onClick={handleCutTrack}>
             <Scissors size={17} />
           </IconButton>
           <div className={`timeline-selection-tool ${timelineSelectionMenuOpen ? "is-open" : ""}`}>
@@ -1953,6 +1977,7 @@ export function Timeline({
               type="button"
               className={`timeline-selection-trigger ${timelineSelectionMode !== "select" ? "is-active" : ""}`}
               aria-label={t("timelineSelectionTools", "选择工具")}
+              data-tooltip={t("timelineSelectionTools", "选择工具")}
               aria-haspopup="menu"
               aria-expanded={timelineSelectionMenuOpen}
               onClick={() => setTimelineSelectionMenuOpen((open) => !open)}
@@ -1997,16 +2022,14 @@ export function Timeline({
             ), document.body) : null}
           </div>
           <IconButton
-            label={t(sourceAudioLinked ? "unlinkSourceAudio" : "linkSourceAudio")}
-            active={sourceAudioLinked}
-            disabled={!sourceAudioBlob}
-            onClick={() => setSourceAudioLinked((linked) => !linked)}
+            label={t(allBatchCaptionsLinked ? "captionUnlinkAudio" : "captionLinkAudio")}
+            tooltip
+            active={allBatchCaptionsLinked}
+            disabled={!batchLinkableCaptions.length}
+            onClick={allBatchCaptionsLinked ? unlinkAllCaptionAudio : linkAllCaptionAudio}
           >
-            {sourceAudioLinked ? <LinkSimple size={17} weight="bold" /> : <LinkBreak size={17} />}
+            {allBatchCaptionsLinked ? <LinkBreak size={17} weight="bold" /> : <LinkSimple size={17} weight="bold" />}
           </IconButton>
-          {sourceAudioBlob ? <span className={`timeline-sync-readout ${sourceAudioLinked ? "is-linked" : ""}`}>
-            {t(sourceAudioLinked ? "sourceAudioSynced" : "sourceAudioIndependent")}
-          </span> : null}
         </div>
         <div className="timeline-segment-tools">
           <button className="timeline-play-button" type="button" disabled={!canPreview} onClick={handlePlayToggle}>
@@ -2078,15 +2101,16 @@ export function Timeline({
           </div>
         </div>
         <div className="track-labels" style={{ gridTemplateRows: timelineLabelRows }}>
-          {timelineTrackLabels.map(([track, label, rowId = track, visibilityKey = track]) => {
+          {timelineTrackLabels.map(([track, label, rowId = track, visibilityKey = track, lockKey = track]) => {
             const rowVisible = getTimelineRowVisibility(track, visibilityKey);
+            const rowLocked = isTimelineRowLocked(track, lockKey);
             return (
               <div
                 className={`${selectedTrack === track && rowVisible ? "is-selected" : ""} ${
                   !rowVisible ? "is-track-disabled" : ""
-                } ${trackLocks[track] ? "is-track-locked" : ""}`}
+                } ${rowLocked ? "is-track-locked" : ""}`}
                 key={rowId}
-                onContextMenu={rowVisible ? (event) => showTrackContextMenu(event, track, "", visibilityKey) : undefined}
+                onContextMenu={rowVisible ? (event) => showTrackContextMenu(event, track, "", visibilityKey, lockKey) : undefined}
               >
               <button
                 type="button"
@@ -2101,14 +2125,14 @@ export function Timeline({
               <button
                 type="button"
                 aria-label={`${label} ${t("lock")}`}
-                aria-pressed={Boolean(trackLocks[track])}
+                aria-pressed={rowLocked}
                 disabled={!rowVisible}
                 onClick={(event) => {
                   event.stopPropagation();
-                  toggleTimelineRowLock(track);
+                  toggleTimelineRowLock(track, lockKey);
                 }}
               >
-                {trackLocks[track] ? <LockKey size={15} /> : <LockKeyOpen size={15} />}
+                {rowLocked ? <LockKey size={15} /> : <LockKeyOpen size={15} />}
               </button>
               <button className="track-name-button" type="button" disabled={!rowVisible} onClick={() => setSelectedTrack(track)}>
                 {label}
@@ -2561,22 +2585,26 @@ export function Timeline({
                 </div>
               ) : null}
             </button> : null}
-            {audioLanes.map((lane, laneIndex) => (
+            {audioLanes.map((lane, laneIndex) => {
+              const rowKey = `audio-${laneIndex}`;
+              const rowVisible = isRowVisible(rowKey);
+              const rowLocked = isTimelineRowLocked("audio", rowKey);
+              return (
               <button
                 className={`audio-track ${selectedTrack === "audio" ? "is-selected" : ""} ${
-                  !isRowVisible("audio") ? "is-track-disabled" : ""
-                } ${trackLocks.audio ? "is-track-locked" : ""} ${
+                  !rowVisible ? "is-track-disabled" : ""
+                } ${rowLocked ? "is-track-locked" : ""} ${
                   laneIndex === 0 && assetDropTargetTrack === "audio" ? "is-drop-target" : ""
                 } ${laneIndex === 0 && assetDropPulseTrack === "audio" ? "is-drop-landing" : ""}`}
                 type="button"
-                disabled={!isRowVisible("audio")}
+                disabled={!rowVisible}
                 key={`audio-lane-${laneIndex}`}
                 onClick={(event) => selectTimelineTrackBackground(event, "audio")}
                 onDragOver={(event) => laneIndex === 0 && handleTrackAssetDragOver(event, "audio")}
                 onDragLeave={(event) => laneIndex === 0 && handleTrackAssetDragLeave(event, "audio")}
                 onDrop={(event) => laneIndex === 0 && handleTrackAssetDrop(event, "audio")}
                 data-asset-drop-track={laneIndex === 0 ? "audio" : undefined}
-                onContextMenu={(event) => showTrackContextMenu(event, "audio")}
+                onContextMenu={(event) => showTrackContextMenu(event, "audio", "", rowKey, rowKey)}
               >
                 {laneIndex === 0 && assetDropTargetTrack === "audio" ? (
                     <div className="track-drop-hint">{t("dropVoiceHere")}</div>
@@ -2613,7 +2641,8 @@ export function Timeline({
                     );
                   })}
               </button>
-            ))}
+              );
+            })}
             {showMusicTrack ? <button
               className={`audio-track music-track ${selectedTrack === "music" ? "is-selected" : ""} ${
                 !trackVisibility.music ? "is-track-disabled" : ""
@@ -2761,7 +2790,7 @@ export function Timeline({
             <>
               {["image", "caption"].includes(contextMenu.track) ? <button type="button" role="menuitem" onClick={() => runContextAction(() => handleAddSegment(contextMenu.targetTime))}><PlusCircle size={16} />{t("addClip")}</button> : null}
               <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track))}>{getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? <EyeSlash size={16} /> : <Eye size={16} />}{t(getTimelineRowVisibility(contextMenu.track, contextMenu.visibilityKey || contextMenu.track) ? "hideTrack" : "showTrack")}</button>
-              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowLock(contextMenu.track))}>{trackLocks[contextMenu.track] ? <LockKeyOpen size={16} /> : <LockKey size={16} />}{t(trackLocks[contextMenu.track] ? "unlockTrack" : "lockTrack")}</button>
+              <button type="button" role="menuitem" onClick={() => runContextAction(() => toggleTimelineRowLock(contextMenu.track, contextMenu.lockKey || contextMenu.track))}>{isTimelineRowLocked(contextMenu.track, contextMenu.lockKey || contextMenu.track) ? <LockKeyOpen size={16} /> : <LockKey size={16} />}{t(isTimelineRowLocked(contextMenu.track, contextMenu.lockKey || contextMenu.track) ? "unlockTrack" : "lockTrack")}</button>
             </>
           )}
         </div>
@@ -2772,7 +2801,7 @@ export function Timeline({
         const maxDuration = Math.max(0.1, Math.min(2, (segment?.duration || 0.5) / 2, (displayedVisualSegments[transitionEditor.index + 1]?.duration || 0.5) / 2));
         return (
           <div className="transition-popover" role="dialog" aria-label={t("transitionSettings")} style={{ left: transitionEditor.x, top: transitionEditor.y }} onPointerDown={(event) => event.stopPropagation()}>
-            <div className="transition-popover-head"><strong>{t("transition")}</strong><button type="button" onClick={() => setTransitionEditor(null)} aria-label={t("close")}>×</button></div>
+            <div className="transition-popover-head"><strong>{t("transition")}</strong><button type="button" onClick={() => setTransitionEditor(null)} aria-label={t("close")}><X size={17} /></button></div>
             <div className="transition-presets">
               {TRANSITIONS.map((option) => (
                 <button type="button" className={transition.id === option.id ? "is-selected" : ""} key={option.id} onClick={() => updateJunctionTransition(transitionEditor.index, { id: option.id })}>

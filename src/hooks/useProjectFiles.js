@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { DEFAULT_SCRIPT, DEFAULT_TIMELINE_DURATION_SECONDS, RATIO_OPTIONS, VOICES } from "../config/editor.js";
+import { DEFAULT_SCRIPT, DEFAULT_TIMELINE_DURATION_SECONDS, normalizeVoiceId, RATIO_OPTIONS, VOICES } from "../config/editor.js";
 import { decodeWaveform, downloadBlob } from "../lib/media.js";
 import { createProjectArchive, readProjectArchive, readProjectFileAsText, resolveProjectVisualMedia } from "../lib/projectArchive.js";
 import { createCaptionSegments, getImageThumbnailCount, getVisualSegmentsTotal } from "../lib/timeline.js";
@@ -80,7 +80,7 @@ export function useProjectFiles(deps) {
         });
       deps.markTimelineViewRestored?.(Boolean(captions.length || data.visualSegments?.length || audio || sourceAudio || music));
       deps.setCaptionSegments(captions); deps.setSelectedSegmentId(captions[0]?.id ?? "");
-      const importedVoice = VOICES.find((voice) => voice.id === data.selectedVoiceId) ?? VOICES[0];
+      const importedVoice = VOICES.find((voice) => voice.id === normalizeVoiceId(data.selectedVoiceId)) ?? VOICES[0];
       deps.setSelectedVoiceId(importedVoice.id);
       deps.setSpeed(Number.isFinite(Number(data.speed)) && Number(data.speed) > 0
         ? Number(data.speed)

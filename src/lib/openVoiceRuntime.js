@@ -1,6 +1,7 @@
 let worker;
 const pending = new Map();
 const SAMPLE_RATE = 22050;
+export const OPENVOICE_EMBEDDING_VERSION = 2;
 
 function getWorker() {
   if (!worker) {

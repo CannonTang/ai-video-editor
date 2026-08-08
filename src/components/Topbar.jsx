@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
@@ -62,6 +63,9 @@ export function Topbar({
   handleImportProject,
   projectFileInputRef,
 }) {
+  const exportAnchorRef = useRef(null);
+  const settingsAnchorRef = useRef(null);
+
   return (
     <header className="topbar">
       <div className="project-cluster">
@@ -186,14 +190,20 @@ export function Topbar({
           {isPlaying ? <Pause size={16} weight="fill" /> : <Play size={16} weight="fill" />}
           {t("preview")}
         </button>
-        <div className="menu-anchor">
-          <button className="export-button" type="button" disabled={exporting} onClick={() => setShowExportMenu((open) => !open)}>
+        <div className="menu-anchor" ref={exportAnchorRef}>
+          <button
+            className="export-button"
+            type="button"
+            aria-expanded={showExportMenu}
+            disabled={exporting}
+            onClick={() => setShowExportMenu((open) => !open)}
+          >
             <FileArrowDown size={17} weight="bold" />
             {exporting ? t("exporting") : t("exportVideo")}
             {!exporting ? <CaretDown size={13} weight="bold" /> : null}
           </button>
           {showExportMenu ? (
-            <Popover className="export-settings-popover" closeLabel={t("close")} onClose={() => setShowExportMenu(false)}>
+            <Popover anchorRef={exportAnchorRef} className="export-settings-popover" closeLabel={t("close")} onClose={() => setShowExportMenu(false)}>
               <ExportSettingsPanel
                 t={t}
                 ratio={ratio}
@@ -207,12 +217,12 @@ export function Topbar({
             </Popover>
           ) : null}
         </div>
-        <div className="menu-anchor">
+        <div className="menu-anchor" ref={settingsAnchorRef}>
           <IconButton label={t("settings")} active={showSettings} onClick={() => setShowSettings((open) => !open)}>
             <GearSix size={19} />
           </IconButton>
           {showSettings ? (
-            <Popover closeLabel={t("close")} onClose={() => setShowSettings(false)}>
+            <Popover anchorRef={settingsAnchorRef} closeLabel={t("close")} onClose={() => setShowSettings(false)}>
               <div className="settings-panel">
                 <strong>{t("exportSettings")}</strong>
                 <label>

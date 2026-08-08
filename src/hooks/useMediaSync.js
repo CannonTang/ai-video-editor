@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, shouldCorrectPreviewMediaTime } from "../lib/editorRuntime.js";
 import { getLinkedSourceAudioState } from "../lib/sourceAudioSync.js";
+import { isTimedSegmentLaneVisible } from "../lib/timeline.js";
 
 export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTime, playbackRate = 1 }) {
   if (!media) return;
@@ -20,11 +21,11 @@ export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTi
   }
 }
 
-export function syncVoiceAudioSegments({ segments, refs, timelineTime, isPlaying, audible }) {
+export function syncVoiceAudioSegments({ segments, refs, timelineTime, isPlaying, visibility }) {
   segments.forEach((segment) => {
     const audio = refs.current.get(segment.id);
     if (!audio) return;
-    if (!isPlaying || !audible) {
+    if (!isPlaying || !isTimedSegmentLaneVisible(segments, segment.id, visibility)) {
       if (!audio.paused) audio.pause();
       return;
     }
@@ -43,9 +44,9 @@ export function useMediaSync(d) {
       refs: d.audioSegmentRefs,
       timelineTime: d.currentTime,
       isPlaying: d.isPlaying,
-      audible: d.trackVisibility?.audio !== false,
+      visibility: d.trackVisibility,
     });
-  }, [d.audioSegments, d.currentTime, d.isPlaying, d.trackVisibility.audio]);
+  }, [d.audioSegments, d.currentTime, d.isPlaying, d.trackVisibility]);
   useEffect(() => { if (d.sourceAudioRef.current) d.sourceAudioRef.current.volume = d.sourceAudioVolume; }, [d.sourceAudioVolume, d.sourceAudioUrl]);
   useEffect(() => {
     const a = d.sourceAudioRef.current; if (!a || !d.sourceAudioUrl) return;

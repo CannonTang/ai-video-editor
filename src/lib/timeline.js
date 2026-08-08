@@ -175,6 +175,31 @@ export function packTimedSegmentsIntoLanes(segments, { preferredLaneKey = "" } =
   return lanes.length ? lanes : [[]];
 }
 
+export function getTimedSegmentLaneStateKey(segments, segmentId, track = "audio") {
+  const laneIndex = packTimedSegmentsIntoLanes(segments).findIndex((lane) => (
+    lane.some((segment) => String(segment.id) === String(segmentId))
+  ));
+  return laneIndex >= 0 ? `${track}-${laneIndex}` : track;
+}
+
+export function isTimedSegmentLaneVisible(segments, segmentId, visibility, track = "audio") {
+  if (visibility?.[track] === false) return false;
+  return visibility?.[getTimedSegmentLaneStateKey(segments, segmentId, track)] !== false;
+}
+
+export function isTimedSegmentLaneLocked(segments, segmentId, locks, track = "audio") {
+  if (locks?.[track] === true) return true;
+  return locks?.[getTimedSegmentLaneStateKey(segments, segmentId, track)] === true;
+}
+
+export function filterTimedSegmentsByLaneVisibility(segments, visibility, track = "audio") {
+  if (visibility?.[track] === false) return [];
+  const lanes = packTimedSegmentsIntoLanes(segments);
+  return lanes.flatMap((lane, laneIndex) => (
+    visibility?.[`${track}-${laneIndex}`] === false ? [] : lane
+  ));
+}
+
 export function packCaptionSegmentsIntoLanes(segments, timeline) {
   const lanes = [];
   segments

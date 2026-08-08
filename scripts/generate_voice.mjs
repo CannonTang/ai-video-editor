@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { env as transformersEnv, RawAudio } from "@huggingface/transformers";
 import { KokoroTTS, TextSplitterStream } from "kokoro-js";
 
-const HUGGING_FACE_REVISION = "f6aa4cf8fb440352b9f36c637dd310d047011e52";
-const MODELSCOPE_REVISION = "14a0656f5a111a0052dfca586fbe2ceb18b54adf";
+const HUGGING_FACE_REVISION = "8471955b41238ec0b231d0e3e8e3ac852be6652b";
+const MODELSCOPE_REVISION = "e0fc307e4890369527cadd10ed4f6af81fd085b3";
 const MODEL_PATH = "kokoro";
 
 function parseArgs(argv) {

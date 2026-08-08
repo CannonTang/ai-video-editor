@@ -40,8 +40,11 @@ const MIRRORED_REPOSITORIES = new Set([
 ]);
 const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
-const VOICE_MODEL_HUGGING_FACE_REVISION = "d9e0542e0e4e8fcfb849240f7e8e7fa8147df1a3";
-const VOICE_MODEL_MODELSCOPE_REVISION = "226b24270b69b38781a35566c7d442061f9e3b81";
+const PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISION = "8471955b41238ec0b231d0e3e8e3ac852be6652b";
+const VOICE_MODEL_HUGGING_FACE_REVISION = "b5ea1e4dce976b03cc56b1bdc354412cc9cc77b0";
+const VOICE_MODEL_MODELSCOPE_REVISION = "db384702f9dbc647d1d387236473fbf4e4ba5581";
+const OPENVOICE_HUGGING_FACE_REVISION = "d9e0542e0e4e8fcfb849240f7e8e7fa8147df1a3";
+const OPENVOICE_MODELSCOPE_REVISION = "226b24270b69b38781a35566c7d442061f9e3b81";
 const DEPTH_MODEL_HUGGING_FACE_REVISION = "a0806c6fb9484894dcb78df523156d244461515d";
 const DEPTH_MODEL_MODELSCOPE_REVISION = "4cc757f80330e22cb8f82b628c53ceca6307fd12";
 function hasCacheableExtension(pathname) {
@@ -90,8 +93,12 @@ function canonicalModelIdentity(url) {
   if (owner === "haixin" && repository === "timeline-studio-vocal-remover" && revision === "main") {
     revision = VOCAL_REMOVER_REVISION;
   }
-  if (owner === "haixin" && repository === "timeline-studio-voice-models" && revision === VOICE_MODEL_MODELSCOPE_REVISION) {
-    revision = VOICE_MODEL_HUGGING_FACE_REVISION;
+  if (owner === "haixin" && repository === "timeline-studio-voice-models") {
+    if (path.startsWith("openvoice-v2-converter-fp16/") && revision === OPENVOICE_MODELSCOPE_REVISION) {
+      revision = OPENVOICE_HUGGING_FACE_REVISION;
+    } else if (revision === VOICE_MODEL_MODELSCOPE_REVISION) {
+      revision = VOICE_MODEL_HUGGING_FACE_REVISION;
+    }
   }
   if (
     owner === "haixin"
@@ -125,6 +132,36 @@ async function removeLegacyKokoroFp32Model() {
     return pathname.endsWith("/kokoro/onnx/model.onnx")
       || (pathname.includes("/Kokoro-82M-v1.0-ONNX/") && pathname.endsWith("/onnx/model.onnx"));
   }).map((request) => cache.delete(request)));
+}
+
+async function migratePreviousVoiceRevision() {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  const keys = await cache.keys();
+  const oldPrefix = `/__model-cache__/haixin/timeline-studio-voice-models/${PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISION}/`;
+  const changedPaths = new Set([
+    "kokoro-multi-lang-v1_1-fp16-4voices/README.md",
+    "kokoro-multi-lang-v1_1-fp16-4voices/SOURCE_NOTES.md",
+    "kokoro-multi-lang-v1_1-fp16-4voices/manifest.json",
+    "kokoro-multi-lang-v1_1-fp16-4voices/runtime/sherpa-onnx-wasm-main-tts.data.part-005.bin",
+    "kokoro-multi-lang-v1_1-fp16-4voices/samples/zh_m_yansheng.mp3",
+  ]);
+  await Promise.all(keys.map(async (request) => {
+    const pathname = new URL(request.url).pathname;
+    if (!pathname.startsWith(oldPrefix)) return;
+    const relativePath = pathname.slice(oldPrefix.length);
+    if (changedPaths.has(relativePath)) {
+      await cache.delete(request);
+      return;
+    }
+    const targetRevision = relativePath.startsWith("openvoice-v2-converter-fp16/")
+      ? OPENVOICE_HUGGING_FACE_REVISION
+      : VOICE_MODEL_HUGGING_FACE_REVISION;
+    const response = await cache.match(request);
+    if (!response) return;
+    const target = new Request(`${self.location.origin}/__model-cache__/haixin/timeline-studio-voice-models/${targetRevision}/${relativePath}`);
+    await cache.put(target, response);
+    await cache.delete(request);
+  }));
 }
 
 function isRuntimeAssetRequest(url) {
@@ -291,6 +328,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(caches.delete("stable-audio-3-small-music-q4-v1").catch(() => false));
   event.waitUntil(removeLegacyPiperDuplicates().catch(() => {}));
   event.waitUntil(removeLegacyKokoroFp32Model().catch(() => {}));
+  event.waitUntil(migratePreviousVoiceRevision().catch(() => {}));
 });
 
 self.addEventListener("fetch", (event) => {

@@ -336,9 +336,11 @@ function deleteClip(project, operation) {
   if (operation.track === "caption") {
     project.script = project.captionSegments.map((item) => item.text).join("\n");
   } else {
-    project.captionSegments = (project.captionSegments || []).map((caption) => caption.audioSegmentId === operation.clipId
-      ? { ...caption, audioSegmentId: "", detachedAudioSegmentId: operation.clipId }
-      : caption);
+    project.captionSegments = (project.captionSegments || []).map((caption) => (
+      caption.audioSegmentId === operation.clipId || caption.detachedAudioSegmentId === operation.clipId
+        ? { ...caption, audioSegmentId: "", detachedAudioSegmentId: "" }
+        : caption
+    ));
   }
 }
 

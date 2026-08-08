@@ -95,6 +95,32 @@ export function createCaptionEditingActions(d) {
     d.notify(t(linked ? "captionAudioLinked" : "captionAudioUnavailable"));
   }
 
+  function linkAllCaptionAudio() {
+    if (d.trackLocks.caption) return void d.notify(t("captionTrackLocked"));
+    const availableAudioIds = new Set(d.audioSegments.map((segment) => segment.id));
+    const linked = d.captionSegments.some((caption) => (
+      !caption.audioSegmentId
+      && caption.detachedAudioSegmentId
+      && availableAudioIds.has(caption.detachedAudioSegmentId)
+    ));
+    d.setCaptionSegments((items) => items.map((caption) => {
+      if (caption.audioSegmentId && availableAudioIds.has(caption.audioSegmentId)) return caption;
+      if (!caption.detachedAudioSegmentId || !availableAudioIds.has(caption.detachedAudioSegmentId)) return caption;
+      return { ...caption, audioSegmentId: caption.detachedAudioSegmentId, detachedAudioSegmentId: "" };
+    }));
+    d.notify(t(linked ? "captionAudioLinked" : "captionAudioUnavailable"));
+  }
+
+  function unlinkAllCaptionAudio() {
+    if (d.trackLocks.caption) return void d.notify(t("captionTrackLocked"));
+    const unlinked = d.captionSegments.some((caption) => caption.audioSegmentId);
+    d.setCaptionSegments((items) => items.map((caption) => {
+      if (!caption.audioSegmentId) return caption;
+      return { ...caption, detachedAudioSegmentId: caption.audioSegmentId, audioSegmentId: "" };
+    }));
+    if (unlinked) d.notify(t("captionAudioUnlinked"));
+  }
+
   function alignCaptionToAudio(segmentId) {
     if (d.trackLocks.caption) return void d.notify(t("captionTrackLocked"));
     let aligned = false;
@@ -274,10 +300,12 @@ export function createCaptionEditingActions(d) {
     deleteCaptionSegment,
     handleCaptionPositionChange,
     linkCaptionAudio,
+    linkAllCaptionAudio,
     linkAudioToCaption,
     startCaptionDrag,
     toggleCaptionSegmentHidden,
     unlinkCaptionAudio,
+    unlinkAllCaptionAudio,
     unlinkAudioCaptions,
     updateCaptionSegmentText,
     updateScript,

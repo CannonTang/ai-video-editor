@@ -63,7 +63,7 @@ Timeline Studio 将常见的音视频 AI 能力放进编辑工作流，而不是
 
 ### 4.1 多语言 AI 配音
 
-中文配音使用浏览器 Piper/VITS ONNX 路径，英文提供 Kokoro 82M，并为德语、西班牙语、法语、意大利语和巴西葡萄牙语提供浏览器 Piper 声音。
+中文及中英混合配音使用浏览器 Kokoro multi-lang v1.1 FP16 路径，提供女声 2 条、男声 2 条；英文保留 Kokoro 82M，并为德语、西班牙语、法语、意大利语和巴西葡萄牙语提供浏览器 Piper 声音。
 
 生成后的声音会成为时间线上的可编辑配音片段，而不是只能试听或下载的孤立结果。
 
@@ -187,4 +187,3 @@ Timeline Studio 仍在持续快速迭代。浏览器媒体、WebCodecs、WebGPU�
 项目地址：https://github.com/MartinDelophy/ai-video-editor
 
 在线体验：https://video-editor.ai-creator.top/
-

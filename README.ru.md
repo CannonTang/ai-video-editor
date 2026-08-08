@@ -74,7 +74,7 @@ gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent clau
 gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent codex --scope user
 ```
 
-Добавьте `--pin v0.9.2`, чтобы установить проверенный релиз, а не автоматически следовать за последним. Перед установкой Skill можно просмотреть командой `gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio`.
+Добавьте `--pin v1.0.0`, чтобы установить проверенный релиз, а не автоматически следовать за последним. Перед установкой Skill можно просмотреть командой `gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio`.
 
 ## Дорожная карта
 

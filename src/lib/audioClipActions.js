@@ -56,7 +56,11 @@ export function createAudioClipActions(d) {
   const deleteAudioSegment = (id) => {
     const segment = d.audioSegments.find((item) => item.id === id); if (segment) URL.revokeObjectURL(segment.url);
     d.setAudioSegments((items) => items.filter((item) => item.id !== id));
-    d.setCaptionSegments((items) => items.filter((item) => item.audioSegmentId !== id));
+    d.setCaptionSegments((items) => items.map((item) => (
+      item.audioSegmentId === id || item.detachedAudioSegmentId === id
+        ? { ...item, audioSegmentId: "", detachedAudioSegmentId: "" }
+        : item
+    )));
     d.setSelectedAudioSegmentId((current) => current === id ? "" : current); d.notify(d.t("audioClipDeleted"));
   };
   return { deleteAudioSegment, toggleAudioSegmentReverse, updateAudioSegment };

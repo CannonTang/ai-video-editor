@@ -11,17 +11,26 @@ Use this workflow whenever an Agent generates narration before picture timing, i
 
 ## Route Chinese and English correctly
 
-- Use MeloTTS `ZH` as the base speech engine when one narration contains both Chinese and inline English. Preserve the mixed-language script as one linguistic utterance; do not split it into Chinese and English clips merely to route different engines.
+- Use Timeline Studio's owned `kokoro-multi-lang-v1_1` FP16 sherpa-onnx WASM bundle for Chinese narration and for any utterance that mixes Chinese with inline English. Preserve the mixed-language script as one linguistic utterance; do not split it into Chinese and English clips merely to route different engines, and retain punctuation-driven sentence pauses without restoring artificial language-switch boundaries.
+- The four built-in Chinese catalog voices share one model and have stable product/upstream identities: 晴岚 / `zh_f_qinglan` / `zf_001`, 若溪 / `zh_f_ruoxi` / `zf_073`, 云舟 / `zh_m_yunzhou` / `zm_009`, and the younger, brighter 景澈 / `zh_m_jingche` / `zm_010`. Do not restore 砚声 / `zm_061` or expose other upstream speakers merely because the source model contains them.
 - Keep product names, acronyms, numbers, URLs, and intended English phrases verbatim unless the user supplies a pronunciation override. Listen to the rendered result and revise pronunciation text explicitly when necessary.
-- Do not claim that Chinese-and-English mixed narration is ready until `node scripts/setup-host.mjs --check --capability voiceover` passes and the approved pinned model artifacts are locally available.
-- If the environment is missing, show the exact plan from the doctor and obtain explicit approval before `--install --capability voiceover`. Never install dependencies as a side effect of the first synthesis request.
-- For other languages, use the confirmed owned voice route selected by the brief. Do not silently route unsupported text through MeloTTS or an operating-system voice.
+- Use the owned `haixin/timeline-studio-voice-models` Hugging Face revision `8471955b41238ec0b231d0e3e8e3ac852be6652b` and equivalent `martindelophy/timeline-studio-voice-models` ModelScope revision `e0fc307e4890369527cadd10ed4f6af81fd085b3`. Prefer ModelScope for Chinese or domestic sessions, fall back to Hugging Face, and preserve one provider-independent cache identity. Never use mutable upstream URLs.
+- Do not install, check, or use MeloTTS for Chinese or mixed Chinese/English narration. The first explicit generation may download the sharded owned browser bundle; treat that as a model setup stage, keep the worker alive for subsequent speech, and never expose a raw network error.
+- English-only narration may use the selected existing English Kokoro voice when the brief calls for it. For other languages, use the confirmed owned voice route selected by the brief. Do not silently route unsupported text through an operating-system voice.
+
+## Cast narrators and characters consistently
+
+- For one narrator, select one of the four built-in speakers and keep it stable for the whole project and every regenerated sentence. Do not alternate speakers to create variety.
+- When the user specifies a voice gender, presentation, or explicit product voice, restrict selection accordingly. If presentation is unspecified, audition the eligible samples and choose the best warm, natural match without blocking on a preference question.
+- For multi-character dialogue, assign one stable speaker ID to each character before synthesis and persist that casting map with the project. Reuse a speaker across minor characters only when the voices remain unambiguous; never swap a character's speaker between sentences.
+- An on-screen person's appearance may guide fictional casting only when the narration is intentionally written as that character. Do not claim the built-in speaker is the real person's voice, infer sensitive identity traits, or imitate a real individual without an explicitly authorized clone profile.
+- When a saved authorized clone profile is selected, use the selected language's Kokoro base speaker first, then run OpenVoice V2 as the visible second-stage timbre conversion. Retain both stage states for retry and error reporting.
 
 ## Generate before editing picture
 
 1. Confirm narration language and any explicitly requested speaker or presentation. When delivery style is unspecified, apply the warm storyteller default without blocking progress.
 2. Normalize the final script without erasing intentional code-switching.
-3. Generate natural-speed base speech. When a saved authorized clone profile is selected, run OpenVoice V2 timbre conversion only after MeloTTS base synthesis and retain both stage states for retry and error reporting.
+3. Lock the narrator/character-to-speaker map, then generate natural-speed base speech with the appropriate owned Kokoro speaker. When a saved authorized clone profile is selected, run OpenVoice V2 timbre conversion only after Kokoro base synthesis and retain both stage states for retry and error reporting.
 4. Listen to the complete output for warmth, human storytelling cadence, phrase emphasis, pronunciation, pauses, clipping, noise tails, and loudness. Regenerate, change the owned speaker, or revise synthesis phrasing when the result sounds mechanical; revise the script rather than globally accelerating speech to force a target duration.
 5. Split accepted narration into sentence-scoped audio artifacts, then bind each caption to exactly one matching `audioClipId`.
 6. Measure accepted speech and use its clauses and pauses to set scene timing, motion, emphasis, and caption boundaries.

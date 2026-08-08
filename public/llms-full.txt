@@ -1,6 +1,6 @@
 # Timeline Studio — Full Product Reference
 
-Last verified: 2026-07-16
+Last verified: 2026-08-08
 Canonical URL: https://video-editor.ai-creator.top/
 GitHub: https://github.com/MartinDelophy/ai-video-editor
 License: MIT
@@ -11,7 +11,7 @@ Timeline Studio is a free, open-source, local-first AI video editor that runs in
 
 ## AI voiceover
 
-- Chinese: Piper/VITS browser ONNX with zh_CN-xiao_ya-medium and zh_CN-chaowen-medium.
+- Chinese and mixed Chinese/English: Kokoro multi-lang v1.1 FP16 sherpa-onnx WASM with two female voices (晴岚, 若溪) and two male voices (云舟, 景澈).
 - English: Kokoro 82M v1.0 ONNX q8 on WASM.
 - Additional browser Piper voices: German, Spanish, French, Italian and Brazilian Portuguese.
 - Generated speech is inserted at the current playhead as a voiceover clip.

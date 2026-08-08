@@ -806,7 +806,7 @@ export function SubjectEffectsInspector({
 
       {show("effects") ? <section className="subject-inspector-actions">
         <label className="switch-row"><input type="checkbox" checked={effect.enabled && effect.outline.enabled} onChange={(event) => patch({ enabled: event.target.checked, outline: { enabled: event.target.checked } })} />{isObject ? t("effectObjectOutlineEnabled") : t("effectOutlineEnabled")}</label>
-        <button className="panel-secondary" type="button" onClick={() => onAnalyze?.({ targetKind: effect.targetKind })}>{running ? t("effectCancelAnalysis") : matchingAnalysis ? t("effectReanalyze") : isObject ? t("effectAnalyzeObject") : t("effectAnalyzePerson")}</button>
+        <button className={running ? "panel-secondary" : "panel-primary"} type="button" onClick={() => onAnalyze?.({ targetKind: effect.targetKind })}>{running ? t("effectCancelAnalysis") : matchingAnalysis ? t("effectReanalyze") : isObject ? t("effectAnalyzeObject") : t("effectAnalyzePerson")}</button>
       </section> : null}
 
       {show("outline") || show("effects") ? <section className="subject-material-section">
