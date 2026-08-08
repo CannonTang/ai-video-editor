@@ -66,7 +66,7 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## AI 能力
 
-- **多语言 AI 配音：** 中文 Piper/VITS ONNX、英文 Kokoro 82M，以及德语、西班牙语、法语、意大利语和巴西葡萄牙语的浏览器 Piper 声音。
+- **多语言 AI 配音：** 中文及中英混合 Kokoro multi-lang v1.1 FP16（女声 2 条、男声 2 条）、英文 Kokoro 82M，以及德语、西班牙语、法语、意大利语和巴西葡萄牙语的浏览器 Piper 声音。
 - **本地 AI 音乐：** Stable Audio 3 Small Q4 ONNX 通过 WebGPU 在浏览器运行，支持自由提示词自动翻译、30/60/90/120 秒选项、长音乐波形感知循环、模型持久缓存，并在完成后自动加入“我的素材”。
 - **自动字幕：** Whisper small q8 ONNX，结合音频能量修正时间戳，并对中文识别结果做克制的高置信纠错。
 - **智能画面：** YOLOS tiny 主体检测与 MODNet 人像抠图，用于图片和完整视频的智能裁切、字幕避让与背景移除。
@@ -125,7 +125,7 @@ gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent clau
 gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent codex --scope user
 ```
 
-如需安装已经验证过的固定版本，而不是跟随最新 Release，请在命令末尾添加 `--pin v0.9.2`。安装前可以先预览 Skill：
+如需安装已经验证过的固定版本，而不是跟随最新 Release，请在命令末尾添加 `--pin v1.0.0`。安装前可以先预览 Skill：
 
 ```bash
 gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio

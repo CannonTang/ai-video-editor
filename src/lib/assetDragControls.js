@@ -16,7 +16,7 @@ export function createAssetDragControls(deps) {
   };
   const getDraggedAsset = (event) => findAssetById(event.dataTransfer?.getData(ASSET_DRAG_MIME) || event.dataTransfer?.getData("text/plain") || deps.draggedAssetIdRef.current || deps.draggedAssetId);
   const getActiveDraggedAsset = () => findAssetById(deps.draggedAssetIdRef.current || deps.draggedAssetId);
-  const getTimelineDropPercent = (clientX, rect) => rect?.width ? Math.max(8, Math.min(92, ((clientX - rect.left) / rect.width) * 100)) : 50;
+  const getTimelineDropPercent = (clientX, rect) => rect?.width ? Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100)) : 50;
   const canDropAssetOnTrack = (asset, track) => {
     if (!asset || deps.trackLocks[track]) return false;
     if (track === "image" || track === "overlay") return asset.type === "image" || asset.type === "video";

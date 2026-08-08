@@ -89,7 +89,7 @@ Before generating narration, ask one compact combined question for the desired n
 
 Prefer the editor's owned browser voice models and their pinned provider mirrors over operating-system speech. Use ModelScope first for Chinese or domestic sessions and the equivalent Hugging Face mirror as fallback, preserving one provider-independent cache identity. Never silently substitute another language, speaker, remote service, or system voice when the selected model is unavailable.
 
-For Agent-driven rendering, invoke the selected owned voice model directly from a headless runtime and download only missing model artifacts. Do not open Timeline Studio or automate its voice panel merely to synthesize audio. Use the editor UI only when the user explicitly wants a visible editing session or needs to adjust the generated voice in context. Reuse the same pinned mirrors, cache identity, text preparation, speaker ID, and output validation across direct and UI paths.
+For Chinese or mixed Chinese/English narration, cast 晴岚、若溪、云舟、 or 景澈 from the owned Kokoro multi-lang v1.1 FP16 bundle and keep one stable speaker per narrator or character. Use the shared headless adapter when current capability inspection confirms it exists. Until that adapter is implemented, TTS is a verified UI-only operation: start the local editor, use AI Voice, export the generated clips and portable project, and validate them. Never substitute MeloTTS, an operating-system voice, or another unowned runtime merely to avoid the browser step. Reuse the same pinned mirrors, cache identity, text preparation, speaker ID, and output validation across future direct and current UI paths.
 
 Normalize the voice brief as:
 

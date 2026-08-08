@@ -1,6 +1,6 @@
 import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
 import { getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay } from "./editorRuntime.js";
-import { getVisualSegmentIndexAtTime } from "./timeline.js";
+import { getVisualSegmentIndexAtTime, isTimedSegmentLaneVisible } from "./timeline.js";
 import { getLinkedSourceAudioState } from "./sourceAudioSync.js";
 import { getVisualSourceTime, normalizeVisualPlaybackRate } from "./visualEffects.js";
 
@@ -100,7 +100,10 @@ export function createPlaybackControls(deps) {
   };
   const handlePlayToggle = () => {
     const video = deps.previewVideoRef.current;
-    const voices = isTrackAudible("audio") ? deps.audioSegments.map((segment) => ({ segment, audio: deps.audioSegmentRefs.current.get(segment.id) })).filter(({ audio }) => audio) : [];
+    const voices = isTrackAudible("audio") ? deps.audioSegments
+      .filter((segment) => isTimedSegmentLaneVisible(deps.audioSegments, segment.id, deps.trackVisibility))
+      .map((segment) => ({ segment, audio: deps.audioSegmentRefs.current.get(segment.id) }))
+      .filter(({ audio }) => audio) : [];
     const source = isTrackAudible("source") ? deps.sourceAudioRef.current : null;
     const music = isTrackAudible("music") ? deps.musicRef.current : null;
     if (deps.isPlaying) { pauseTimelineMedia(); deps.setIsPlaying(false); return; }

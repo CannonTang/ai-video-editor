@@ -1,6 +1,6 @@
 import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
 import { downloadBlob } from "./media.js";
-import { cloneVisualSegment, createVisualSegment, getVisualSegmentsTotal, makeId } from "./timeline.js";
+import { cloneVisualSegment, createVisualSegment, getVisualSegmentsTotal, isTimedSegmentLaneLocked, makeId } from "./timeline.js";
 
 export function createTimelineClipboardActions(d) {
   const focusedStickerIndex = () => {
@@ -15,7 +15,10 @@ export function createTimelineClipboardActions(d) {
     d.commitStickerSegments(next, next.length ? "已删除当前贴纸片段" : "已删除最后一个贴纸片段", next[Math.max(0, index - 1)]?.id ?? "");
   };
   const handleDeleteTrack = () => {
-    if (d.trackLocks[d.selectedTrack]) return void d.notify("当前轨道已锁定，无法删除");
+    const selectedTrackLocked = d.selectedTrack === "audio"
+      ? isTimedSegmentLaneLocked(d.audioSegments, d.selectedAudioSegmentId || d.selectedAudioSegment?.id, d.trackLocks)
+      : d.trackLocks[d.selectedTrack];
+    if (selectedTrackLocked) return void d.notify("当前轨道已锁定，无法删除");
     if (d.selectedTrack === "caption") return void d.handleRemoveSegment();
     if (d.selectedTrack === "overlay") {
       if (!d.selectedVisualOverlayId) return void d.notify("请先选择一个画中画片段");
@@ -62,7 +65,10 @@ export function createTimelineClipboardActions(d) {
     d.clearImageTrack();
   };
   const handleDuplicateTrack = () => {
-    if (d.trackLocks[d.selectedTrack]) return void d.notify("当前轨道已锁定，无法复制");
+    const selectedTrackLocked = d.selectedTrack === "audio"
+      ? isTimedSegmentLaneLocked(d.audioSegments, d.selectedAudioSegmentId || d.selectedAudioSegment?.id, d.trackLocks)
+      : d.trackLocks[d.selectedTrack];
+    if (selectedTrackLocked) return void d.notify("当前轨道已锁定，无法复制");
     if (d.selectedTrack === "overlay") {
       const source = d.visualOverlaySegments.find((segment) => segment.id === d.selectedVisualOverlayId);
       if (!source) return void d.notify("请先选择一个画中画片段");

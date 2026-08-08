@@ -5,7 +5,7 @@
 - Editable main Visuals sequence plus timed picture-in-picture overlays
 - Captions, stickers, voiceover, separated source audio, and music tracks
 - Visual transforms, property keyframes, masks, filters, effects, speed, and animations
-- Automatic captions, multilingual browser TTS, vocal separation, and vision analysis
+- Automatic captions; Kokoro multi-lang v1.1 FP16 Chinese/mixed Chinese-English TTS with 晴岚、若溪、云舟、景澈; other owned multilingual browser TTS; vocal separation; and vision analysis
 - Portable `.timeline` ZIP archives containing `project.json` and media binaries
 - Offline WebCodecs composition/export with a recorder fallback
 - Undo/redo through the editor history layer
@@ -41,6 +41,7 @@ Observed browser-path constraints:
 
 1. Full browser-renderer parity in the headless command runner; the first H.264/AAC Visuals + Voiceover + Music path and ffprobe-backed import probing are available.
 2. Broader command coverage for Voiceover generation and advanced render controls; multi-asset Voiceover storage and rendering are available.
+   - Chinese and mixed Chinese/English generation is available now through the editor's four-speaker Kokoro browser worker, but a shared headless command adapter over that exact runtime is still missing. Do not substitute MeloTTS or an operating-system voice.
 3. A fully serializable editor core independent of React setters, DOM nodes, Blob URLs, and browser-only refs; the first shared reducers now live in `src/lib/projectCommandEngine.js`.
 4. Persisted undo checkpoints; transactions, revision preconditions, idempotency keys, structured errors, and field-level dry-run diffs are available.
 5. Richer non-caption analysis inspection; project, track, clip, and caption transcript reads are available.

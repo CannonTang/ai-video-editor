@@ -26,7 +26,7 @@ export function useAudioTrackState() {
   const [sourceAudioStart, setSourceAudioStart] = useState(0);
   const [sourceAudioAssetId, setSourceAudioAssetId] = useState("");
   const [sourceAudioLinked, setSourceAudioLinked] = useState(true);
-  const [favoriteVoiceIds, setFavoriteVoiceIds] = useState(["zh_CN-xiao_ya-medium"]);
+  const [favoriteVoiceIds, setFavoriteVoiceIds] = useState(["zh_f_qinglan"]);
   const [historyItems, setHistoryItems] = useState([]);
   const [recordedVoices, setRecordedVoices] = useState([]);
   const [recordingState, setRecordingState] = useState("idle");

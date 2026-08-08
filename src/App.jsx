@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { X } from "@phosphor-icons/react";
 
 import { LanguageIntro } from "./components/panels.jsx";
 import { PreviewStage } from "./components/PreviewStage.jsx";
@@ -586,9 +587,9 @@ export function App() {
 
   const {
     alignAudioCaptions, alignCaptionToAudio, commitCaptionSegments, deleteCaptionSegment, handleCaptionPositionChange,
-    linkAudioToCaption, linkCaptionAudio,
+    linkAllCaptionAudio, linkAudioToCaption, linkCaptionAudio,
     startCaptionDrag, toggleCaptionSegmentHidden,
-    unlinkAudioCaptions, unlinkCaptionAudio, updateCaptionSegmentText, updateScript,
+    unlinkAllCaptionAudio, unlinkAudioCaptions, unlinkCaptionAudio, updateCaptionSegmentText, updateScript,
   } = createCaptionEditingActions({
     audioSegments, captionSegments, captionStyle, currentCaptionSegment, focusedSegmentIndex,
     notify, previewCanvasRef, previewVisionKey, previewVisionRecord, script,
@@ -724,7 +725,7 @@ export function App() {
   });
 
   const generateVoiceover = useVoiceGeneration({
-    commitAudio, notify, script, selectedVoice, setProgress, setStatus,
+    addVoiceProfile, commitAudio, notify, script, selectedVoice, setProgress, setStatus,
     setStatusText, setVoiceTab, speed, status, t, selectedVoiceProfile,
   });
 
@@ -855,7 +856,7 @@ export function App() {
   });
 
   const { handleDeleteTrack, handleDuplicateTrack } = createTimelineClipboardActions({
-    audioBlob, captionSegments, clearImageTrack, clearMusicTrack, clearSourceAudioTrack,
+    audioBlob, audioSegments, captionSegments, clearImageTrack, clearMusicTrack, clearSourceAudioTrack,
     commitCaptionSegments, commitStickerSegments, commitVisualSegments,
     currentStickerSegmentIndex, currentVisualSegmentIndex, deleteAudioSegment,
     focusedSegmentIndex, getCurrentVisualAssetSnapshot, handleRemoveSegment,
@@ -973,7 +974,7 @@ export function App() {
     setAssetDropTargetTrack, setDraggedAssetId, setSelectedFilterId,
     setSelectedLibraryAssetId, setSelectedTrack, setSelectedTransitionId,
     setSelectedVisualSegmentId, setVisualSegments, trackScrollRef, resolveVisualDropIntent, updateVisualAssetInTimeline,
-    t, triggerAssetDropPulse, visualSegments,
+    t, timelineDuration, triggerAssetDropPulse, visualSegments,
   });
   const addVisualOverlay = (asset, options = {}) => {
     if (!asset?.src || (asset.type !== "image" && asset.type !== "video")) return;
@@ -1525,6 +1526,8 @@ export function App() {
         alignCaptionToAudio={alignCaptionToAudio}
         linkCaptionAudio={linkCaptionAudio}
         unlinkCaptionAudio={unlinkCaptionAudio}
+        linkAllCaptionAudio={linkAllCaptionAudio}
+        unlinkAllCaptionAudio={unlinkAllCaptionAudio}
         alignAudioCaptions={alignAudioCaptions}
         linkAudioToCaption={linkAudioToCaption}
         unlinkAudioCaptions={unlinkAudioCaptions}
@@ -1589,7 +1592,6 @@ export function App() {
         setSelectedSegmentId={setSelectedSegmentId}
         captionTargetDuration={captionTargetDuration}
         sourceAudioLinked={sourceAudioLinked}
-        setSourceAudioLinked={setSourceAudioLinked}
         linkedSourceAudioSegments={linkedSourceAudioSegments}
         sourceAudioBlob={sourceAudioBlob}
         sourceAudioPeaks={sourceAudioPeaks}
@@ -1650,12 +1652,12 @@ export function App() {
                   : mobilePanelOrigin === "caption-clip"
                     ? t("caption")
                     : t(activeTool))}</strong>
-          <div role="tablist" aria-label={t("mobilePanelView")}>
-            {!mobilePanelOrigin.endsWith("-clip") ? <>
+          <div className="mobile-sheet-nav-actions">
+            {!mobilePanelOrigin.endsWith("-clip") ? <div className="mobile-sheet-tabs" role="tablist" aria-label={t("mobilePanelView")}>
               <button className={mobilePanel === "tools" ? "is-active" : ""} type="button" role="tab" aria-selected={mobilePanel === "tools"} onClick={() => changeMobilePanel("tools")}>{t("mobileDrawerTools")}</button>
               <button className={mobilePanel === "inspector" ? "is-active" : ""} type="button" role="tab" aria-selected={mobilePanel === "inspector"} onClick={() => changeMobilePanel("inspector")}>{t("properties")}</button>
-            </> : null}
-            <button className="mobile-sheet-close" type="button" aria-label={t("close", "关闭")} onClick={() => changeMobilePanel("")}>×</button>
+            </div> : null}
+            <button className="mobile-sheet-close" type="button" aria-label={t("close", "关闭")} onClick={() => changeMobilePanel("")}><X size={20} /></button>
           </div>
         </header>
       ) : null}

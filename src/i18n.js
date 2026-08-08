@@ -105,6 +105,20 @@ const TIMELINE_SELECTION_COPY = {
   ru: { timelineSelectionTools: "Инструменты выделения", timelineSelect: "Выбрать", timelineSelectLeft: "Выбрать всё слева", timelineSelectRight: "Выбрать всё справа", timelineSelectedLeft: "Выбрано клипов слева: {count}", timelineSelectedRight: "Выбрано клипов справа: {count}" },
 };
 
+const TIMELINE_TOOLBAR_COPY = {
+  zh: { deleteTrack: "删除选中轨道", duplicateTrack: "复制选中轨道", cutSegment: "剪切当前片段" },
+  en: { deleteTrack: "Delete selected track", duplicateTrack: "Duplicate selected track", cutSegment: "Cut current segment" },
+  ja: { deleteTrack: "選択中のトラックを削除", duplicateTrack: "選択中のトラックを複製", cutSegment: "現在のクリップをカット" },
+  ko: { deleteTrack: "선택한 트랙 삭제", duplicateTrack: "선택한 트랙 복제", cutSegment: "현재 클립 자르기" },
+  es: { deleteTrack: "Eliminar pista seleccionada", duplicateTrack: "Duplicar pista seleccionada", cutSegment: "Cortar clip actual" },
+  fr: { deleteTrack: "Supprimer la piste sélectionnée", duplicateTrack: "Dupliquer la piste sélectionnée", cutSegment: "Couper le clip actuel" },
+  de: { deleteTrack: "Ausgewählte Spur löschen", duplicateTrack: "Ausgewählte Spur duplizieren", cutSegment: "Aktuellen Clip schneiden" },
+  pt: { deleteTrack: "Excluir faixa selecionada", duplicateTrack: "Duplicar faixa selecionada", cutSegment: "Cortar clipe atual" },
+  th: { deleteTrack: "ลบแทร็กที่เลือก", duplicateTrack: "ทำสำเนาแทร็กที่เลือก", cutSegment: "ตัดคลิปปัจจุบัน" },
+  vi: { deleteTrack: "Xóa rãnh đã chọn", duplicateTrack: "Nhân đôi rãnh đã chọn", cutSegment: "Cắt clip hiện tại" },
+  ru: { deleteTrack: "Удалить выбранную дорожку", duplicateTrack: "Дублировать выбранную дорожку", cutSegment: "Разрезать текущий клип" },
+};
+
 const FACE_SWAP_COPY = {
   zh: {
     faceSwapKicker: "浏览器本地 AI", faceSwapTitle: "换脸", faceSwapDescription: "将一张已授权的源人脸持续替换到当前图片或视频中的同一目标人物。",
@@ -3109,7 +3123,7 @@ export function createTranslator(languageId) {
   const projectChromeCopy = PROJECT_CHROME_COPY[languageId] ?? PROJECT_CHROME_COPY.en;
   const coreLabelCopy = CORE_LABEL_COPY[languageId] ?? CORE_LABEL_COPY.en;
   const specializedCopy = Object.assign({}, ...[
-    EXPORT_RENDER_COPY, MEDIA_COMPATIBILITY_COPY, COMMUNITY_LINKS_COPY, VOICE_COLOR_COPY, VOICE_CLONE_COPY, TIMELINE_SELECTION_COPY, FACE_SWAP_COPY, VECTOR_LIBRARY_COPY, PROJECT_CHROME_COPY, CORE_LABEL_COPY, MOBILE_DRAWER_COPY, MOBILE_CLIP_ACTION_COPY,
+    EXPORT_RENDER_COPY, MEDIA_COMPATIBILITY_COPY, COMMUNITY_LINKS_COPY, VOICE_COLOR_COPY, VOICE_CLONE_COPY, TIMELINE_SELECTION_COPY, TIMELINE_TOOLBAR_COPY, FACE_SWAP_COPY, VECTOR_LIBRARY_COPY, PROJECT_CHROME_COPY, CORE_LABEL_COPY, MOBILE_DRAWER_COPY, MOBILE_CLIP_ACTION_COPY,
     VISUAL_EDITOR_COPY, TRANSITION_EDITOR_COPY, ASSET_PREVIEW_COPY, ASSET_DROP_COPY,
     AUTO_CAPTION_STATUS_COPY, VISUAL_PANEL_TITLE_COPY, VISUAL_MASK_SHAPE_COPY,
     VISUAL_KEYFRAME_ACTION_COPY, VISUAL_TAB_COPY, SOURCE_AUDIO_SYNC_COPY,

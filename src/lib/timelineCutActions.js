@@ -1,5 +1,5 @@
 import { MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
-import { cloneVisualSegment, createVisualSegment, getVisualSegmentTimeline, getVisualSegmentsTotal, makeId, materializeCaptionTimings } from "./timeline.js";
+import { cloneVisualSegment, createVisualSegment, getVisualSegmentTimeline, getVisualSegmentsTotal, isTimedSegmentLaneLocked, makeId, materializeCaptionTimings } from "./timeline.js";
 import { normalizeVisualKeyframes, resolveVisualTransform } from "./visualEffects.js";
 
 const MIN_CAPTION_SPLIT_SECONDS = 0.2;
@@ -84,10 +84,10 @@ export function createTimelineCutActions(d) {
     d.commitCaptionSegments(next, "已在播放头位置切开字幕片段", index + 1);
   };
   const handleCutAudioSegment = () => {
-    if (d.trackLocks.audio) return void d.notify("配音轨已锁定，无法剪切");
     const index = d.audioSegments.findIndex((segment) => segment.id === d.selectedAudioSegmentId);
     const source = d.audioSegments[index];
     if (!source) return void d.notify("请先选择一个配音片段");
+    if (isTimedSegmentLaneLocked(d.audioSegments, source.id, d.trackLocks)) return void d.notify("配音轨已锁定，无法剪切");
     const time = Math.max(source.start, Math.min(source.start + source.duration, d.currentTime));
     if (time <= source.start + 0.05 || time >= source.start + source.duration - 0.05) {
       return void d.notify("请把播放头放在配音片段中间再剪切");

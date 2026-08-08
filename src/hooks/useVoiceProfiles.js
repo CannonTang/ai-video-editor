@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { normalizeVoiceId } from "../config/editor.js";
 import {
   deleteVoiceProfile, listVoiceProfiles, loadFavoriteBuiltInVoiceIds,
   saveFavoriteBuiltInVoiceIds, saveVoiceProfile, setVoiceProfileFavorite,
@@ -15,7 +16,9 @@ export function useVoiceProfiles({ favoriteVoiceIds, setFavoriteVoiceIds, notify
     Promise.all([listVoiceProfiles(), loadFavoriteBuiltInVoiceIds(initialFavoriteVoiceIdsRef.current)])
       .then(([profiles, favorites]) => {
         if (!active) return;
-        setVoiceProfiles(profiles); setFavoriteVoiceIds(favorites); setVoiceLibraryReady(true);
+        setVoiceProfiles(profiles);
+        setFavoriteVoiceIds([...new Set(favorites.map(normalizeVoiceId))]);
+        setVoiceLibraryReady(true);
       })
       .catch((error) => { console.error(error); if (active) setVoiceLibraryReady(true); });
     return () => { active = false; };

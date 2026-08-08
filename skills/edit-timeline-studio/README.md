@@ -52,7 +52,7 @@ If Node.js is missing, start with `sh scripts/bootstrap-host.sh --check` on macO
 
 If tools are missing, review the printed plan and explicitly authorize the interactive installer with `node scripts/setup-host.mjs --install`. It installs only declared media tools and pinned Python analysis packages in an isolated Timeline Studio runtime. It never bundles model downloads, GPU drivers, credentials, or paid services. See [host environment setup](references/host-environment.md).
 
-Before Agent-driven Chinese voiceover that contains inline English, run `node scripts/setup-host.mjs --check --capability voiceover`. After approval, `--install --capability voiceover` prepares a separate pinned MeloTTS runtime plus UniDic language resources before synthesis; model artifacts remain a separately authorized, immutable download.
+Agent-driven Chinese and mixed Chinese/English narration uses Timeline Studio's owned Kokoro multi-lang v1.1 FP16 browser bundle with four stable voices: 晴岚、若溪、云舟、景澈. It does not require MeloTTS, UniDic, or a separate Python voiceover environment. The first explicit generation downloads the pinned sharded model through ModelScope-first/Hugging-Face-fallback delivery and the editor caches it for repeat use.
 
 Claude Code and Codex can also install through GitHub CLI:
 

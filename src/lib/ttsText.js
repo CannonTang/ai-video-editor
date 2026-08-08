@@ -143,6 +143,21 @@ function prepareKokoroText(rawText) {
   };
 }
 
+function prepareKokoroMultilangText(rawText) {
+  const normalized = normalizeBaseText(rawText);
+  const text = normalized
+    .replace(/[^\p{Script=Han}\p{Script=Latin}0-9\s，。！？；：、,.!?;:()\-]/gu, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n+ */g, "。")
+    .replace(/[。]{2,}/g, "。")
+    .trim();
+  if (!text) throw new TtsInputError("ttsErrorEmptyScript");
+  return {
+    text,
+    warningKey: text !== normalized ? "ttsWarningChineseSymbolsCleaned" : "",
+  };
+}
+
 export function prepareTextForVoice(rawText, voice) {
   if (voice?.engine === "piper" && voice.language === "中文") {
     return prepareChinesePiperText(rawText);
@@ -150,6 +165,10 @@ export function prepareTextForVoice(rawText, voice) {
 
   if (voice?.engine === "kokoro") {
     return prepareKokoroText(rawText);
+  }
+
+  if (voice?.engine === "kokoro-multilang") {
+    return prepareKokoroMultilangText(rawText);
   }
 
   const text = normalizeBaseText(rawText);

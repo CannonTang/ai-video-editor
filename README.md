@@ -71,7 +71,7 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## AI capabilities
 
-- **Multilingual voiceover:** Chinese Piper/VITS ONNX voices, English Kokoro 82M, and browser Piper voices for German, Spanish, French, Italian, and Brazilian Portuguese.
+- **Multilingual voiceover:** Chinese and mixed Chinese/English Kokoro multi-lang v1.1 FP16 voices (two female and two male), English Kokoro 82M, and browser Piper voices for German, Spanish, French, Italian, and Brazilian Portuguese.
 - **Local AI music:** Stable Audio 3 Small Q4 ONNX runs through WebGPU with translated free-form prompts, 30/60/90/120-second choices, waveform-aware long-track looping, persistent model caching, and automatic insertion into My Assets.
 - **Automatic captions:** Whisper small q8 ONNX with waveform-aware timing and conservative Chinese recognition cleanup.
 - **Smart framing:** YOLOS tiny subject detection and MODNet portrait matting for smart crop, caption avoidance, and background removal across images and complete videos.
@@ -85,7 +85,7 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 Browser AI models are mirrored on both Hugging Face and ModelScope. Timeline Studio uses ModelScope first for Chinese interfaces and domestic sessions, uses Hugging Face first elsewhere, remembers the first working source for the current runtime, and automatically falls back to the other source when needed. Cache identities are shared across both providers, so switching routes does not download the same revision twice.
 
 - Stable Audio: [Hugging Face](https://huggingface.co/haixin/stable-audio-3-small-music-onnx) · [ModelScope](https://www.modelscope.cn/models/martindelophy/stable-audio-3-small-music-onnx/files?version=main)
-- Voice models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-voice-models/tree/f6aa4cf8fb440352b9f36c637dd310d047011e52) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-voice-models/files?version=14a0656f5a111a0052dfca586fbe2ceb18b54adf) (mixed upstream licenses; see the repository model card)
+- Voice models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-voice-models/tree/8471955b41238ec0b231d0e3e8e3ac852be6652b) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-voice-models/files?version=e0fc307e4890369527cadd10ed4f6af81fd085b3) (mixed upstream licenses; see the repository model card)
 - Timeline Studio ONNX models: [Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=main)
 - Depth Anything V2 Small Q4F16: [Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models/tree/a0806c6fb9484894dcb78df523156d244461515d/depth-anything-v2-small) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=4cc757f80330e22cb8f82b628c53ceca6307fd12&subpath=depth-anything-v2-small) (Apache-2.0)
 - Vocal remover: [Hugging Face](https://huggingface.co/haixin/timeline-studio-vocal-remover) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/files?version=main)
@@ -143,7 +143,7 @@ gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent clau
 gh skill install MartinDelophy/ai-video-editor edit-timeline-studio --agent codex --scope user
 ```
 
-To install the tested release instead of following the latest release, add `--pin v0.9.2`. Preview the Skill before installing with:
+To install the tested release instead of following the latest release, add `--pin v1.0.0`. Preview the Skill before installing with:
 
 ```bash
 gh skill preview MartinDelophy/ai-video-editor edit-timeline-studio

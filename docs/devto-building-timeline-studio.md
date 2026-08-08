@@ -38,7 +38,7 @@ There is no single model or runtime that handles every part of this application 
 
 | Task | Model/runtime | Execution |
 | --- | --- | --- |
-| Chinese and multilingual TTS | Piper/VITS ONNX | WASM |
+| Chinese and mixed Chinese/English TTS | Kokoro multi-lang v1.1 FP16 | sherpa-onnx WASM |
 | English TTS | Kokoro 82M v1.0 q8 | WASM |
 | Automatic captions | Whisper small q8 | WASM worker |
 | Object detection | YOLOS tiny q8 | WASM worker |
@@ -201,4 +201,3 @@ You have to design model selection, execution providers, workers, caching, memor
 The browser is already capable of much more local media intelligence than many applications use today. But the best results come from acknowledging its constraints: lazy-load aggressively, cache carefully, keep heavy work off the main thread, validate graph rewrites numerically, and never hide a degraded result behind a “success” message.
 
 Timeline Studio is still evolving, and contributions are welcome. If you want to experiment with local-first creative tooling, check out the [GitHub repository](https://github.com/MartinDelophy/ai-video-editor), try the [live editor](https://video-editor.ai-creator.top/), and let me know which part of the browser AI stack you would like to see explored next.
-

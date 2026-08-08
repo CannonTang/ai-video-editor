@@ -1,6 +1,7 @@
 import { DEFAULT_STICKER_SEGMENT_SECONDS, MAX_TIMELINE_DURATION_SECONDS, MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
 import { collectTimelineSnapPoints, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
 import { createTimelineEdgeAutoScroller, getTimelineDragTimeDelta } from "./timelineEdgeAutoScroll.js";
+import { isTimedSegmentLaneLocked } from "./timeline.js";
 
 export function createTimelineMoveControls(d) {
   const startSingleTrackMove = (event, track) => {
@@ -42,17 +43,26 @@ export function createTimelineMoveControls(d) {
     if (event.button !== 0) return;
     d.pauseForTimelineEdit?.();
     const segment = d.audioSegments.find((item) => item.id === id); if (!segment) return;
-    if (d.trackLocks.audio) return void d.notify(d.t("audioTrackLockedMove"));
+    if (isTimedSegmentLaneLocked(d.audioSegments, segment.id, d.trackLocks)) return void d.notify(d.t("audioTrackLockedMove"));
     const captions = d.captionSegments.filter((caption) => caption.audioSegmentId === segment.id);
     if (captions.length && d.trackLocks.caption) {
       return void d.notify("关联字幕轨已锁定，无法移动这个配音片段");
     }
     const rect = d.trackScrollRef.current?.getBoundingClientRect(); const duration = d.timelineDurationRef.current || 10;
     if (!rect) return;
-    event.stopPropagation(); d.setSelectedTrack("audio"); d.setSelectedAudioSegmentId(segment.id);
+    event.preventDefault(); event.stopPropagation(); d.setSelectedTrack("audio"); d.setSelectedAudioSegmentId(segment.id);
     const startX = event.clientX; const start = segment.start || 0;
     const snapPoints = collectTimelineSnapPoints(d, { track: "audio", id: segment.id });
     let moved = false; let latest = start; let cancelledByPinch = false;
+    const applyPosition = (nextStart) => {
+      const delta = nextStart - start;
+      d.setAudioSegments((items) => items.map((item) => item.id === segment.id ? { ...item, start: nextStart } : item));
+      if (!captions.length) return;
+      d.setCaptionSegments((items) => items.map((caption) => {
+        const original = captions.find((item) => item.id === caption.id);
+        return original ? { ...caption, start: original.start + delta, end: original.end + delta } : caption;
+      }));
+    };
     const move = (e) => {
       if (cancelledByPinch || d.trackScrollRef.current?.classList.contains("is-pinching")) return;
       if (!moved && Math.abs(e.clientX - startX) < 4) return;
@@ -61,39 +71,29 @@ export function createTimelineMoveControls(d) {
       const snapped = snapTimelineRange(unsnapped, segment.duration, snapPoints, (10 / Math.max(rect.width, 1)) * duration);
       latest = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - segment.duration, snapped.start));
       d.setSnapGuide?.(snapped.guide);
-      d.setAudioSegments((items) => items.map((item) => item.id === segment.id ? { ...item, start: latest } : item));
-      const delta = latest - start;
-      d.setCaptionSegments((items) => items.map((caption) => {
-        const original = captions.find((item) => item.id === caption.id);
-        return original ? { ...caption, start: original.start + delta, end: original.end + delta } : caption;
-      }));
-      d.setTimelineHorizon((value) => Math.max(value, Math.ceil((latest + segment.duration + 5) / 10) * 10));
+      applyPosition(latest);
     };
     const cancelForPinch = () => {
       cancelledByPinch = true;
-      if (moved) {
-        d.setAudioSegments((items) => items.map((item) => item.id === segment.id ? { ...item, start } : item));
-        d.setCaptionSegments((items) => items.map((caption) => {
-          const original = captions.find((item) => item.id === caption.id);
-          return original ? { ...caption, start: original.start, end: original.end } : caption;
-        }));
-      }
+      if (moved) applyPosition(start);
       cleanup();
     };
     const cleanup = () => {
       removeEventListener("pointermove", move);
       removeEventListener("pointerup", up);
-      removeEventListener("pointercancel", cleanup);
+      removeEventListener("pointercancel", cancel);
       removeEventListener("timeline-mobile-pinch-start", cancelForPinch);
       d.setSnapGuide?.(null);
     };
+    const cancel = () => { if (moved) applyPosition(start); cleanup(); };
     const up = () => { cleanup(); if (moved) {
       if (cancelledByPinch) return;
+      applyPosition(latest);
       d.suppressTimelineClipClickRef.current = segment.id;
       setTimeout(() => { if (d.suppressTimelineClipClickRef.current === segment.id) d.suppressTimelineClipClickRef.current = ""; }, 160);
       d.seekTo(latest); d.notify(d.t("audioClipMoved"));
     } };
-    addEventListener("pointermove", move, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", cleanup); addEventListener("timeline-mobile-pinch-start", cancelForPinch);
+    addEventListener("pointermove", move, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", cancel); addEventListener("timeline-mobile-pinch-start", cancelForPinch);
   };
   const startStickerSegmentMove = (event, id = "", initialLane = 0) => {
     if (event.button !== 0) return;

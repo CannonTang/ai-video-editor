@@ -49,7 +49,6 @@ export function createAudioTrackActions(d) {
     ]);
     d.setSelectedAudioSegmentId(id);
     d.setSelectedTrack("audio");
-    d.setTimelineHorizon((value) => Math.max(value, Math.ceil((start + nextDuration + 5) / 10) * 10));
     d.setCurrentTime(start);
     d.setStatus("done");
     d.setStatusText(nextStatusText);
@@ -58,9 +57,15 @@ export function createAudioTrackActions(d) {
   }
 
   function clearAudioTrack(message = "配音音频已从时间线移除") {
+    const removedAudioIds = new Set(d.audioSegments.map((segment) => segment.id));
     d.audioSegmentRefs.current.forEach((audio) => audio.pause());
     d.audioSegments.forEach((segment) => URL.revokeObjectURL(segment.url));
     d.setAudioSegments([]);
+    d.setCaptionSegments((segments) => segments.map((caption) => (
+      removedAudioIds.has(caption.audioSegmentId) || removedAudioIds.has(caption.detachedAudioSegmentId)
+        ? { ...caption, audioSegmentId: "", detachedAudioSegmentId: "" }
+        : caption
+    )));
     d.setSelectedAudioSegmentId("");
     d.setCurrentTime(0);
     d.setIsPlaying(false);
@@ -193,14 +198,15 @@ export function createAudioTrackActions(d) {
     const audioSegment = replaceAudio(blob, decoded.duration, decoded.peaks, nextStatusText, captionSegment ? {
       start: captionSegment.start || 0,
       script: options.script || captionSegment.text,
-      replaceSegmentId: captionSegment.audioSegmentId || "",
+      replaceSegmentId: captionSegment.audioSegmentId || captionSegment.detachedAudioSegmentId || "",
       ...identity,
     } : { ...options, ...identity });
 
     if (captionSegment) {
       d.setCaptionSegments((segments) => segments.map((segment) => segment.id === captionSegment.id ? {
         ...segment,
-        audioSegmentId: audioSegment.id,
+        audioSegmentId: "",
+        detachedAudioSegmentId: audioSegment.id,
         start: audioSegment.start,
         end: audioSegment.start + audioSegment.duration,
       } : segment).sort((a, b) => (a.start || 0) - (b.start || 0)));
@@ -220,17 +226,18 @@ export function createAudioTrackActions(d) {
 
     const generatedCaptions = createCaptionSegments(d.script);
     const generatedTimeline = getCaptionTimeline(generatedCaptions, audioSegment.duration);
-    const boundCaptions = generatedCaptions.map((segment, index) => ({
+    const alignedCaptions = generatedCaptions.map((segment, index) => ({
       ...segment,
-      audioSegmentId: audioSegment.id,
+      audioSegmentId: "",
+      detachedAudioSegmentId: audioSegment.id,
       start: audioSegment.start + generatedTimeline[index].start,
       end: audioSegment.start + generatedTimeline[index].end,
     }));
     d.setCaptionSegments((segments) => [
-      ...segments.filter((segment) => segment.audioSegmentId),
-      ...boundCaptions,
+      ...segments,
+      ...alignedCaptions,
     ].sort((a, b) => (a.start || 0) - (b.start || 0)));
-    d.setSelectedSegmentId(boundCaptions[0]?.id ?? "");
+    d.setSelectedSegmentId(alignedCaptions[0]?.id ?? "");
     d.setHistoryItems((items) => [{
       id: crypto.randomUUID(),
       blob,

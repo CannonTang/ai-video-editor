@@ -24,6 +24,14 @@ export const ASSET_DRAG_MIME = "application/x-ai-voiceover-asset";
 
 export const DEFAULT_SCRIPT = "";
 
+const LEGACY_VOICE_ID_ALIASES = {
+  zh_m_yansheng: "zh_m_jingche",
+};
+
+export function normalizeVoiceId(voiceId) {
+  return LEGACY_VOICE_ID_ALIASES[voiceId] || voiceId;
+}
+
 export const EXPORT_RECORDING_FORMATS = [
   {
     mimeType: "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
@@ -66,26 +74,52 @@ export const AUDIO_RECORDING_FORMATS = [
 
 export const VOICES = [
   {
-    id: "zh_CN-xiao_ya-medium",
-    name: "小雅",
+    id: "zh_f_qinglan",
+    name: "晴岚",
     language: "中文",
-    detail: "Piper ONNX · 温暖叙事",
-    gender: "温暖女声",
-    engine: "piper",
+    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    gender: "自然女声",
+    engine: "kokoro-multilang",
     badge: "推荐",
-    defaultSpeed: 0.9,
-    sampleUrl: "/assets/voice-samples/zh_CN-xiao_ya-medium.mp3",
+    defaultSpeed: 1,
+    avatarUrl: "/assets/voice-avatars/zh_f_qinglan.webp",
+    sampleUrl: "/assets/voice-samples/zh_f_qinglan.mp3",
   },
   {
-    id: "zh_CN-chaowen-medium",
-    name: "超文",
+    id: "zh_f_ruoxi",
+    name: "若溪",
     language: "中文",
-    detail: "Piper ONNX · 沉稳讲述",
-    gender: "沉稳人声",
-    engine: "piper",
-    badge: "ONNX",
-    defaultSpeed: 0.95,
-    sampleUrl: "/assets/voice-samples/zh_CN-chaowen-medium.mp3",
+    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    gender: "自然女声",
+    engine: "kokoro-multilang",
+    badge: "FP16",
+    defaultSpeed: 1,
+    avatarUrl: "/assets/voice-avatars/zh_f_ruoxi.webp",
+    sampleUrl: "/assets/voice-samples/zh_f_ruoxi.mp3",
+  },
+  {
+    id: "zh_m_yunzhou",
+    name: "云舟",
+    language: "中文",
+    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    gender: "自然男声",
+    engine: "kokoro-multilang",
+    badge: "FP16",
+    defaultSpeed: 1,
+    avatarUrl: "/assets/voice-avatars/zh_m_yunzhou.webp",
+    sampleUrl: "/assets/voice-samples/zh_m_yunzhou.mp3",
+  },
+  {
+    id: "zh_m_jingche",
+    name: "景澈",
+    language: "中文",
+    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    gender: "年轻清亮男声",
+    engine: "kokoro-multilang",
+    badge: "FP16",
+    defaultSpeed: 1,
+    avatarUrl: "/assets/voice-avatars/zh_m_jingche.webp",
+    sampleUrl: "/assets/voice-samples/zh_m_jingche.mp3",
   },
   {
     id: "af_heart",
@@ -95,6 +129,7 @@ export const VOICES = [
     gender: "Warm female",
     engine: "kokoro",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/af_heart.webp",
     sampleUrl: "/assets/voice-samples/af_heart.mp3",
   },
   {
@@ -105,6 +140,7 @@ export const VOICES = [
     gender: "Steady male",
     engine: "kokoro",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/am_fenrir.webp",
     sampleUrl: "/assets/voice-samples/am_fenrir.mp3",
   },
   {
@@ -115,6 +151,7 @@ export const VOICES = [
     gender: "Natural male",
     engine: "piper",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/de_DE-thorsten-medium.webp",
     sampleUrl: "/assets/voice-samples/de_DE-thorsten-medium.mp3",
   },
   {
@@ -125,6 +162,7 @@ export const VOICES = [
     gender: "Natural male",
     engine: "piper",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/es_ES-davefx-medium.webp",
     sampleUrl: "/assets/voice-samples/es_ES-davefx-medium.mp3",
   },
   {
@@ -135,6 +173,7 @@ export const VOICES = [
     gender: "Natural voice",
     engine: "piper",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/fr_FR-siwis-medium.webp",
     sampleUrl: "/assets/voice-samples/fr_FR-siwis-medium.mp3",
   },
   {
@@ -142,9 +181,10 @@ export const VOICES = [
     name: "Riccardo",
     language: "Italiano",
     detail: "Piper ONNX · Italiano · x_low",
-    gender: "Natural male",
+    gender: "Natural female",
     engine: "piper",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/it_IT-riccardo-x_low.webp",
     sampleUrl: "/assets/voice-samples/it_IT-riccardo-x_low.mp3",
   },
   {
@@ -155,6 +195,7 @@ export const VOICES = [
     gender: "Natural male",
     engine: "piper",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/pt_BR-faber-medium.webp",
     sampleUrl: "/assets/voice-samples/pt_BR-faber-medium.mp3",
   },
   {
@@ -162,9 +203,11 @@ export const VOICES = [
     name: "Minseo",
     language: "한국어",
     detail: "MMS VITS ONNX · 한국어",
-    gender: "Natural voice",
+    gender: "Natural male",
     engine: "mms",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/ko_KR-mms-medium.webp",
+    sampleUrl: "/assets/voice-samples/ko_KR-mms-medium.mp3",
   },
   {
     id: "ja_JP-supertonic-f1",
@@ -174,33 +217,41 @@ export const VOICES = [
     gender: "Natural female",
     engine: "supertonic",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/ja_JP-supertonic-f1.webp",
+    sampleUrl: "/assets/voice-samples/ja_JP-supertonic-f1.mp3",
   },
   {
     id: "vi_VN-mms-medium",
     name: "Linh",
     language: "Tiếng Việt",
     detail: "MMS VITS ONNX · Tiếng Việt",
-    gender: "Natural voice",
+    gender: "Natural male",
     engine: "mms",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/vi_VN-mms-medium.webp",
+    sampleUrl: "/assets/voice-samples/vi_VN-mms-medium.mp3",
   },
   {
     id: "ru_RU-mms-medium",
     name: "Irina",
     language: "Русский",
     detail: "MMS VITS ONNX · Русский",
-    gender: "Natural voice",
+    gender: "Natural male",
     engine: "mms",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/ru_RU-mms-medium.webp",
+    sampleUrl: "/assets/voice-samples/ru_RU-mms-medium.mp3",
   },
   {
     id: "th_TH-mms-medium",
     name: "Malee",
     language: "ไทย",
     detail: "MMS VITS ONNX · ภาษาไทย",
-    gender: "Natural voice",
+    gender: "Natural male",
     engine: "mms",
     badge: "ONNX",
+    avatarUrl: "/assets/voice-avatars/th_TH-mms-medium.webp",
+    sampleUrl: "/assets/voice-samples/th_TH-mms-medium.mp3",
   },
 ];
 
