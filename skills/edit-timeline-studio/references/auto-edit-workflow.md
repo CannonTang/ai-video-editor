@@ -10,7 +10,7 @@ Classify on three independent axes:
 
 - `category`: `talking-head`, `tutorial-demo`, `interview-conversation`, `vlog-event`, `marketing-commerce`, `narrative-documentary`, or `website-walkthrough-promo`
 - `goal`: `cleanup`, `condense`, `highlights`, `summary`, `promotion`, `reframe`, or a user-defined goal
-- `delivery`: platform, audience, target duration, aspect ratio, and caption/audio requirements
+- `delivery`: platform, audience, aspect ratio, caption/audio requirements, and only genuinely hard platform limits
 
 Record classification confidence as `high`, `medium`, or `low`. Do not pretend that a goal or audience can be discovered from pixels alone.
 
@@ -21,7 +21,7 @@ Never ask for facts already available from the media. Do not ask every question 
 Ask at most three concise questions in the first round, combining related choices where useful:
 
 1. Ask for the intended result when `goal` is unresolved: faithful cleanup, condensed explanation, highlights, summary, or promotional cut.
-2. Ask for target duration or delivery platform when the answer materially changes selection or framing.
+2. Ask for the delivery platform only when it materially changes selection, framing, or export compatibility. Do not ask for or infer a target runtime for narrated work; its duration emerges from the accepted audio spine.
 3. Ask for must-keep, must-avoid, consent, claims, required steps, featured people, or story-order constraints when the category makes them important.
 
 Then ask no more than two category-specific follow-ups. State the proposed defaults in the same message. Continue with safe defaults if the user does not answer a preference question; stop only for a genuinely blocking decision.
@@ -116,7 +116,7 @@ Do not treat silence removal as automatic approval to cut. Protect breaths that 
 
 ## 6. Caption as an editorial pass
 
-Generate or revise captions only from the final spoken edit. The constraint is conditional: when captions are configured, none may be a silent text layer; when captions are absent, decide whether voiceover is needed from the brief and content rather than generating it automatically. Transcription captions must bind to their existing source-speech clip, while every Agent-authored narration, explanatory, promotional, or text-led caption requires generated or recorded voiceover first. Do not synthesize a second voice over already-spoken source dialogue. When no authorized speech route is available, do not create the caption.
+Generate or revise captions only from the final spoken edit. For Agent-authored narration, synthesize separate sentence- or semantic-beat audio files first, arrange them with a default `0.5–0.8s` gap, and lock that audio spine before cutting or timing the picture. Let the measured audio duration and pauses determine scene lengths, visual changes, and caption boundaries; never force accepted narration to follow a prebuilt picture timeline. The constraint is conditional: when captions are configured, none may be a silent text layer; when captions are absent, decide whether voiceover is needed from the brief and content rather than generating it automatically. Transcription captions must bind to their existing source-speech clip, while every Agent-authored narration, explanatory, promotional, or text-led caption requires generated or recorded voiceover first. Do not synthesize a second voice over already-spoken source dialogue. When no authorized speech route is available, do not create the caption.
 
 Lock the speech performance before caption segmentation. Split captions by meaning, syntax, breath, and shot context rather than fixed character counts. Keep captions readable, avoid very brief flashes, use at most two lines unless the user's format requires otherwise, and flag reading-rate outliers instead of silently dropping words. Preserve names, numbers, product terms, and uncertainty from low-confidence transcription for review.
 
