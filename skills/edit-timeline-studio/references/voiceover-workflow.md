@@ -26,14 +26,17 @@ Use this workflow whenever an Agent generates narration before picture timing, i
 - An on-screen person's appearance may guide fictional casting only when the narration is intentionally written as that character. Do not claim the built-in speaker is the real person's voice, infer sensitive identity traits, or imitate a real individual without an explicitly authorized clone profile.
 - When a saved authorized clone profile is selected, use the selected language's Kokoro base speaker first, then run OpenVoice V2 as the visible second-stage timbre conversion. Retain both stage states for retry and error reporting.
 
-## Generate before editing picture
+## Build the segmented audio spine before editing picture
 
 1. Confirm narration language and any explicitly requested speaker or presentation. When delivery style is unspecified, apply the warm storyteller default without blocking progress.
-2. Normalize the final script without erasing intentional code-switching.
-3. Lock the narrator/character-to-speaker map, then generate natural-speed base speech with the appropriate owned Kokoro speaker. When a saved authorized clone profile is selected, run OpenVoice V2 timbre conversion only after Kokoro base synthesis and retain both stage states for retry and error reporting.
-4. Listen to the complete output for warmth, human storytelling cadence, phrase emphasis, pronunciation, pauses, clipping, noise tails, and loudness. Regenerate, change the owned speaker, or revise synthesis phrasing when the result sounds mechanical; revise the script rather than globally accelerating speech to force a target duration.
-5. Split accepted narration into sentence-scoped audio artifacts, then bind each caption to exactly one matching `audioClipId`.
-6. Measure accepted speech and use its clauses and pauses to set scene timing, motion, emphasis, and caption boundaries.
+2. Normalize the final script without erasing intentional code-switching, then divide it into sentence-sized or coherent semantic beats. Keep each segment independently understandable and editable; do not split one linguistic utterance merely because it switches languages.
+3. Lock the narrator/character-to-speaker map, then synthesize every segment separately at natural speed into its own physical audio artifact. Do not synthesize one long narration and cut it into segment ranges afterward. When a saved authorized clone profile is selected, run OpenVoice V2 timbre conversion on each accepted segment only after Kokoro base synthesis and retain both stage states for retry and error reporting.
+4. Listen to every segment and then the ordered sequence for warmth, human storytelling cadence, phrase emphasis, pronunciation, clipping, noise tails, and loudness. Regenerate, change the owned speaker, or revise synthesis phrasing when the result sounds mechanical. Never accelerate, compress, pad, trim, or rewrite accepted narration merely to approach a duration estimate.
+5. Arrange the accepted segment files into the narration timeline before cutting picture. Leave a default `0.5–0.8s` gap between adjacent segments so each thought lands and the edit has a natural visual breath. Shorten or lengthen that range only for an intentional dialogue overlap, dramatic hold, music cue, or other documented editorial reason; never let an accidental decoder tail define the gap.
+6. Lock this complete segmented audio spine, including the measured clip durations and inter-segment gaps. Only then set scene in/out points, motion, emphasis, transitions, caption boundaries, and the overall picture duration. Adapt and trim visuals to the audio; do not retime accepted speech around a prebuilt picture edit.
+7. Bind each spoken caption to exactly one matching segment `audioClipId`. Keep captions out of the silent inter-segment gaps unless the gap intentionally contains audible speech from another authorized source.
+
+Treat runtime as an output measurement, not an editing target. Do not ask the picture or voice to land on an approximate number of seconds, and do not regard a longer or shorter result as an error. If the user explicitly identifies a non-negotiable platform upload cap, report the natural audio-derived duration and resolve that delivery constraint with the user before changing the script or performance; never silently retime the accepted voice.
 
 Keep runtime, model ID, immutable revision, speaker ID, language mode, text-normalization decisions, speed, timestamps, and fallback provenance with the generated asset.
 
@@ -46,6 +49,7 @@ Keep runtime, model ID, immutable revision, speaker ID, language mode, text-norm
 - Run `node scripts/validate-voiceover-loudness.mjs <sentence-01.wav> <sentence-02.wav> ...` on the final sentence artifacts. Treat a nonzero exit as a delivery blocker; change the command thresholds only when the brief documents another mastering standard.
 - Measure the final mixed export over every narration interval as well as the full program. A compliant full-program average never excuses a sentence that jumps in level. Verify that music ducking, limiters, and clip overlaps do not reintroduce audible level changes.
 - Reject delivery when any sentence misses the level-spread or true-peak gate, or when normal-speed continuous playback still reveals an unexplained loudness jump. Fix the individual stems, rebuild the editable project, and rerender before handoff.
+- Measure the silence between adjacent narration assets on the assembled timeline. Unless an intentional exception is recorded, require each gap to fall within `0.5–0.8s`; distinguish the scheduled gap from encoded leading/trailing silence so decoder padding does not create false breathing room.
 
 ## Gate stereo and multichannel timing
 

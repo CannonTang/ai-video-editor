@@ -6,13 +6,13 @@ Use this reference for product, brand, `marketing-commerce`, website-promotion, 
 
 - Define one umbrella proposition that raises the story from a product function to a meaningful human, team, creator, customer, or industry change. Make the stakes feel consequential through scope and causality, never through unverified superlatives.
 - Begin with a recognizable tension or limitation, reveal the product as the mechanism of change, prove that change through concrete cases, synthesize the broader consequence, and end with a CTA that resolves or echoes the opening.
-- Unless the user explicitly requests a teaser, target roughly 35–45 seconds for a short promotional video. Allow the evidence and narration to run longer when a complete truthful arc needs it; do not crush a narrative into the duration by accelerating speech or replacing proof with slogans.
+- Unless the user explicitly requests a teaser, build the complete truthful arc without targeting a preset runtime. Generate and accept the segmented narration first, then let its natural delivery and pauses determine the final duration; being longer or shorter than an early estimate is not a defect. Do not accelerate speech, remove needed pauses, drop proof, or replace proof with slogans to hit a number of seconds.
 
 ## Proactively discover closed-loop cases
 
 - Inspect the supplied media, product surface, authorized website flows, official documentation, user-provided facts, and current public sources when research is in scope. Do not ask the user to invent a case list when relevant cases can be derived from inspected evidence.
 - Build a case manifest before scripting. For every candidate record: audience or protagonist, starting state, concrete friction, product action, visible evidence, result or changed state, narrative role, visual source, provenance, and claim status (`verified`, `official-claim`, `illustrative`, or `not-verified`).
-- Normally retain at least three visually and causally distinct cases in a 35–45 second promo. Vary the people, context, scale, workflow, or outcome; do not present the same feature three times with different labels.
+- Normally retain at least three visually and causally distinct cases. Vary the people, context, scale, workflow, or outcome; do not present the same feature three times with different labels.
 - Give every retained case a mini-loop: `context -> friction -> product action -> visible result -> consequence`. A logo, UI screen, feature name, testimonial fragment, or generic lifestyle shot is not a complete case by itself.
 - Escalate the cases toward the main payoff—for example individual to team to wider ecosystem, routine task to complex challenge to transformation, or immediate gain to durable outcome. Make each case contribute new proof rather than equal-weight repetition.
 - Use an illustrative case only when it is clearly framed as a plausible use case rather than a verified customer outcome. Never fabricate a customer identity, quotation, metric, adoption claim, before/after result, or product behavior.
