@@ -65,7 +65,6 @@ function normalizeBaseText(text) {
   return text
     .normalize("NFKC")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
-    .replace(/[“”"']/g, "")
     .replace(/\r\n?/g, "\n")
     .trim();
 }
@@ -146,10 +145,16 @@ function prepareKokoroText(rawText) {
 function prepareKokoroMultilangText(rawText) {
   const normalized = normalizeBaseText(rawText);
   const text = normalized
-    .replace(/[^\p{Script=Han}\p{Script=Latin}0-9\s，。！？；：、,.!?;:()\-]/gu, "")
+    .replace(/[^\p{Script=Han}\p{Script=Latin}0-9\s，。！？；：、,.!?;:\-""''()…—·]/gu, "")
+    .replace(/,/g, "，")
+    .replace(/!/g, "！")
+    .replace(/\?/g, "？")
+    .replace(/;/g, "；")
+    .replace(/:/g, "：")
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n+ */g, "。")
-    .replace(/[。]{2,}/g, "。")
+    .replace(/[，、]{2,}/g, "，")
+    .replace(/[。！？；：]{2,}/g, (marks) => marks[0])
     .trim();
   if (!text) throw new TtsInputError("ttsErrorEmptyScript");
   return {
