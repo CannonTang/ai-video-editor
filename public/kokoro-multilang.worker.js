@@ -140,6 +140,38 @@ async function initialize(baseUrls) {
   }
 }
 
+const PUNCTUATION_PAUSES = new Map([
+  ["、", 0.15],
+  ["，", 0.3], [",", 0.3],
+  ["：", 0.4], [":", 0.4], ["—", 0.4],
+  ["；", 0.5], [";", 0.5],
+  ["。", 0.6], [".", 0.6],
+  ["？", 0.6], ["?", 0.6],
+  ["！", 0.6], ["!", 0.6],
+  ["…", 0.8],
+  ["\n", 0.6],
+]);
+
+function splitTextByPunctuation(text) {
+  const segments = [];
+  const parts = text.split(/([，。！？；：、,.!?;:…—\n]+)/);
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = (parts[i] || "").trim();
+    if (!part) continue;
+    segments.push(part);
+  }
+  return segments;
+}
+
+function getPauseForPunct(punct) {
+  let maxPause = 0;
+  for (const char of punct) {
+    const pause = PUNCTUATION_PAUSES.get(char) ?? 0;
+    if (pause > maxPause) maxPause = pause;
+  }
+  return maxPause;
+}
+
 self.onmessage = (event) => {
   const message = event.data || {};
   if (message.type === "init") {
@@ -150,13 +182,41 @@ self.onmessage = (event) => {
   try {
     const sid = Math.max(0, Math.min(3, Number(message.sid) || 0));
     const speed = Math.max(0.5, Math.min(2, Number(message.speed) || 1));
-    const audio = tts.generate({ text: String(message.text || ""), sid, speed });
+    const text = String(message.text || "");
+    const sampleRate = tts.sampleRate;
+    const segments = splitTextByPunctuation(text);
+    const chunks = [];
+    for (let i = 0; i < segments.length; i += 1) {
+      const seg = segments[i];
+      if (/^[，。！？；：、,.!?;:…—\n]+$/.test(seg)) continue;
+      const audio = tts.generate({ text: seg, sid, speed });
+      chunks.push(audio.samples);
+      if (i < segments.length - 1) {
+        let pause = 0;
+        for (let j = i + 1; j < segments.length; j += 1) {
+          if (/^[，。！？；：、,.!?;:…—\n]+$/.test(segments[j])) {
+            const p = getPauseForPunct(segments[j]);
+            if (p > pause) pause = p;
+          } else break;
+        }
+        if (pause > 0) {
+          chunks.push(new Float32Array(Math.round(sampleRate * pause)));
+        }
+      }
+    }
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const combined = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.length;
+    }
     self.postMessage({
       type: "result",
       requestId: message.requestId,
-      samples: audio.samples,
-      sampleRate: audio.sampleRate || tts.sampleRate,
-    }, [audio.samples.buffer]);
+      samples: combined,
+      sampleRate,
+    }, [combined.buffer]);
   } catch (error) {
     self.postMessage({ type: "error", scope: "generate", requestId: message.requestId, message: errorMessage(error) });
   }
