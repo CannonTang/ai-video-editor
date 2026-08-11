@@ -59,7 +59,7 @@ import {
   updateVectorPart,
 } from "../lib/vectorDocument.js";
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
-import { AiMusicGenerator, FavoriteVoicesPanel, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
+import { AI_MUSIC_COPY, AiMusicGenerator, FavoriteVoicesPanel, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 import { SmartFramePanel } from "./SmartFramePanel.jsx";
 import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
@@ -838,7 +838,7 @@ function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegm
         </label> : null}
         <label className="audio-property-slider">
           <span><b>{t("volume")}</b><em>{Math.round((segment.volume ?? 1) * 100)}%</em></span>
-          <input type="range" min="0" max="1" step="0.01" value={segment.volume ?? 1} onChange={(event) => updateAudioSegment(segment.id, { volume: Number(event.target.value) })} />
+          <input type="range" min="0" max="4" step="0.01" value={segment.volume ?? 1} onChange={(event) => updateAudioSegment(segment.id, { volume: Number(event.target.value) })} />
         </label>
         {segment.canChangeSpeed !== false ? <div className="audio-property-slider">
           <span><b>{t("visualSpeed")}</b><em>{(segment.playbackRate ?? 1).toFixed((segment.playbackRate ?? 1) % 1 ? 2 : 0)}×</em></span>
@@ -1290,7 +1290,6 @@ export function VoicePanel({
   selectedTrack,
   selectedAudioSegment,
   selectedTrackAudioSegment,
-  audioClipInspectorOpen = false,
   mobileInspectorOrigin = "",
   mobileInspectorSection = "",
   onCloseMobileInspector,
@@ -1360,7 +1359,7 @@ export function VoicePanel({
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = panelContext === "audio" && (
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
-    || Boolean(audioClipInspectorOpen && ["source", "music"].includes(selectedTrack) && audioPropertySegment)
+    || Boolean(["source", "music"].includes(selectedTrack) && audioPropertySegment)
   );
   const isVisualContext = panelContext === "visual" && !isEffectsContext;
   const isStickerContext = panelContext === "sticker" && Boolean(selectedStickerSegment);
@@ -1403,7 +1402,7 @@ export function VoicePanel({
     background: t("effectBackground"),
     edge: t("effectEdgeCleanup"),
   }[mobileInspectorSection];
-  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isOpticalFlowContext ? t("effectVectorTracking") : isCinematicDepthContext ? t("depthTitle") : isPhotoParallaxContext ? t("parallaxTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (uiLanguage === "zh" ? "AI 音乐" : "AI music") : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
+  const title = focusedSectionTitle || (isFaceSwapContext ? t("faceSwapTitle") : isOpticalFlowContext ? t("effectVectorTracking") : isCinematicDepthContext ? t("depthTitle") : isPhotoParallaxContext ? t("parallaxTitle") : isEffectsContext ? t("effectProperties") : isAiMusicContext ? (AI_MUSIC_COPY[uiLanguage] || AI_MUSIC_COPY.en).title : isSmartAutoContext ? t("smartAutoEdit") : isSmartFrameContext ? t("smartFrame") : isAvatarContext ? t("avatarTitle") : isVectorOverlay || isVectorVisual ? t("vectorProperties", "矢量图形") : isOverlayContext ? t("pictureInPicture", "画中画") : isStickerContext ? t("stickerProperties") : isVisualContext ? t("visualPanelTitle") : isCaptionContext ? t("caption") : isAudioClipContext ? t("audioClipProperties") : t("aiVoice"));
   const panelStatusText = isFaceSwapContext
     ? faceSwap?.job?.running ? `${faceSwap.job.progress}%` : hasVisual ? t("smartVisualReady") : t("smartWaitingVisual")
     : isOpticalFlowContext ? t("effectFlowExperimental")

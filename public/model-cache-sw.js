@@ -182,6 +182,10 @@ function shouldCacheRequest(request) {
   return isHuggingFaceModelRequest(url) || isModelScopeModelRequest(url) || isRuntimeAssetRequest(url);
 }
 
+function isAiMusicModelRequest(url) {
+  return url.pathname.includes("/stable-audio-3-small-music-onnx/");
+}
+
 function withCacheStatus(response, status) {
   const headers = new Headers(response.headers);
   headers.set("X-Timeline-Model-Cache", status);
@@ -220,7 +224,10 @@ async function cacheFirst(request, event) {
   }
 
   const response = await fetch(request);
-  if (response.ok || response.type === "opaque") {
+  // AI music downloads remain parallel, while its worker owns canonical,
+  // cross-tab-deduplicated Cache Storage writes. Cloning several ~100 MB
+  // streams here would create a second persistent copy of every artifact.
+  if ((response.ok || response.type === "opaque") && !isAiMusicModelRequest(new URL(request.url))) {
     const requestUrl = new URL(request.url);
     if (requestUrl.pathname.includes("timeline-studio-voice-models")) {
       try {

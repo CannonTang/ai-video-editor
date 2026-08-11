@@ -37,6 +37,7 @@ import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
 import { resolveSubjectMaterialShadow } from "./subjectMaterialRendering.js";
 import { drawCinematicDepthFrame, normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./depthOfField.js";
 import { drawPhotoParallaxFrame, normalizePhotoParallax } from "./photoParallax.js";
+import { createVideoTrackFrame } from "./videoTrackFrames.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -76,7 +77,7 @@ function getSubjectMaterialTexture(materialId) {
   return image?.complete && image.naturalWidth > 0 ? image : null;
 }
 
-const VIDEO_TRACK_FRAME_MAX = 120;
+const VIDEO_TRACK_FRAME_MAX = 480;
 const VIDEO_TRACK_FRAME_HEIGHT = 90;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -90,30 +91,48 @@ export function getVideoTrackSampleCount(duration, maxFrames = VIDEO_TRACK_FRAME
     safeDuration <= 20
       ? 0.2
       : safeDuration <= 45
-        ? 0.5
+        ? 0.25
       : safeDuration <= 120
-        ? 0.75
+        ? 0.4
         : safeDuration <= 600
-          ? 3
-          : 10;
+          ? 0.5
+          : 1.5;
 
   return Math.max(1, Math.min(maxFrames, Math.ceil(safeDuration / targetStep)));
 }
 
 export function seekVideoFrame(video, time) {
   const safeTime = Math.max(0, Math.min(time, Math.max(0, (video.duration || time) - 0.04)));
-  if (video.readyState >= 2 && Math.abs(video.currentTime - safeTime) < 0.015) {
-    return new Promise((resolve) => window.requestAnimationFrame(resolve));
-  }
-
   return new Promise((resolve, reject) => {
+    let callbackId = 0;
+    let timeoutId = 0;
     const cleanup = () => {
       video.removeEventListener("seeked", handleSeeked);
       video.removeEventListener("error", handleError);
+      if (callbackId) video.cancelVideoFrameCallback?.(callbackId);
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+    const resolvePresentedFrame = () => {
+      if (typeof video.requestVideoFrameCallback !== "function") {
+        window.requestAnimationFrame(() => {
+          cleanup();
+          resolve(video.currentTime);
+        });
+        return;
+      }
+      callbackId = video.requestVideoFrameCallback((_now, metadata) => {
+        const mediaTime = Number.isFinite(metadata?.mediaTime) ? metadata.mediaTime : video.currentTime;
+        cleanup();
+        resolve(mediaTime);
+      });
+      timeoutId = window.setTimeout(() => {
+        cleanup();
+        resolve(video.currentTime);
+      }, 500);
     };
     const handleSeeked = () => {
-      cleanup();
-      window.requestAnimationFrame(resolve);
+      video.removeEventListener("seeked", handleSeeked);
+      resolvePresentedFrame();
     };
     const handleError = () => {
       cleanup();
@@ -122,8 +141,54 @@ export function seekVideoFrame(video, time) {
 
     video.addEventListener("seeked", handleSeeked, { once: true });
     video.addEventListener("error", handleError, { once: true });
-    video.currentTime = safeTime;
+    if (video.readyState >= 2 && Math.abs(video.currentTime - safeTime) < 0.015) {
+      resolvePresentedFrame();
+    } else {
+      video.currentTime = safeTime;
+    }
   });
+}
+
+async function extractVideoTrackFramesWithWebCodecs(src, sampleTimes, options) {
+  if (typeof VideoDecoder === "undefined" || !sampleTimes.length) return null;
+  const { width, height, quality, signal } = options;
+  let input = null;
+  try {
+    const blob = src instanceof Blob
+      ? src
+      : await fetch(String(src), { signal }).then((response) => {
+          if (!response.ok) throw new Error(`Video read failed (${response.status})`);
+          return response.blob();
+        });
+    if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+    const { ALL_FORMATS, BlobSource, CanvasSink, Input } = await import("mediabunny");
+    input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+    const track = await input.getPrimaryVideoTrack();
+    if (!track || !(await track.canDecode())) return null;
+    const sink = new CanvasSink(track, {
+      width,
+      height,
+      fit: "fill",
+      poolSize: 3,
+      decoderOptions: { optimizeForLatency: true },
+    });
+    const frames = [];
+    for await (const result of sink.canvasesAtTimestamps(sampleTimes)) {
+      if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+      if (!result?.canvas) continue;
+      frames.push(createVideoTrackFrame(
+        result.canvas.toDataURL("image/jpeg", quality),
+        result.timestamp,
+      ));
+    }
+    return frames;
+  } catch (error) {
+    if (error?.name === "AbortError") throw error;
+    console.warn("Video timeline WebCodecs extraction unavailable; using native seek fallback.", error);
+    return null;
+  } finally {
+    input?.dispose();
+  }
 }
 
 export async function extractVideoTrackFrames(src, options = {}) {
@@ -133,6 +198,7 @@ export async function extractVideoTrackFrames(src, options = {}) {
     height,
     maxFrames = VIDEO_TRACK_FRAME_MAX,
     quality = 0.72,
+    signal,
   } = options;
   const video = await loadVideo(src);
   const safeDuration = Math.max(0, duration || video.duration || 0);
@@ -153,13 +219,25 @@ export async function extractVideoTrackFrames(src, options = {}) {
   }
 
   try {
+    const sampleTimes = Array.from(
+      { length: frameCount },
+      (_, index) => ((index + 0.5) / frameCount) * safeDuration,
+    );
+    const decodedFrames = await extractVideoTrackFramesWithWebCodecs(src, sampleTimes, {
+      width: canvas.width,
+      height: canvas.height,
+      quality,
+      signal,
+    });
+    if (decodedFrames?.length) return decodedFrames;
     const frames = [];
     video.pause();
     for (let index = 0; index < frameCount; index += 1) {
-      const time = ((index + 0.5) / frameCount) * safeDuration;
-      await seekVideoFrame(video, time);
+      if (signal?.aborted) throw signal.reason || new DOMException("Aborted", "AbortError");
+      const time = sampleTimes[index];
+      const sourceTime = await seekVideoFrame(video, time);
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
-      frames.push(canvas.toDataURL("image/jpeg", quality));
+      frames.push(createVideoTrackFrame(canvas.toDataURL("image/jpeg", quality), sourceTime));
     }
     return frames;
   } finally {
@@ -205,7 +283,11 @@ export async function createVideoTrackFramesFromBlobs(blobs, options = {}) {
     const bitmap = await createImageBitmap(sourceFrames[sourceIndex]);
     try {
       context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      frames.push(canvas.toDataURL("image/jpeg", quality));
+      const safeDuration = Math.max(0, Number(duration) || 0);
+      const sourceTime = safeDuration > 0
+        ? ((sourceIndex + 0.5) / sourceFrames.length) * safeDuration
+        : sourceIndex;
+      frames.push(createVideoTrackFrame(canvas.toDataURL("image/jpeg", quality), sourceTime));
     } finally {
       bitmap.close();
     }

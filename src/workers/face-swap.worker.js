@@ -8,6 +8,7 @@ import {
 
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };
 ort.env.webgpu.powerPreference = "high-performance";
+ort.env.webgpu.forceFallbackAdapter = false;
 ort.env.logLevel = "error";
 
 let runtimePromise = null;

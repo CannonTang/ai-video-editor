@@ -5,7 +5,9 @@ import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url
 import { LIVE_PORTRAIT_WEB_MODEL, getLivePortraitModelUrl } from "../config/livePortrait.js";
 import { evaluateLivePortraitFrameQuality } from "../lib/livePortraitQuality.ts";
 import { fetchFirstAvailableModel } from "../lib/modelSources.js";
+import { configureOrtWebGpu } from "../lib/webGpuPreference.js";
 
+configureOrtWebGpu(ort);
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };

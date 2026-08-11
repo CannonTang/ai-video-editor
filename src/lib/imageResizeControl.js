@@ -2,7 +2,12 @@ import {
   IMAGE_SNAP_THRESHOLD_PIXELS, MAX_TIMELINE_DURATION_SECONDS, MIN_VISUAL_SEGMENT_SECONDS,
 } from "../config/editor.js";
 import { createVisualSegment, estimateDuration, getImageThumbnailCount, getVisualSegmentsTotal } from "./timeline.js";
-import { createTimelineEdgeAutoScroller, getTimelineDragTimeDelta } from "./timelineEdgeAutoScroll.js";
+import {
+  createTimelineEdgeAutoScroller,
+  getTimelineActiveDragHorizon,
+  getTimelineDragTimeDelta,
+  settleTimelineDrag,
+} from "./timelineEdgeAutoScroll.js";
 
 export function createImageResizeControl(d) {
   return function startImageResize(event, segmentId = "", segmentIndex = -1) {
@@ -36,8 +41,9 @@ export function createImageResizeControl(d) {
     ].filter(Boolean);
     let activeLabel = "";
     let editingStarted = false;
+    let moved = false;
     apply = (clientX, scrollOffset = autoScroller.getScrollOffset()) => {
-      if (!editingStarted) {
+      if (!editingStarted && moved) {
         editingStarted = true;
         d.pauseForTimelineEdit?.();
       }
@@ -62,16 +68,35 @@ export function createImageResizeControl(d) {
         d.sourceAudioBlob ? d.sourceAudioStart + d.sourceAudioDuration : 0,
         d.musicBlob ? d.musicDuration : 0, estimateDuration(d.script), visualDuration);
       activeLabel = snap?.label ?? ""; d.setSnapGuide(snap); d.setVisualSegments(next);
+      if (moved) {
+        d.setTimelineHorizon((value) => getTimelineActiveDragHorizon(value, timelineDuration, projectDuration));
+      }
       d.setImageDuration(visualDuration); d.setImageClipCount(getImageThumbnailCount(visualDuration));
-      d.setCurrentTime((time) => Math.min(time, projectDuration));
     };
-    apply(event.clientX);
-    const move = (e) => { autoScroller.update(e.clientX); apply(e.clientX); };
+    const move = (e) => {
+      if (!moved && Math.abs(e.clientX - event.clientX) < 3) return;
+      moved = true;
+      autoScroller.update(e.clientX);
+      apply(e.clientX);
+    };
     const up = () => {
-      autoScroller.stop(); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel); d.setSnapGuide(null);
+      settleTimelineDrag(autoScroller, { active: moved, setTimelineHorizon: d.setTimelineHorizon });
+      removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel); d.setSnapGuide(null);
+      if (!moved) return;
       d.notify(activeLabel === "配音结尾" ? "图片已吸附到配音结尾" : activeLabel === "原声结尾" ? "图片已吸附到视频原声结尾" : activeLabel === "音乐结尾" ? "图片已吸附到音乐结尾" : "图片片段时长已调整");
     };
-    const cancel = () => { autoScroller.stop(); removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel); d.setSnapGuide(null); };
+    const cancel = () => {
+      settleTimelineDrag(autoScroller, {
+        active: moved,
+        setTimelineHorizon: d.setTimelineHorizon,
+        settle: () => {
+          d.setVisualSegments(segments);
+          d.setImageDuration(d.imageDuration);
+          d.setImageClipCount(getImageThumbnailCount(d.imageDuration));
+        },
+      });
+      removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel); d.setSnapGuide(null);
+    };
     addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true }); addEventListener("pointercancel", cancel, { once: true });
   };
 }

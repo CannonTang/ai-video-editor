@@ -4,6 +4,7 @@ import { buildEnglishMusicPrompt, createAiMusicFileName, translateMusicDescripti
 import { repeatPcm16WavAtBestBoundary } from "../lib/aiMusicLoop.js";
 import { decodeWaveform } from "../lib/media.js";
 import { getModelSourcePreference } from "../lib/modelSources.js";
+import { waitForModelCacheServiceWorker } from "../lib/serviceWorker.js";
 
 export function useAiMusicGeneration({ activeLanguage, imageUrlRefs, setActiveTool, setMediaTab, setSelectedLibraryAssetId, setUserAssets }) {
   const workerRef = useRef(null);
@@ -28,10 +29,14 @@ export function useAiMusicGeneration({ activeLanguage, imageUrlRefs, setActiveTo
       return;
     }
     await navigator.storage?.persist?.().catch(() => false);
+    // The model cache is owned by the service worker. On a first-page visit,
+    // wait until it controls the page so the initial parallel download is
+    // persisted instead of falling through as an uncached worker fetch.
+    await waitForModelCacheServiceWorker();
     const worker = workerRef.current ?? new Worker(new URL("../workers/ai-music.worker.js", import.meta.url), { type: "module" });
     const warmRuntime = Boolean(workerRef.current);
     workerRef.current = worker;
-    setJob({ state: "running", progress: warmRuntime ? 0.64 : 0.01, phase: warmRuntime ? "conditioning" : "download", error: "" });
+    setJob({ state: "running", progress: warmRuntime ? 0.64 : 0.01, phase: warmRuntime ? "conditioning" : "checking", error: "" });
     worker.onmessage = async ({ data }) => {
       if (data.type === "progress") {
         setJob((current) => ({ ...current, progress: data.progress, phase: data.phase }));
@@ -40,7 +45,17 @@ export function useAiMusicGeneration({ activeLanguage, imageUrlRefs, setActiveTo
       if (data.type === "error") {
         worker.terminate();
         workerRef.current = null;
-        setJob({ state: "error", progress: 0, phase: "", error: data.message });
+        const cacheWriteFailed = String(data.message || "").startsWith("AI_MUSIC_CACHE_WRITE_FAILED");
+        setJob({
+          state: "error",
+          progress: 0,
+          phase: "",
+          error: cacheWriteFailed
+            ? (String(activeLanguage).toLowerCase().startsWith("zh")
+              ? `模型下载或本地缓存失败（${String(data.message).split(": ").at(-1)}），请重试。`
+              : `Model download or local caching failed (${String(data.message).split(": ").at(-1)}). Try again.`)
+            : data.message,
+        });
         return;
       }
       if (data.type !== "complete") return;

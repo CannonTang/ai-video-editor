@@ -1,8 +1,9 @@
 import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
-import { getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay } from "./editorRuntime.js";
+import { getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, setTimelineAudioGain } from "./editorRuntime.js";
 import { getVisualSegmentIndexAtTime, isTimedSegmentLaneVisible } from "./timeline.js";
 import { getLinkedSourceAudioState } from "./sourceAudioSync.js";
 import { getVisualSourceTime, normalizeVisualPlaybackRate } from "./visualEffects.js";
+import { requestLatestVideoFrame } from "./videoFrameSync.js";
 
 export function createPlaybackControls(deps) {
   const isTrackAudible = (track) => deps.trackVisibility?.[track] !== false;
@@ -28,7 +29,7 @@ export function createPlaybackControls(deps) {
     deps.audioSegmentRefs.current.forEach((audio) => audio.pause()); deps.sourceAudioRef.current?.pause();
     deps.musicRef.current?.pause(); deps.previewVideoRef.current?.pause();
   };
-  const syncPreviewVideoTime = (timelineTime) => {
+  const syncPreviewVideoTime = (timelineTime, { immediate = false } = {}) => {
     const video = deps.previewVideoRef.current;
     if (!video || deps.previewVisualType !== "video") return;
     const index = getVisualSegmentIndexAtTime(deps.visualSegments, timelineTime);
@@ -48,11 +49,14 @@ export function createPlaybackControls(deps) {
     const targetTime = Math.max(0, Math.min(sourceTime, maxTime));
     video.playbackRate = normalizeVisualPlaybackRate(segment?.playbackRate);
     if ("preservesPitch" in video) video.preservesPitch = true;
-    if (Number.isFinite(targetTime) && Math.abs(video.currentTime - targetTime) > 0.01) {
-      video.currentTime = targetTime;
+    if (Number.isFinite(targetTime)) {
+      requestLatestVideoFrame(video, targetTime, {
+        immediate,
+        onPresented: deps.setPreviewVideoMediaTime,
+      });
     }
   };
-  const seekTo = (time) => {
+  const seekTo = (time, options = {}) => {
     const clamped = Math.max(0, Math.min(deps.timelineDurationRef.current || MAX_TIMELINE_DURATION_SECONDS, time));
     deps.currentTimeRef.current = clamped; deps.setCurrentTime(clamped);
     // Seeking while playback is active must also move the fallback timeline
@@ -65,7 +69,7 @@ export function createPlaybackControls(deps) {
       deps.visualPlaybackStartedAtRef.current = performance.now();
       deps.visualPlaybackLastUpdateRef.current = 0;
     }
-    syncPreviewVideoTime(clamped);
+    syncPreviewVideoTime(clamped, options);
     deps.audioSegments.forEach((segment) => {
       const audio = deps.audioSegmentRefs.current.get(segment.id);
       if (audio) audio.currentTime = Math.max(0, Number(segment.sourceStart) || 0) + getTimelineTrackLocalTime(clamped, segment.start, segment.duration) * Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
@@ -93,9 +97,13 @@ export function createPlaybackControls(deps) {
       pauseTimelineMedia();
       deps.setIsPlaying(false);
     }
-    seekTo(getTimelineTimeFromClientX(event.clientX));
+    seekTo(getTimelineTimeFromClientX(event.clientX), { immediate: true });
     const move = (e) => seekTo(getTimelineTimeFromClientX(e.clientX));
-    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); };
+    const up = (upEvent) => {
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      seekTo(getTimelineTimeFromClientX(upEvent.clientX), { immediate: true });
+    };
     addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true });
   };
   const handlePlayToggle = () => {
@@ -115,7 +123,7 @@ export function createPlaybackControls(deps) {
       const active = isTimelineTimeInsideTrack(timelineTime, segment.start, segment.duration);
       const playbackRate = Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
       audio.currentTime = Math.max(0, Number(segment.sourceStart) || 0) + getTimelineTrackLocalTime(timelineTime, segment.start, segment.duration) * playbackRate;
-      audio.volume = getAudioSegmentPreviewVolume(segment, timelineTime); audio.playbackRate = playbackRate;
+      setTimelineAudioGain(audio, getAudioSegmentPreviewVolume(segment, timelineTime)); audio.playbackRate = playbackRate;
       if ("preservesPitch" in audio) audio.preservesPitch = true;
       playIf(audio, active);
     });

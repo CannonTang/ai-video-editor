@@ -1,7 +1,13 @@
-import { getVisualSegmentTimeline, materializeCaptionTimings, moveTimedCaptionSegment, reorderTimelineItems } from "./timeline.js";
+import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
+import { materializeCaptionTimings, moveTimedCaptionSegment, reorderTimelineItems } from "./timeline.js";
 import { collectTimelineSnapPoints, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
 import { createVisualOverlaySegment } from "./visualOverlayTimeline.js";
-import { createTimelineEdgeAutoScroller, getTimelineDragTimeDelta } from "./timelineEdgeAutoScroll.js";
+import {
+  createTimelineEdgeAutoScroller,
+  getTimelineActiveDragHorizon,
+  getTimelineDragTimeDelta,
+  settleTimelineDrag,
+} from "./timelineEdgeAutoScroll.js";
 
 export function getStableTimelineReorderIndex(slotCenters, pointerX, fallbackIndex = 0) {
   if (!Array.isArray(slotCenters) || !slotCenters.length || !Number.isFinite(pointerX)) {
@@ -30,12 +36,11 @@ export function createTimelineReorderControls(d) {
       const source = d.visualSegments.length ? d.visualSegments : d.renderedVisualSegments;
       if (source.length < 2) return;
       const next = reorderTimelineItems(source, fromIndex, toIndex);
-      d.commitVisualSegments(next, "已调整视觉片段顺序", toIndex); d.seekTo(getVisualSegmentTimeline(next)[toIndex]?.start ?? 0); return;
+      d.commitVisualSegments(next, "已调整视觉片段顺序", toIndex); return;
     }
   };
   const startTimelineClipDrag = (event, track, segmentId, index) => {
     if (event.button !== 0 || event.target.closest(".image-resize-handle, .caption-resize-handle")) return;
-    d.pauseForTimelineEdit?.();
     if (d.trackLocks[track]) return void d.notify(track === "image" ? "图片轨已锁定，无法拖动片段" : "字幕轨已锁定，无法拖动片段");
     if (track === "image") { d.setSelectedTrack("image"); d.setSelectedVisualSegmentId(segmentId); }
     else { d.setSelectedTrack("caption"); d.setSelectedSegmentId(segmentId); }
@@ -48,31 +53,70 @@ export function createTimelineReorderControls(d) {
       const initial = { track, mode: "move", segmentId, fromIndex: index, startX: event.clientX, startY: event.clientY,
         originalStart: caption.start, originalEnd: caption.end, previewStart: caption.start, previewEnd: caption.end,
         previewSegments: materializedCaptions, dragging: false };
-      d.timelineClipDragRef.current = initial; d.setTimelineClipDrag(initial);
-      const move = (e) => {
+      d.timelineClipDragRef.current = initial;
+      const trackElement = document.querySelector('[data-timeline-reorder-track="caption"]');
+      const width = Math.max(1, trackElement?.getBoundingClientRect().width || 1);
+      const autoScroller = createTimelineEdgeAutoScroller({
+        trackElement: d.trackScrollRef?.current,
+        pointerType: event.pointerType,
+        timelineDuration: d.timelineDuration,
+        onScrollFrame: (clientX, scrollOffset) => move({ clientX, clientY: event.clientY, preventDefault() {} }, scrollOffset),
+      });
+      const move = (e, scrollOffset = autoScroller.getScrollOffset()) => {
         const state = d.timelineClipDragRef.current; if (!state || state.segmentId !== segmentId) return;
         if (!state.dragging && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 4) return;
-        const trackElement = document.querySelector('[data-timeline-reorder-track="caption"]');
-        const width = Math.max(1, trackElement?.getBoundingClientRect().width || 1);
-        const delta = ((e.clientX - state.startX) / width) * d.timelineDuration;
-        const unsnappedStart = Math.max(0, Math.min(d.timelineDuration - duration, state.originalStart + delta));
+        if (!state.dragging) d.pauseForTimelineEdit?.();
+        e.preventDefault?.();
+        autoScroller.update(e.clientX);
+        const dragClientX = autoScroller.getDragClientX(e.clientX);
+        const delta = getTimelineDragTimeDelta({
+          clientX: dragClientX,
+          startX: state.startX,
+          scrollOffset,
+          contentWidth: width,
+          timelineDuration: d.timelineDuration,
+        });
+        const unsnappedStart = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - duration, state.originalStart + delta));
         const snapped = snapTimelineRange(unsnappedStart, duration, snapPoints, (10 / width) * d.timelineDuration);
-        const previewStart = Math.max(0, Math.min(d.timelineDuration - duration, snapped.start));
+        const previewStart = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - duration, snapped.start));
         const previewEnd = previewStart + duration;
         const previewSegments = moveTimedCaptionSegment(materializedCaptions, segmentId, previewStart, previewEnd);
         const next = { ...state, previewStart, previewEnd, previewSegments, dragging: true };
+        d.setTimelineHorizon?.((value) => getTimelineActiveDragHorizon(value, d.timelineDuration, previewEnd));
         d.timelineClipDragRef.current = next; d.setTimelineClipDrag(next);
         d.setSnapGuide?.(snapped.guide);
       };
+      const cleanup = () => {
+        removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel);
+      };
+      const cancel = () => {
+        const active = Boolean(d.timelineClipDragRef.current?.dragging);
+        settleTimelineDrag(autoScroller, {
+          active,
+          setTimelineHorizon: d.setTimelineHorizon,
+          settle: () => { d.setTimelineClipDrag(null); d.setSnapGuide?.(null); },
+        });
+        d.timelineClipDragRef.current = null;
+        cleanup();
+      };
       const up = () => {
-        removeEventListener("pointermove", move); removeEventListener("pointerup", up);
-        const state = d.timelineClipDragRef.current; d.timelineClipDragRef.current = null; d.setTimelineClipDrag(null); d.setSnapGuide?.(null);
+        const state = d.timelineClipDragRef.current;
+        settleTimelineDrag(autoScroller, {
+          active: Boolean(state?.dragging),
+          setTimelineHorizon: d.setTimelineHorizon,
+          settle: () => {
+            d.setTimelineClipDrag(null);
+            d.setSnapGuide?.(null);
+            d.commitCaptionSegments(state.previewSegments, "已移动字幕片段", index);
+          },
+        });
+        d.timelineClipDragRef.current = null;
+        cleanup();
         if (!state?.dragging) return;
         d.suppressTimelineClipClickRef.current = segmentId;
         setTimeout(() => { if (d.suppressTimelineClipClickRef.current === segmentId) d.suppressTimelineClipClickRef.current = ""; }, 120);
-        d.commitCaptionSegments(state.previewSegments, "已移动字幕片段", index); d.seekTo(state.previewStart);
       };
-      addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true });
+      addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true }); addEventListener("pointercancel", cancel, { once: true });
       return;
     }
     const count = track === "image" ? d.renderedVisualSegments.length : d.captionSegments.length;
@@ -96,7 +140,7 @@ export function createTimelineReorderControls(d) {
       startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY,
       stableSlotCenters, dragging: false,
     };
-    d.timelineClipDragRef.current = initial; d.setTimelineClipDrag(initial);
+    d.timelineClipDragRef.current = initial;
     const autoScroller = createTimelineEdgeAutoScroller({
       trackElement: d.trackScrollRef?.current,
       pointerType: event.pointerType,
@@ -118,6 +162,7 @@ export function createTimelineReorderControls(d) {
       const state = d.timelineClipDragRef.current; if (!state || state.segmentId !== segmentId) return;
       if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       if (!state.dragging && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return;
+      if (!state.dragging) d.pauseForTimelineEdit?.();
       autoScroller.update(e.clientX);
       const pointerContentX = e.clientX + scrollOffset;
       const wantsOverlay = track === "image"
@@ -173,7 +218,6 @@ export function createTimelineReorderControls(d) {
         d.setSelectedVisualSegmentId("");
         d.setSelectedVisualOverlayId(overlay.id);
         d.setSelectedTrack("overlay");
-        d.seekTo(overlay.start);
         return;
       }
       commitTimelineClipReorder(track, state.fromIndex, state.overIndex);
@@ -205,7 +249,7 @@ export function createTimelineReorderControls(d) {
       fromIndex: index, startX, startY: event.clientY, originalStart: caption.start, originalEnd: caption.end,
       previewStart: caption.start, previewEnd: caption.end, previewSegments: materialized, dragging: false,
     };
-    d.timelineClipDragRef.current = initial; d.setTimelineClipDrag(initial);
+    d.timelineClipDragRef.current = initial;
     const move = (moveEvent, scrollOffset = autoScroller?.getScrollOffset() || 0) => {
       const state = d.timelineClipDragRef.current;
       if (!state || state.segmentId !== segmentId) return;
@@ -229,23 +273,39 @@ export function createTimelineReorderControls(d) {
       }
       const previewSegments = moveTimedCaptionSegment(materialized, segmentId, previewStart, previewEnd);
       const next = { ...state, previewStart, previewEnd, previewSegments, dragging: true };
+      d.setTimelineHorizon?.((value) => getTimelineActiveDragHorizon(value, d.timelineDuration, previewEnd));
       d.timelineClipDragRef.current = next; d.setTimelineClipDrag(next);
       d.setSnapGuide?.(snap ? { time: snap.time, label: `${snap.time.toFixed(2)}s` } : null);
     };
     const cleanup = () => {
-      autoScroller.stop();
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel);
     };
     const cancel = () => {
-      cleanup(); d.timelineClipDragRef.current = null; d.setTimelineClipDrag(null); d.setSnapGuide?.(null);
+      const active = Boolean(d.timelineClipDragRef.current?.dragging);
+      settleTimelineDrag(autoScroller, {
+        active,
+        setTimelineHorizon: d.setTimelineHorizon,
+        settle: () => { d.setTimelineClipDrag(null); d.setSnapGuide?.(null); },
+      });
+      d.timelineClipDragRef.current = null;
+      cleanup();
     };
     const up = () => {
+      const state = d.timelineClipDragRef.current;
+      settleTimelineDrag(autoScroller, {
+        active: Boolean(state?.dragging),
+        setTimelineHorizon: d.setTimelineHorizon,
+        settle: () => {
+          d.setTimelineClipDrag(null);
+          d.setSnapGuide?.(null);
+          d.commitCaptionSegments(state.previewSegments, "已调整字幕片段时长", index);
+        },
+      });
+      d.timelineClipDragRef.current = null;
       cleanup();
-      const state = d.timelineClipDragRef.current; d.timelineClipDragRef.current = null; d.setTimelineClipDrag(null); d.setSnapGuide?.(null);
       if (!state?.dragging) return;
       d.suppressTimelineClipClickRef.current = segmentId;
       setTimeout(() => { if (d.suppressTimelineClipClickRef.current === segmentId) d.suppressTimelineClipClickRef.current = ""; }, 120);
-      d.commitCaptionSegments(state.previewSegments, "已调整字幕片段时长", index);
     };
     addEventListener("pointermove", move); addEventListener("pointerup", up, { once: true }); addEventListener("pointercancel", cancel, { once: true });
   };

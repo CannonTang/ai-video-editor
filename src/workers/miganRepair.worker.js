@@ -1,5 +1,6 @@
 import * as ort from "onnxruntime-web-migan/webgpu";
 import { fetchFirstAvailableModel, mirroredModelFileUrls } from "../lib/modelSources.js";
+import { configureOrtWebGpu, installHighPerformanceAdapterDefault } from "../lib/webGpuPreference.js";
 
 const MODEL_REVISION = "d551be137b16ecdf12637387f2fb4776565e763f";
 const MODEL_PATH = "migan-webgpu/migan-generator-256.onnx";
@@ -11,6 +12,8 @@ const CACHE_NAME = "timeline-studio-migan-generator-256-webgpu-v1";
 const SHARED_MODEL_CACHE_NAME = "timeline-studio-model-cache-v4";
 const MODEL_READ_STALL_TIMEOUT_MS = 20_000;
 
+configureOrtWebGpu(ort);
+installHighPerformanceAdapterDefault(self.navigator?.gpu);
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.wasmPaths = "/vendor/migan-ort/";
 

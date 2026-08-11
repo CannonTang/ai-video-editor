@@ -139,7 +139,11 @@ export function createTimelineCutActions(d) {
       id: "music-audio", start: d.musicStart || 0, duration: d.musicDuration,
       sourceStart: 0, peaks: d.musicPeaks || [],
     }];
-    const index = segments.findIndex((segment) => d.currentTime > segment.start + 0.05 && d.currentTime < segment.start + segment.duration - 0.05);
+    const index = segments.findIndex((segment) => (
+      (!d.selectedMusicSegmentId || segment.id === d.selectedMusicSegmentId)
+      && d.currentTime > segment.start + 0.05
+      && d.currentTime < segment.start + segment.duration - 0.05
+    ));
     const source = segments[index];
     if (!source) return void d.notify("请把播放头放在音乐片段中间再剪切");
     const firstDuration = d.currentTime - source.start;
@@ -149,14 +153,15 @@ export function createTimelineCutActions(d) {
     const peakSplit = peakCount > 1 ? Math.max(1, Math.min(peakCount - 1, Math.round(firstDuration / source.duration * peakCount))) : 0;
     const first = { ...source, id: makeId("music"), duration: firstDuration,
       sourceDuration: firstDuration * playbackRate,
-      peaks: peakCount ? source.peaks.slice(0, peakSplit) : [] };
+      peaks: peakCount ? source.peaks.slice(0, peakSplit) : [], fadeOut: 0 };
     const second = { ...source, id: makeId("music"), start: d.currentTime, duration: secondDuration,
       sourceDuration: secondDuration * playbackRate,
       sourceStart: Math.max(0, Number(source.sourceStart) || 0) + firstDuration * playbackRate,
-      peaks: peakCount ? source.peaks.slice(peakSplit) : [] };
+      peaks: peakCount ? source.peaks.slice(peakSplit) : [], fadeIn: 0 };
     const next = [...segments];
     next.splice(index, 1, first, second);
     d.setMusicSegments(next);
+    d.setSelectedMusicSegmentId?.(second.id);
     d.notify("已在播放头位置切开音乐片段");
   };
   const handleCutOverlaySegment = () => {
