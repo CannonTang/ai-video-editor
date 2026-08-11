@@ -8,6 +8,9 @@ import { synthesizeBaseVoice } from "../lib/baseVoiceSynthesis.js";
 
 export function useVoiceGeneration(d) {
   return useCallback(async (captionSegment = null) => {
+    captionSegment = captionSegment?.id && typeof captionSegment?.text === "string"
+      ? captionSegment
+      : null;
     const rawText = (captionSegment?.text ?? d.script).trim();
     if (!rawText || d.status === "generating" || d.status === "captioning") return;
     d.setVoiceTab("synthesis"); d.setStatus("generating"); d.setStatusText("ttsStatusPreparingModel"); d.setProgress(6);

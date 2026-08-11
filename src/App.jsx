@@ -147,7 +147,7 @@ export function App() {
     setCaptionsEnabled, setScript, setSelectedSegmentId,
   } = useCaptionState();
   const {
-    audioSegments, favoriteVoiceIds, historyItems, musicBlob, musicDuration, musicName, musicSegments, musicStart,
+    audioSegments, audioSegmentsRef, favoriteVoiceIds, generatedVoiceEndRef, historyItems, musicBlob, musicDuration, musicName, musicSegments, musicStart,
     musicPeaks, musicUrl, musicVolume, recordedVoices, recordingElapsed, recordingState,
     selectedAudioSegmentId, selectedVoiceId, setAudioSegments, setFavoriteVoiceIds,
     setHistoryItems, setMusicBlob, setMusicDuration, setMusicName, setMusicPeaks, setMusicStart,
@@ -618,7 +618,7 @@ export function App() {
     clearAudioTrack, clearMusicTrack, clearSourceAudioTrack, commitAudio,
     replaceAudio, replaceMusic, replaceSourceAudio,
   } = createAudioTrackActions({
-    audioBlob, audioDuration, audioSegmentRefs, audioSegments, captionDuration,
+    audioBlob, audioDuration, audioSegmentRefs, audioSegments, audioSegmentsRef, captionDuration, generatedVoiceEndRef,
     currentTimeRef, imageDuration, imageSrc, musicBlob, musicDuration, musicRef,
     musicUrlRef, notify, script, selectedVoice, selectedVoiceId, setActiveTool,
     setAudioSegments, setCaptionSegments, setCurrentTime, setHistoryItems,
