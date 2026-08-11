@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { DEFAULT_TIMELINE_DURATION_SECONDS, VOICES } from "../config/editor.js";
 
@@ -6,7 +6,17 @@ export function useAudioTrackState() {
   const [selectedVoiceId, setSelectedVoiceId] = useState(VOICES[0].id);
   const [speed, setSpeed] = useState(VOICES[0].defaultSpeed ?? 1);
   const [volume, setVolume] = useState(1);
-  const [audioSegments, setAudioSegments] = useState([]);
+  const [audioSegments, setAudioSegmentsState] = useState([]);
+  const audioSegmentsRef = useRef(audioSegments);
+  const generatedVoiceEndRef = useRef(0);
+  audioSegmentsRef.current = audioSegments;
+  const setAudioSegments = useCallback((update) => {
+    setAudioSegmentsState((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      audioSegmentsRef.current = next;
+      return next;
+    });
+  }, []);
   const [selectedAudioSegmentId, setSelectedAudioSegmentId] = useState("");
   const [timelineHorizon, setTimelineHorizon] = useState(DEFAULT_TIMELINE_DURATION_SECONDS);
   const [musicBlob, setMusicBlob] = useState(null);
@@ -33,7 +43,7 @@ export function useAudioTrackState() {
   const [recordingElapsed, setRecordingElapsed] = useState(0);
 
   return {
-    audioSegments, favoriteVoiceIds, historyItems, musicBlob, musicDuration, musicName,
+    audioSegments, audioSegmentsRef, favoriteVoiceIds, generatedVoiceEndRef, historyItems, musicBlob, musicDuration, musicName,
     musicPeaks, musicSegments, musicStart, musicUrl, musicVolume, recordedVoices, recordingElapsed, recordingState,
     selectedAudioSegmentId, selectedVoiceId, setAudioSegments, setFavoriteVoiceIds,
     setHistoryItems, setMusicBlob, setMusicDuration, setMusicName, setMusicPeaks, setMusicSegments,

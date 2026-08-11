@@ -6,6 +6,7 @@ import {
   formatSavedTime,
   getCaptionTimeline,
 } from "./timeline.js";
+import { getGeneratedVoiceAppendStart } from "./generatedVoicePlacement.js";
 
 export function createAudioTrackActions(d) {
   function replaceAudio(blob, duration, nextPeaks, nextStatusText, options = {}) {
@@ -61,6 +62,7 @@ export function createAudioTrackActions(d) {
     d.audioSegmentRefs.current.forEach((audio) => audio.pause());
     d.audioSegments.forEach((segment) => URL.revokeObjectURL(segment.url));
     d.setAudioSegments([]);
+    if (d.generatedVoiceEndRef) d.generatedVoiceEndRef.current = 0;
     d.setCaptionSegments((segments) => segments.map((caption) => (
       removedAudioIds.has(caption.audioSegmentId) || removedAudioIds.has(caption.detachedAudioSegmentId)
         ? { ...caption, audioSegmentId: "", detachedAudioSegmentId: "" }
@@ -198,12 +200,24 @@ export function createAudioTrackActions(d) {
       cloneVoiceProfileId: options.cloneVoiceProfileId || "",
       cloneVoiceProfileName: options.cloneVoiceProfileName || "",
     };
+    const rememberedVoiceEnd = Number(d.generatedVoiceEndRef?.current) || 0;
+    const appendStart = Math.max(
+      rememberedVoiceEnd ? rememberedVoiceEnd + 0.6 : 0,
+      getGeneratedVoiceAppendStart(d.audioSegmentsRef?.current ?? d.audioSegments, d.currentTimeRef.current),
+    );
     const audioSegment = replaceAudio(blob, decoded.duration, decoded.peaks, nextStatusText, captionSegment ? {
       start: captionSegment.start || 0,
       script: options.script || captionSegment.text,
       replaceSegmentId: captionSegment.audioSegmentId || captionSegment.detachedAudioSegmentId || "",
       ...identity,
-    } : { ...options, ...identity });
+    } : {
+      ...options,
+      start: options.start ?? appendStart,
+      ...identity,
+    });
+    if (!captionSegment && d.generatedVoiceEndRef) {
+      d.generatedVoiceEndRef.current = audioSegment.start + audioSegment.duration;
+    }
 
     if (captionSegment) {
       d.setCaptionSegments((segments) => segments.map((segment) => segment.id === captionSegment.id ? {

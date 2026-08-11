@@ -13,7 +13,7 @@ Use real browser interactions and real media. Unit tests and DOM assertions supp
    - `environment`: port, codec, model, browser, network, or filesystem condition;
    - `skill`: guidance was missing, ambiguous, stale, or overly confident.
 5. Fix the product or update the smallest relevant Skill section. Do not encode a product bug as permanent workflow guidance when the product can be fixed.
-6. Run the skill validator, synchronize the installed copy, rerun the failed scenario, then run adjacent smoke scenarios.
+6. Run the skill validator, synchronize the installed copy, rerun the failed scenario from a fresh project, then run adjacent smoke scenarios. Invalidate every project and render produced before the fix; they may remain comparison evidence but cannot be delivered as the corrected result.
 7. Preserve raw screenshots, console errors, media probes, downloads, and project archives outside the Skill and product repository when they materially explain a failure.
 
 For content-aware automatic editing, use [auto-edit-scenarios.md](auto-edit-scenarios.md) for category fixtures, clarification checks, editorial hard gates, and stress variants.
@@ -39,6 +39,8 @@ Run these across empty and pre-populated projects where applicable:
 9. Change transforms, masks, keyframes, speed, effects, animations, and aspect ratio; compare preview with deterministic export.
     - For both a video clip and a voiceover/independent-audio clip, test 0.5×, 1×, 1.5×, and 2× on desktop and mobile. Verify the timeline width and linked caption end update from preserved source duration, seeking resolves the correct source timestamp, splitting advances source offsets by timeline duration multiplied by rate, and decoded export duration/audio match preview. Use a known-frequency or voiced fixture to verify linked-audio speed changes preserve pitch in preview, deterministic export, and compatibility export.
 10. Export MP4/WebM and decode the entire result to verify dimensions, duration, frame count, visible captions/overlays, and a real non-silent audio track when expected. Extract frames inside every caption range and visually verify the burned-in text. Test both a captured browser download event and the fallback where the event times out but a new artifact exists on disk.
+    - For any claimed regeneration, use distinct output paths and capture modification time, byte size, and SHA-256 for the prior and new `.timeline` and video. Require the new files to be created after the fix and their hashes to differ from the stale artifacts. Renaming or copying an old file does not qualify.
+    - Verify the editable project and rendered media independently. Structural clip timing in `.timeline` must agree with decoded audio activity in the final video around the opening and every affected boundary.
 11. Compare same-tab autosave, a newly opened same-origin tab, and explicit `.timeline` save/reopen. Verify duration, ordering, assets, track state, selections that should persist, and generated media links; never treat an “Autosaved” label as proof that local blobs will reopen.
 12. Repeat critical flows in every supported interface language, narrow desktop panels, reduced motion, and at least the supported Chromium path; include Firefox/Windows regressions when available.
 13. On mobile, select visual, caption, sticker, source-audio, voiceover, and music clips by ordinary tap and verify that the fixed action bar is track-specific. Voiceover and music must expose Audio, Split, Captions, Vocal Separation, and Delete; source audio must omit unsupported vocal separation; visual clips must not expose audio-only actions. At desktop width, the mobile bar stays hidden and the corresponding right-click context menu remains available.
@@ -47,7 +49,21 @@ Run these across empty and pre-populated projects where applicable:
 14. Still on mobile, verify that selecting a source-audio, voiceover, or music clip pans the timeline just enough to keep the full time-accurate clip visible when it fits. For all three audio types, the clip action bar's Audio action opens the dedicated audio-clip property sheet directly above the current action bar; the selected clip and its Back/Audio/Split/Captions/Separation/Delete menu remain visible and unchanged throughout opening, editing, and closing, and neither the Audio feature home nor the persistent Media/Captions/Smart/Audio/Stickers rail may replace it. Verify that voiceover and music speed changes update time-accurate clip width, pitch-preserving preview, and export; linked source-audio speed changes its associated video clip. Long localized audio-track labels remain one ellipsized line inside the label column, and desktop behavior remains unchanged.
     - Verify one-second and sub-second audio clips at mobile zoom: clips rendered at 220px or narrower hide the duration badge entirely so the waveform and clip body remain unobstructed; wider mobile clips may use compact copy without intercepting dragging or selection. Desktop retains the precise full duration label.
 15. Exercise AI paths with cold and warm caches, unavailable models, download failure, cancellation, WASM/WebGPU fallback, and truthful backend reporting.
+    - For free-script voice generation, use the real Generate control three consecutive times from a fresh project. Treat DOM `MouseEvent`, `PointerEvent`, and other UI event objects as invalid business targets. Export and reopen the project; require only the first voice clip at the initial playhead, each later clip at `previousEnd + plannedGap` within timeline precision, and zero overlaps. Render and inspect the isolated speech bus at all three onsets before accepting the regression.
 16. Test handoff-only requests separately from concrete editing requests so the Agent never invents creative changes.
+
+## Corrected-delivery evidence
+
+When a failed result was already shown to the user, the corrected handoff must include:
+
+- the exact first failed action and its classification;
+- the fresh-project regression result and adjacent smoke result;
+- distinct absolute paths for the newly exported project and video;
+- modification time, size, and SHA-256 evidence for new versus stale artifacts;
+- timeline-level timing evidence plus decoded-media evidence;
+- a visible review marker when the user needs an immediate visual distinction, clearly disclosed as review-only.
+
+Do not claim the fix is visible in a video when only code, Skill text, or a partial regression project changed. Do not return a stale artifact while describing it as regenerated.
 
 ## Observation record
 
