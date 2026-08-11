@@ -157,10 +157,18 @@ export function normalizeTimedSegmentIds(segments, prefix = "segment") {
 
 export function packTimedSegmentsIntoLanes(segments, { preferredLaneKey = "" } = {}) {
   const lanes = [];
-  [...segments].sort((a, b) => (a.start || 0) - (b.start || 0) || String(a.id).localeCompare(String(b.id))).forEach((segment) => {
+  const orderedSegments = preferredLaneKey
+    ? [...segments]
+    : [...segments].sort((a, b) => (a.start || 0) - (b.start || 0));
+  orderedSegments.forEach((segment) => {
     const laneAccepts = (lane = []) => {
-      const last = lane.at(-1);
-      return !last || (last.start || 0) + (last.duration || 0) <= (segment.start || 0) + 0.001;
+      const start = segment.start || 0;
+      const end = start + (segment.duration || 0);
+      return lane.every((item) => {
+        const itemStart = item.start || 0;
+        const itemEnd = itemStart + (item.duration || 0);
+        return itemEnd <= start + 0.001 || end <= itemStart + 0.001;
+      });
     };
     const preferredLane = preferredLaneKey && Number.isInteger(segment?.[preferredLaneKey])
       ? Math.max(0, segment[preferredLaneKey])
@@ -169,14 +177,19 @@ export function packTimedSegmentsIntoLanes(segments, { preferredLaneKey = "" } =
     const laneIndex = preferredLane >= 0 && laneAccepts(lanes[preferredLane])
       ? preferredLane
       : lanes.findIndex(laneAccepts);
-    if (laneIndex >= 0) lanes[laneIndex].push(segment);
+    if (laneIndex >= 0) {
+      lanes[laneIndex].push(segment);
+      lanes[laneIndex].sort((a, b) => (a.start || 0) - (b.start || 0));
+    }
     else lanes.push([segment]);
   });
   return lanes.length ? lanes : [[]];
 }
 
 export function getTimedSegmentLaneStateKey(segments, segmentId, track = "audio") {
-  const laneIndex = packTimedSegmentsIntoLanes(segments).findIndex((lane) => (
+  const laneIndex = packTimedSegmentsIntoLanes(segments, {
+    preferredLaneKey: track === "audio" ? "lane" : "",
+  }).findIndex((lane) => (
     lane.some((segment) => String(segment.id) === String(segmentId))
   ));
   return laneIndex >= 0 ? `${track}-${laneIndex}` : track;
@@ -194,7 +207,9 @@ export function isTimedSegmentLaneLocked(segments, segmentId, locks, track = "au
 
 export function filterTimedSegmentsByLaneVisibility(segments, visibility, track = "audio") {
   if (visibility?.[track] === false) return [];
-  const lanes = packTimedSegmentsIntoLanes(segments);
+  const lanes = packTimedSegmentsIntoLanes(segments, {
+    preferredLaneKey: track === "audio" ? "lane" : "",
+  });
   return lanes.flatMap((lane, laneIndex) => (
     visibility?.[`${track}-${laneIndex}`] === false ? [] : lane
   ));

@@ -4,7 +4,9 @@ import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url
 
 import { JOYVASA_WEB_MODEL } from "../config/joyVasa.js";
 import { fetchFirstAvailableModel } from "../lib/modelSources.js";
+import { configureOrtWebGpu } from "../lib/webGpuPreference.js";
 
+configureOrtWebGpu(ort);
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
-import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, shouldCorrectPreviewMediaTime } from "../lib/editorRuntime.js";
+import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, setTimelineAudioGain, shouldCorrectPreviewMediaTime } from "../lib/editorRuntime.js";
 import { getLinkedSourceAudioState } from "../lib/sourceAudioSync.js";
 import { isTimedSegmentLaneVisible } from "../lib/timeline.js";
+import { requestLatestVideoFrame } from "../lib/videoFrameSync.js";
 
 export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTime, playbackRate = 1 }) {
   if (!media) return;
@@ -37,7 +38,7 @@ export function syncVoiceAudioSegments({ segments, refs, timelineTime, isPlaying
 }
 
 export function useMediaSync(d) {
-  useEffect(() => { d.audioSegments.forEach((s) => { const a = d.audioSegmentRefs.current.get(s.id); if (a) a.volume = getAudioSegmentPreviewVolume(s, d.currentTime); }); }, [d.audioSegments, d.currentTime]);
+  useEffect(() => { d.audioSegments.forEach((s) => { const a = d.audioSegmentRefs.current.get(s.id); if (a) setTimelineAudioGain(a, getAudioSegmentPreviewVolume(s, d.currentTime)); }); }, [d.audioSegments, d.currentTime]);
   useEffect(() => {
     syncVoiceAudioSegments({
       segments: d.audioSegments,
@@ -47,7 +48,7 @@ export function useMediaSync(d) {
       visibility: d.trackVisibility,
     });
   }, [d.audioSegments, d.currentTime, d.isPlaying, d.trackVisibility]);
-  useEffect(() => { if (d.sourceAudioRef.current) d.sourceAudioRef.current.volume = d.sourceAudioVolume; }, [d.sourceAudioVolume, d.sourceAudioUrl]);
+  useEffect(() => { if (d.sourceAudioRef.current) setTimelineAudioGain(d.sourceAudioRef.current, d.sourceAudioVolume); }, [d.sourceAudioVolume, d.sourceAudioUrl]);
   useEffect(() => {
     const a = d.sourceAudioRef.current; if (!a || !d.sourceAudioUrl) return;
     const state = d.sourceAudioLinked && d.linkedSourceAudioSegments?.length
@@ -56,7 +57,14 @@ export function useMediaSync(d) {
     const play = d.isPlaying && d.trackVisibility?.source !== false && state.active;
     syncTimelineAudioElement(a, { active: state.active, shouldPlay: play, expectedTime: state.sourceTime, playbackRate: state.playbackRate });
   }, [d.currentTime, d.isPlaying, d.linkedSourceAudioSegments, d.sourceAudioDuration, d.sourceAudioLinked, d.sourceAudioStart, d.sourceAudioUrl, d.trackVisibility.source]);
-  useEffect(() => { if (d.musicRef.current) d.musicRef.current.volume = d.musicVolume; }, [d.musicVolume, d.musicUrl]);
+  useEffect(() => {
+    const music = d.musicRef.current;
+    if (!music) return;
+    const segment = d.musicSegments?.find((item) => isTimelineTimeInsideTrack(d.currentTime, item.start, item.duration));
+    setTimelineAudioGain(music, segment
+      ? getAudioSegmentPreviewVolume({ ...segment, volume: segment.volume ?? d.musicVolume }, d.currentTime)
+      : d.musicVolume);
+  }, [d.currentTime, d.musicSegments, d.musicVolume, d.musicUrl]);
   useEffect(() => {
     const music = d.musicRef.current; if (!music || !d.musicUrl) return;
     const segments = d.musicSegments?.length ? d.musicSegments : [{ start: d.musicStart, duration: d.musicDuration, sourceStart: 0, playbackRate: 1 }];
@@ -80,8 +88,10 @@ export function useMediaSync(d) {
     const max = Math.max(0, (Number(v.duration) || sourceStart) - 0.001);
     const time = Math.min(sourceStart, max);
     if (Number.isFinite(time) && Math.abs(v.currentTime - time) > 0.04) {
-      v.currentTime = time;
-      d.setPreviewVideoMediaTime(time);
+      requestLatestVideoFrame(v, time, {
+        immediate: true,
+        onPresented: d.setPreviewVideoMediaTime,
+      });
     }
   }, [d.previewVisualSegment?.id, d.previewVisualSegment?.sourceStart, d.previewVisualSrc, d.previewVisualType]);
   useEffect(() => {
@@ -89,8 +99,9 @@ export function useMediaSync(d) {
     const max = Math.max(0, (Number(v.duration) || d.previewVisualSourceTime) - 0.001);
     const time = Math.min(Math.max(0, d.previewVisualSourceTime), max);
     if (shouldCorrectPreviewMediaTime({ isPlaying: d.isPlaying, currentTime: v.currentTime, targetTime: time })) {
-      v.currentTime = time;
-      d.setPreviewVideoMediaTime(time);
+      requestLatestVideoFrame(v, time, {
+        onPresented: d.setPreviewVideoMediaTime,
+      });
     }
   }, [d.isPlaying, d.previewVisualSegment?.id, d.previewVisualSourceTime, d.previewVisualSrc, d.previewVisualType]);
   useEffect(() => {

@@ -307,11 +307,12 @@ export function App() {
     stickerDuration, timelineDuration, visualTimeline, voiceTrackDuration,
   } = useTimelineModel({
     audioSegments, captionSegments, currentTime, imageDuration, imageSrc, musicBlob,
-    musicDuration, musicUrl, ratioId, script, selectedAudioSegmentId, selectedFilterId,
+    musicDuration, musicTimelineEnd, musicUrl, ratioId, script, selectedAudioSegmentId, selectedFilterId,
     selectedSegmentId, selectedStickerId, selectedStickerSegmentId,
     selectedVisualSegmentId, selectedVoiceId, sourceAudioBlob, sourceAudioDuration,
     sourceAudioTimelineEnd,
     sourceAudioStart, sourceAudioUrl, stickerSegments, timelineDurationRef, timelineHorizon,
+    timelineZoom,
     trackVisibility, visionRecords, visualSegments, visualType, visualOverlaySegments,
   });
   const previousTimelineContentDurationRef = useRef(estimatedDuration);
@@ -623,7 +624,7 @@ export function App() {
     musicUrlRef, notify, script, selectedVoice, selectedVoiceId, setActiveTool,
     setAudioSegments, setCaptionSegments, setCurrentTime, setHistoryItems,
     setIsPlaying, setMusicBlob, setMusicDuration, setMusicName, setMusicPeaks, setMusicSegments,
-    setMusicStart, setMusicUrl, setProgress, setSelectedAudioSegmentId, setSelectedSegmentId,
+    setMusicStart, setMusicUrl, setProgress, setSelectedAudioSegmentId, setSelectedMusicSegmentId, setSelectedSegmentId,
     setSelectedTrack, setSourceAudioAssetId, setSourceAudioBlob, setSourceAudioDuration, setSourceAudioLinked, setSourceAudioName,
     setSourceAudioPeaks, setSourceAudioStart, setSourceAudioUrl, setSourceAudioVolume,
     setStatus, setStatusText, setTimelineHorizon, sourceAudioBlob, sourceAudioDuration,
@@ -640,7 +641,7 @@ export function App() {
   const selectedAudioToolTarget = selectedTrack === "audio" && selectedAudioSegmentId && selectedAudioSegment
     ? { ...selectedAudioSegment, segmentId: selectedAudioSegment.id, track: "audio", canChangeSpeed: true }
     : selectedTrack === "music" && musicBlob
-      ? { ...(selectedMusicSegment ?? musicSegments[0] ?? { id: "music-audio", start: musicStart, duration: musicDuration, sourceStart: 0, sourceDuration: musicDuration, playbackRate: 1 }), blob: musicBlob, name: musicName || t("musicTrack"), segmentId: selectedMusicSegment?.id || musicSegments[0]?.id || "music-audio", track: "music", volume: musicVolume, canChangeSpeed: true }
+      ? { ...(selectedMusicSegment ?? musicSegments[0] ?? { id: "music-audio", start: musicStart, duration: musicDuration, sourceStart: 0, sourceDuration: musicDuration, playbackRate: 1 }), blob: musicBlob, name: musicName || t("musicTrack"), segmentId: selectedMusicSegment?.id || musicSegments[0]?.id || "music-audio", track: "music", volume: selectedMusicSegment?.volume ?? musicSegments[0]?.volume ?? musicVolume, canChangeSpeed: true }
       : selectedTrack === "source" && sourceAudioBlob
         ? { ...(selectedSourceAudioPiece ?? {}), blob: sourceAudioBlob, name: sourceAudioName, start: selectedSourceAudioPiece?.start ?? sourceAudioStart, sourceStart: selectedSourceAudioPiece?.sourceStart ?? 0, duration: selectedSourceAudioPiece?.duration ?? sourceAudioDuration, sourceDuration: selectedSourceAudioPiece?.sourceDuration ?? sourceAudioDuration, playbackRate: selectedSourceAudioPiece?.playbackRate ?? 1, segmentId: selectedSourceAudioSegmentId || "source-audio", track: "source", volume: sourceAudioVolume, canChangeStart: !sourceAudioLinked, canChangeSpeed: Boolean(sourceAudioLinked && selectedSourceAudioPiece), voiceColorOriginalBlob: sourceVoiceColorOriginalRef.current?.blob || null }
         : null;
@@ -803,25 +804,25 @@ export function App() {
   const updateSelectedTrackAudioSegment = (id, patch) => {
     if (selectedTrack === "audio") return updateAudioSegment(id, patch);
     if (selectedTrack === "music") {
-      if (Number.isFinite(patch.volume)) setMusicVolume(Math.max(0, Math.min(1, patch.volume)));
       setMusicSegments((segments) => {
         const source = segments.length ? segments : [{ id: "music-audio", start: musicStart, duration: musicDuration, sourceStart: 0, sourceDuration: musicDuration, playbackRate: 1, peaks: musicPeaks }];
         const next = source.map((segment) => {
           if (segment.id !== id) return segment;
-          return Number.isFinite(patch.playbackRate)
-            ? { ...updateAudioSegmentPlaybackRate(segment, patch.playbackRate), ...patch }
-            : { ...segment, ...patch };
+          const normalizedPatch = Number.isFinite(patch.volume)
+            ? { ...patch, volume: Math.max(0, Math.min(4, patch.volume)) }
+            : patch;
+          return Number.isFinite(normalizedPatch.playbackRate)
+            ? { ...updateAudioSegmentPlaybackRate(segment, normalizedPatch.playbackRate), ...normalizedPatch }
+            : { ...segment, ...normalizedPatch };
         });
         const nextStart = Math.min(...next.map((segment) => segment.start));
-        const nextEnd = Math.max(...next.map((segment) => segment.start + segment.duration));
         setMusicStart(nextStart);
-        setMusicDuration(Math.max(0, nextEnd - nextStart));
         return next;
       });
       return;
     }
     if (selectedTrack === "source") {
-      if (Number.isFinite(patch.volume)) setSourceAudioVolume(Math.max(0, Math.min(1, patch.volume)));
+      if (Number.isFinite(patch.volume)) setSourceAudioVolume(Math.max(0, Math.min(4, patch.volume)));
       if (!sourceAudioLinked && Number.isFinite(patch.start)) setSourceAudioStart(Math.max(0, patch.start));
       if (sourceAudioLinked && id !== "source-audio" && Number.isFinite(patch.playbackRate)) {
         setVisualSegments((segments) => {
@@ -860,11 +861,11 @@ export function App() {
     commitCaptionSegments, commitStickerSegments, commitVisualSegments,
     currentStickerSegmentIndex, currentVisualSegmentIndex, deleteAudioSegment,
     focusedSegmentIndex, getCurrentVisualAssetSnapshot, handleRemoveSegment,
-    imageClipCount, imageDuration, imageMeta, imageName, imageSrc, musicBlob, musicName,
-    notify, selectedAudioSegment, selectedAudioSegmentId, selectedSegmentId,
+    imageClipCount, imageDuration, imageMeta, imageName, imageSrc, musicBlob, musicDuration, musicName, musicPeaks, musicSegments, musicStart,
+    notify, selectedAudioSegment, selectedAudioSegmentId, selectedMusicSegmentId, selectedSegmentId,
     selectedSegmentIndex, selectedStickerSegmentId, selectedTrack,
     selectedVisualSegmentId, selectedVisualSegmentIndex, setAudioSegments,
-    setCaptionSegments, setSelectedAudioSegmentId, sourceAudioBlob,
+    setCaptionSegments, setMusicSegments, setMusicStart, setSelectedAudioSegmentId, setSelectedMusicSegmentId, sourceAudioBlob,
     sourceAudioLinked, sourceAudioName, selectedSourceAudioSegmentId, linkedSourceAudioSegments,
     setSelectedSourceAudioSegmentId, stickerSegments, t, trackLocks, visualSegments, visualType,
     visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
@@ -889,8 +890,8 @@ export function App() {
     currentStickerSegmentIndex, currentTime, focusedSegmentIndex,
     getCurrentVisualAssetSnapshot, imageDuration, imageSrc, notify,
     musicBlob, musicDuration, musicPeaks, musicSegments, musicStart,
-    selectedAudioSegmentId, selectedSegmentId, selectedSegmentIndex, selectedStickerSegmentId,
-    setAudioSegments, setCaptionSegments, setMusicSegments, setSelectedAudioSegmentId,
+    selectedAudioSegmentId, selectedMusicSegmentId, selectedSegmentId, selectedSegmentIndex, selectedStickerSegmentId,
+    setAudioSegments, setCaptionSegments, setMusicSegments, setSelectedAudioSegmentId, setSelectedMusicSegmentId,
     selectedTrack, stickerSegments, t, trackLocks, visualSegments,
     visualOverlaySegments, selectedVisualOverlayId, setVisualOverlaySegments, setSelectedVisualOverlayId,
   });
@@ -898,7 +899,7 @@ export function App() {
   const { getTimelineTimeFromClientX, handlePlayToggle, pauseTimelineMedia, seekTo, startTimelineSeek } = createPlaybackControls({
     audioSegmentRefs, audioSegments, canPreview, currentTimeRef, currentVisualRange,
     estimatedDuration, isPlaying, musicDuration, musicSegments, musicRef, musicStart, musicUrl, notify,
-    linkedSourceAudioSegments, previewVideoRef, previewVisualType, setCurrentTime, setIsPlaying, sourceAudioDuration,
+    linkedSourceAudioSegments, previewVideoRef, previewVisualType, setCurrentTime, setIsPlaying, setPreviewVideoMediaTime, sourceAudioDuration,
     sourceAudioLinked,
     sourceAudioRef, sourceAudioStart, sourceAudioUrl, timelineDuration,
     timelineDurationRef, trackScrollRef, trackVisibility, visualSegments, visualTimeline, previewVisualSegment,
@@ -926,8 +927,8 @@ export function App() {
     audioSegments, captionSegments, captionTargetDuration, estimatedDuration, notify, seekTo, setActiveTool,
     setAudioSegments, setCaptionSegments, setSelectedAudioSegmentId, setSelectedStickerId,
     setSelectedStickerSegmentId, setSelectedTrack, setStickerSegments, setTimelineHorizon,
-    setMusicStart, setSourceAudioLinked, setSourceAudioStart, musicDuration, musicSegments, musicStart, setMusicSegments,
-    sourceAudioDuration, sourceAudioStart, stickerSegments, suppressTimelineClipClickRef, t, timelineDurationRef,
+    setMusicStart, setSelectedMusicSegmentId, setSourceAudioLinked, setSourceAudioStart, musicDuration, musicSegments, musicStart, setMusicSegments,
+    sourceAudioDuration, sourceAudioLinked, sourceAudioStart, stickerSegments, suppressTimelineClipClickRef, t, timelineDurationRef,
     trackLocks, trackScrollRef, pauseForTimelineEdit, visualSegments, setSnapGuide, commitStickerSegments,
     setStickerTimelineDrag,
   });
@@ -938,7 +939,7 @@ export function App() {
     setCurrentTime, setImageClipCount, setImageDuration, setSelectedTrack,
     setSelectedVisualSegmentId, setSnapGuide, setVisualSegments, sourceAudioBlob,
     sourceAudioDuration, sourceAudioStart, timelineDuration, timelineDurationRef,
-    trackLocks, trackScrollRef, visualSegments, pauseForTimelineEdit,
+    setTimelineHorizon, trackLocks, trackScrollRef, visualSegments, pauseForTimelineEdit,
   });
 
   const extractVideoSourceAudio = useSourceAudioExtraction({
@@ -1139,6 +1140,7 @@ export function App() {
     notify, renderedVisualSegments, seekTo, setSelectedSegmentId, setSelectedTrack,
     setSelectedVisualSegmentId, setTimelineClipDrag, suppressTimelineClipClickRef,
     timelineClipDragRef, timelineDuration, trackLocks, visualSegments, pauseForTimelineEdit,
+    setTimelineHorizon,
     stickerSegments, sourceAudioDuration, sourceAudioStart, musicDuration, musicStart, setSnapGuide,
     visualOverlaySegments, setVisualOverlaySegments, setSelectedVisualOverlayId, trackScrollRef,
   });
@@ -1445,7 +1447,6 @@ export function App() {
           selectedTrack={selectedTrack}
           selectedAudioSegment={selectedAudioSegment}
           selectedTrackAudioSegment={selectedAudioToolTarget}
-          audioClipInspectorOpen={mobilePanel === "inspector" && mobilePanelOrigin === "audio-clip"}
           mobileInspectorOrigin={mobilePanel === "inspector" ? mobilePanelOrigin : ""}
           mobileInspectorSection={isMobileViewport && mobilePanel === "inspector" ? mobileInspectorSection : ""}
           onCloseMobileInspector={() => changeMobilePanel("")}
@@ -1538,6 +1539,8 @@ export function App() {
         trackScrollRef={trackScrollRef}
         startTimelineSeek={startTimelineSeek}
         timelineDuration={timelineDuration}
+        timelineContentDuration={Math.max(estimatedDuration, timelineHorizon)}
+        setTimelineHorizon={setTimelineHorizon}
         currentTime={currentTime}
         playheadPercent={playheadPercent}
         snapGuide={snapGuide}

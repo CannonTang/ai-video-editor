@@ -17,13 +17,43 @@ export function shouldCorrectPreviewMediaTime({ isPlaying, currentTime, targetTi
 }
 
 export function getAudioSegmentPreviewVolume(segment, timelineTime) {
-  const volume = Math.max(0, Math.min(1, segment.volume ?? 1));
+  const volume = Math.max(0, Math.min(4, segment.volume ?? 1));
   const localTime = Math.max(0, Math.min(segment.duration, timelineTime - segment.start));
   const fadeIn = Math.max(0, Math.min(segment.duration, segment.fadeIn || 0));
   const fadeOut = Math.max(0, Math.min(segment.duration, segment.fadeOut || 0));
   const fadeInGain = fadeIn > 0 ? Math.min(1, localTime / fadeIn) : 1;
   const fadeOutGain = fadeOut > 0 ? Math.min(1, (segment.duration - localTime) / fadeOut) : 1;
   return volume * Math.max(0, Math.min(fadeInGain, fadeOutGain));
+}
+
+let timelineAudioContext = null;
+const timelineAudioGainNodes = new WeakMap();
+
+export function setTimelineAudioGain(media, value) {
+  if (!media) return;
+  const gainValue = Math.max(0, Math.min(4, Number(value) || 0));
+  let entry = timelineAudioGainNodes.get(media);
+  if (!entry) {
+    const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
+    try {
+      timelineAudioContext ||= AudioContextClass ? new AudioContextClass() : null;
+      if (timelineAudioContext) {
+        const source = timelineAudioContext.createMediaElementSource(media);
+        const gain = timelineAudioContext.createGain();
+        source.connect(gain).connect(timelineAudioContext.destination);
+        entry = { context: timelineAudioContext, gain };
+        timelineAudioGainNodes.set(media, entry);
+      }
+    } catch {
+      entry = null;
+    }
+  }
+  if (entry) {
+    media.volume = 1;
+    entry.gain.gain.value = gainValue;
+  } else {
+    media.volume = Math.min(1, gainValue);
+  }
 }
 
 export async function decodeAvatarAudio16k(blob) {
@@ -151,6 +181,7 @@ export function isTimelineTimeInsideTrack(time, start = 0, duration = 0) { retur
 
 export function requestTimelineMediaPlay(media) {
   if (!media || media.__timelinePlayPending) return;
+  timelineAudioGainNodes.get(media)?.context?.resume?.().catch(() => {});
   media.__timelinePlayPending = true;
   let request;
   try {

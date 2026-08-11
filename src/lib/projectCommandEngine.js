@@ -379,7 +379,7 @@ const NUMERIC_CLIP_PROPERTIES = Object.freeze({
   scale: { min: 0.1, max: 20 },
   rotation: { min: -36000, max: 36000 },
   opacity: { min: 0, max: 1 },
-  volume: { min: 0, max: 2 },
+  volume: { min: 0, max: 4 },
   fadeIn: { min: 0, max: 1800 },
   fadeOut: { min: 0, max: 1800 },
   layer: { min: 0, max: 1000 },

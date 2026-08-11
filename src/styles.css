@@ -1729,9 +1729,12 @@ button:disabled {
 .ai-music-progress { display: grid; gap: 6px; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; padding: 8px; background: rgba(255,255,255,.025); }
 .ai-music-progress > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ai-music-progress strong { color: #cbd6da; font-size: 10px; }
-.ai-music-progress > span { height: 5px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.08); }
+.ai-music-progress > span { position: relative; height: 5px; overflow: hidden; border-radius: 9px; background: rgba(255,255,255,.08); }
 .ai-music-progress i { display: block; height: 100%; border-radius: inherit; background: #35ead9; transition: width .2s ease; }
 .ai-music-progress small { overflow: hidden; color: #87959e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-music-progress.is-streaming > span::after { position: absolute; inset: 0 auto 0 -34%; width: 34%; border-radius: inherit; background: linear-gradient(90deg, transparent, rgba(205,255,250,.75), transparent); content: ""; animation: ai-music-cache-stream 1.2s ease-in-out infinite; }
+@keyframes ai-music-cache-stream { to { transform: translateX(394%); } }
+@media (prefers-reduced-motion: reduce) { .ai-music-progress.is-streaming > span::after { animation: none; opacity: .55; inset-inline: 33%; } }
 .ai-music-success { margin: 0; color: #8debe1; }
 .ai-music-error { margin: 0; color: #ff929a; font-size: 11px; line-height: 1.4; }
 .ai-music-actions { display: flex; justify-content: flex-end; }
@@ -8123,14 +8126,15 @@ button:disabled {
   content: "";
 }
 
-.audio-track:not(.source-track):not(.music-track) .audio-clip {
+.audio-track:not(.source-track) .audio-clip {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
   cursor: grab;
 }
 
-.audio-track:not(.source-track):not(.music-track) .audio-clip:active {
+.audio-track:not(.source-track) .audio-clip:active {
+  transform: translateY(-50%);
   cursor: grabbing;
 }
 
@@ -10490,6 +10494,18 @@ button:disabled {
     .optical-flow-segmented button
   ):not(.is-active):is(:hover, :focus-visible)::before {
     transform: skewX(-16deg);
+  }
+}
+
+/* AI Music form fields already have clear control borders. Their focused
+   state stays compact instead of inheriting the desktop-wide offset outline
+   and three-pixel halo used by smaller controls. */
+@media (min-width: 761px) {
+  .ai-music-card.is-embedded :is(input, textarea, select):focus,
+  .ai-music-card.is-embedded :is(input, textarea, select):focus-visible {
+    border-color: rgba(83, 234, 220, 0.72);
+    outline: none;
+    box-shadow: 0 0 0 1px rgba(53, 234, 217, 0.1);
   }
 }
 

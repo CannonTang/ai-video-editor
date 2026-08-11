@@ -3,7 +3,9 @@
 import * as ort from 'onnxruntime-web/webgpu';
 import ortWasmMjsUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url";
 import ortWasmUrl from "onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url";
+import { configureOrtWebGpu } from "./webGpuPreference.js";
 
+configureOrtWebGpu(ort);
 ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };

@@ -4,6 +4,11 @@ export function normalizeAudioPlaybackRate(value) {
   return Math.max(0.25, Math.min(4, Number(value) || 1));
 }
 
+export function normalizeAudioVolume(value) {
+  const volume = Number(value);
+  return Number.isFinite(volume) ? Math.max(0, Math.min(4, volume)) : 1;
+}
+
 export function updateAudioSegmentPlaybackRate(segment, value) {
   const previousRate = normalizeAudioPlaybackRate(segment?.playbackRate);
   const playbackRate = normalizeAudioPlaybackRate(value);
@@ -21,9 +26,12 @@ export function updateAudioSegmentPlaybackRate(segment, value) {
 export function createAudioClipActions(d) {
   const updateAudioSegment = (id, patch) => d.setAudioSegments((segments) => segments.map((segment) => {
     if (segment.id !== id) return segment;
-    const next = Number.isFinite(patch.playbackRate)
-      ? { ...updateAudioSegmentPlaybackRate(segment, patch.playbackRate), ...patch, playbackRate: normalizeAudioPlaybackRate(patch.playbackRate) }
-      : { ...segment, ...patch };
+    const normalizedPatch = Number.isFinite(patch.volume)
+      ? { ...patch, volume: normalizeAudioVolume(patch.volume) }
+      : patch;
+    const next = Number.isFinite(normalizedPatch.playbackRate)
+      ? { ...updateAudioSegmentPlaybackRate(segment, normalizedPatch.playbackRate), ...normalizedPatch, playbackRate: normalizeAudioPlaybackRate(normalizedPatch.playbackRate) }
+      : { ...segment, ...normalizedPatch };
     if (Number.isFinite(patch.start) && patch.start !== segment.start) {
       const delta = patch.start - segment.start;
       d.setCaptionSegments((captions) => captions.map((caption) => caption.audioSegmentId === id

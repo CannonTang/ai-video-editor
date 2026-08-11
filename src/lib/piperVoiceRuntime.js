@@ -10,6 +10,7 @@ ort.env.wasm.numThreads = 1;
 ort.env.wasm.simd = true;
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };
 ort.env.webgpu.powerPreference = "high-performance";
+ort.env.webgpu.forceFallbackAdapter = false;
 
 const PINYIN_VOICES = {
   "zh_CN-xiao_ya-medium": "zh/zh_CN/xiao_ya/medium",

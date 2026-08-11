@@ -22,6 +22,7 @@ export function createAssetDropActions(d) {
   }
 
   async function applyAssetToTrack(asset, track, options = {}) {
+    if (asset?.type === "audio" && asset.kind === "music") track = "music";
     if (!d.canDropAssetOnTrack(asset, track)) {
       d.notify(tr("assetTrackMismatch", "请把素材拖到匹配的轨道"));
       return;

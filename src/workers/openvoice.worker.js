@@ -8,6 +8,7 @@ ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(4, nav
 ort.env.wasm.simd = true;
 ort.env.wasm.wasmPaths = { mjs: ortWasmMjsUrl, wasm: ortWasmUrl };
 ort.env.webgpu.powerPreference = "high-performance";
+ort.env.webgpu.forceFallbackAdapter = false;
 
 const MODEL_ROOT = "openvoice-v2-converter-fp16";
 const SAMPLE_RATE = 22050;

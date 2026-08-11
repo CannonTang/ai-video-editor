@@ -61,7 +61,25 @@ export function createTimelineClipboardActions(d) {
       d.setSelectedSourceAudioSegmentId("");
       return void d.clearSourceAudioTrack("已删除当前原声音频片段");
     }
-    if (d.selectedTrack === "music") return void d.clearMusicTrack();
+    if (d.selectedTrack === "music") {
+      const segments = d.musicSegments?.length ? d.musicSegments : [{
+        id: "music-audio",
+        start: d.musicStart || 0,
+        duration: d.musicDuration || 0,
+        sourceStart: 0,
+        sourceDuration: d.musicDuration || 0,
+        playbackRate: 1,
+        peaks: d.musicPeaks || [],
+      }];
+      const index = segments.findIndex((segment) => segment.id === d.selectedMusicSegmentId);
+      if (index < 0) return void d.notify("请先选择一个音乐片段");
+      const next = segments.filter((_, position) => position !== index);
+      if (!next.length) return void d.clearMusicTrack("已删除当前音乐片段");
+      d.setMusicSegments(next);
+      d.setMusicStart(Math.min(...next.map((segment) => segment.start)));
+      d.setSelectedMusicSegmentId(next[Math.min(index, next.length - 1)]?.id ?? "");
+      return void d.notify("已删除当前音乐片段");
+    }
     d.clearImageTrack();
   };
   const handleDuplicateTrack = () => {
@@ -116,6 +134,29 @@ export function createTimelineClipboardActions(d) {
         .map((caption) => ({ ...caption, id: makeId("caption"), audioSegmentId: id, start: caption.start + delta, end: caption.end + delta }));
       d.setAudioSegments((items) => [...items, copy]); d.setCaptionSegments((items) => [...items, ...captions].sort((a, b) => (a.start || 0) - (b.start || 0)));
       d.setSelectedAudioSegmentId(id); return void d.notify(d.t("audioClipDuplicated"));
+    }
+    if (d.selectedTrack === "music") {
+      const segments = d.musicSegments?.length ? d.musicSegments : [{
+        id: "music-audio",
+        start: d.musicStart || 0,
+        duration: d.musicDuration || 0,
+        sourceStart: 0,
+        sourceDuration: d.musicDuration || 0,
+        playbackRate: 1,
+        peaks: d.musicPeaks || [],
+      }];
+      const source = segments.find((segment) => segment.id === d.selectedMusicSegmentId);
+      if (!source) return void d.notify("请先选择一个音乐片段");
+      const copy = {
+        ...source,
+        id: makeId("music"),
+        start: Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - source.duration, source.start + source.duration + 0.2)),
+      };
+      const next = [...segments, copy];
+      d.setMusicSegments(next);
+      d.setMusicStart(Math.min(...next.map((segment) => segment.start)));
+      d.setSelectedMusicSegmentId(copy.id);
+      return void d.notify("已复制当前音乐片段");
     }
     const blob = d.selectedTrack === "music" ? d.musicBlob : d.selectedTrack === "source" ? d.sourceAudioBlob : d.audioBlob;
     const name = d.selectedTrack === "music" ? d.musicName || "background-music.wav" : d.selectedTrack === "source" ? d.sourceAudioName || "source-audio.wav" : "ai-voiceover-copy.wav";

@@ -92,7 +92,9 @@ export function createAudioTrackActions(d) {
     const nextStart = Math.max(0, Number(options.start) || 0);
     d.setMusicStart(nextStart);
     d.setMusicPeaks(nextPeaks);
-    d.setMusicSegments?.([{ id: crypto.randomUUID(), start: nextStart, duration: nextDuration, sourceStart: 0, sourceDuration: nextDuration, playbackRate: 1, peaks: nextPeaks }]);
+    const segmentId = crypto.randomUUID();
+    d.setMusicSegments?.([{ id: segmentId, start: nextStart, duration: nextDuration, sourceStart: 0, sourceDuration: nextDuration, playbackRate: 1, peaks: nextPeaks }]);
+    d.setSelectedMusicSegmentId?.(segmentId);
     d.setSelectedTrack("music");
     if (options.focusAudio !== false) d.setActiveTool("audio");
     d.notify(message);
@@ -170,6 +172,7 @@ export function createAudioTrackActions(d) {
     d.setMusicStart(0);
     d.setMusicPeaks([]);
     d.setMusicSegments?.([]);
+    d.setSelectedMusicSegmentId?.("");
     d.setCurrentTime((time) => Math.min(time, Math.max(
       d.audioBlob ? d.audioDuration : 0,
       d.captionDuration,

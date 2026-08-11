@@ -21,7 +21,10 @@ export function createAssetDragControls(deps) {
     if (!asset || deps.trackLocks[track]) return false;
     if (track === "image" || track === "overlay") return asset.type === "image" || asset.type === "video";
     if (track === "sticker") return asset.type === "sticker";
-    if (track === "audio" || track === "music") return asset.type === "audio";
+    if (track === "audio" || track === "music") {
+      if (asset.type !== "audio") return false;
+      return asset.kind === "music" ? track === "music" : true;
+    }
     return track === "source" && asset.type === "video";
   };
   const handleAssetDragStart = (event, asset) => {

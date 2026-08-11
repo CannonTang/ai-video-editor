@@ -22,7 +22,10 @@ import {
 } from "../lib/timeline.js";
 import { getVisionKey, resolveVisionAnalysisAtTime } from "../lib/vision.js";
 import { getVisualSourceTime } from "../lib/visualEffects.js";
-import { getTimelineProjectDuration } from "../lib/timelineScale.js";
+import {
+  getTimelineProjectDuration,
+  getTimelineVisibleDuration,
+} from "../lib/timelineScale.js";
 import { getActiveVisualOverlays } from "../lib/visualOverlayTimeline.js";
 
 export function useTimelineModel(d) {
@@ -92,21 +95,27 @@ export function useTimelineModel(d) {
     voiceTrackDuration,
     captionDuration,
     d.sourceAudioBlob ? finiteDuration(d.sourceAudioTimelineEnd ?? Number(d.sourceAudioStart) + Number(d.sourceAudioDuration)) : 0,
-    d.musicBlob ? finiteDuration(Number(d.musicStart) + Number(d.musicDuration)) : 0,
+    d.musicBlob
+      ? finiteDuration(d.musicTimelineEnd ?? Number(d.musicStart) + Number(d.musicDuration))
+      : 0,
     stickerDuration,
     visualOverlayDuration,
     d.imageSrc ? finiteDuration(d.imageDuration) : 0,
   ), [
     voiceTrackDuration, captionDuration, d.imageDuration, d.imageSrc, d.musicBlob,
-    d.musicDuration, d.musicStart, d.sourceAudioBlob, d.sourceAudioDuration,
+    d.musicDuration, d.musicStart, d.musicTimelineEnd, d.sourceAudioBlob, d.sourceAudioDuration,
     d.sourceAudioStart, d.sourceAudioTimelineEnd, stickerDuration, visualOverlayDuration,
   ]);
   const timelineDuration = useMemo(() => estimatedDuration <= 0
     ? DEFAULT_TIMELINE_DURATION_SECONDS
     : Math.min(
         MAX_TIMELINE_DURATION_SECONDS,
-        Math.max(d.timelineHorizon, getTimelineProjectDuration(estimatedDuration)),
-      ), [estimatedDuration, d.timelineHorizon]);
+        Math.max(
+          d.timelineHorizon,
+          getTimelineProjectDuration(estimatedDuration),
+          getTimelineVisibleDuration(d.timelineZoom),
+        ),
+      ), [estimatedDuration, d.timelineHorizon, d.timelineZoom]);
   d.timelineDurationRef.current = timelineDuration;
 
   const currentSegmentIndex = getSegmentIndexAtTime(

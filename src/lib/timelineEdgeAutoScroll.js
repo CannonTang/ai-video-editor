@@ -1,6 +1,7 @@
 import { flushSync } from "react-dom";
 
 const MOBILE_TIMELINE_QUERY = "(max-width: 760px)";
+const trimScaleGenerations = new WeakMap();
 export const TIMELINE_TRIM_SCALE_START_EVENT = "timeline-trim-scale-start";
 export const TIMELINE_TRIM_SCALE_END_EVENT = "timeline-trim-scale-end";
 
@@ -15,20 +16,6 @@ export function getTrimLockedTrackWidth(timelineDuration, pixelsPerSecond) {
   return duration * scale;
 }
 
-export function getTrimTrailingSpacerGeometry(contentWidth, viewportWidth) {
-  return {
-    left: Math.max(0, Number(contentWidth) || 0),
-    width: Math.max(0, Number(viewportWidth) || 0),
-  };
-}
-
-export function getTrimScrollSettleStep(scrollLeft, nativeMaximum, maxStep = 6) {
-  const current = Math.max(0, Number(scrollLeft) || 0);
-  const maximum = Math.max(0, Number(nativeMaximum) || 0);
-  const step = Math.max(0, Number(maxStep) || 0);
-  return Math.max(maximum, current - step);
-}
-
 export function getTimelineTrimDragClientX(clientX, rect, inset = 10) {
   if (!rect || !Number.isFinite(clientX) || !(rect.width > 0)) return clientX;
   const safeInset = Math.max(0, Math.min(rect.width / 2, Number(inset) || 0));
@@ -39,6 +26,48 @@ export function getMobileTrimReleaseScrollLeft(scrollLeft, trackWidth) {
   const current = Math.max(0, Number(scrollLeft) || 0);
   const width = Math.max(0, Number(trackWidth) || 0);
   return width > 0 ? Math.min(current, width) : current;
+}
+
+export function getTimelineReleaseHorizon(trackElement, timelineDuration, minimumDuration = 10) {
+  const scrollElement = trackElement?.parentElement;
+  const contentWidth = trackElement?.getBoundingClientRect?.().width || trackElement?.clientWidth || 0;
+  const duration = Math.max(0, Number(timelineDuration) || 0);
+  const minimum = Math.max(0, Number(minimumDuration) || 0);
+  if (!scrollElement || !(contentWidth > 0) || !(duration > 0)) return Math.max(minimum, duration);
+  const visibleEnd = ((scrollElement.scrollLeft + scrollElement.clientWidth) / contentWidth) * duration;
+  return Math.max(minimum, Math.ceil(visibleEnd * 2) / 2);
+}
+
+export function getTimelineActiveDragHorizon(currentHorizon, dragStartDuration, contentEnd = 0) {
+  return Math.max(
+    0,
+    Number(currentHorizon) || 0,
+    Number(dragStartDuration) || 0,
+    Number(contentEnd) || 0,
+  );
+}
+
+/**
+ * Finish a timeline edit as one state transition. During an active drag the
+ * content mutation, release horizon and scale unlock must reach React in the
+ * same flush; otherwise the track briefly renders one of the intermediate
+ * geometries and the scrollbar visibly converges over repeated releases.
+ */
+export function settleTimelineDrag(autoScroller, {
+  active = false,
+  setTimelineHorizon,
+  settle,
+} = {}) {
+  if (!active) {
+    autoScroller?.stop();
+    return null;
+  }
+  const releaseHorizon = autoScroller?.getReleaseHorizon?.();
+  autoScroller?.stop(() => {
+    settle?.();
+    if (Number.isFinite(releaseHorizon)) setTimelineHorizon?.(releaseHorizon);
+  });
+  return releaseHorizon;
 }
 
 export function getTimelineEdgeAutoScrollStep(clientX, rect, {
@@ -78,11 +107,23 @@ export function createTimelineEdgeAutoScroller({
     (pointerType === "touch" && isMobile)
     || (["mouse", "pen"].includes(pointerType) && !isMobile)
   );
-  const usesDesktopTrailingSpacer = enabled && !isMobile && manageTrimScale;
   const rulerElement = enabled && manageTrimScale
     ? trackElement.closest?.(".timeline-board")?.querySelector?.(".timeline-ruler-canvas")
     : null;
-  if (enabled && manageTrimScale) {
+  let previousContentWidth = trackElement?.getBoundingClientRect?.().width || trackElement?.clientWidth || 0;
+  const dragPixelsPerSecond = previousContentWidth > 0 && timelineDuration > 0
+    ? previousContentWidth / timelineDuration
+    : 0;
+  let logicalScrollOffset = 0;
+  let latestClientX = 0;
+  let frameId = 0;
+  let phase = "pending";
+
+  const activateTrimScale = () => {
+    if (!enabled || phase !== "pending") return;
+    phase = "dragging";
+    if (!manageTrimScale) return;
+    trimScaleGenerations.set(trackElement, (trimScaleGenerations.get(trackElement) || 0) + 1);
     trackElement.classList?.add("is-trimming");
     rulerElement?.classList?.add("is-trimming");
     const contentWidth = trackElement.getBoundingClientRect?.().width || trackElement.clientWidth || 0;
@@ -95,41 +136,11 @@ export function createTimelineEdgeAutoScroller({
         },
       })));
     }
-  }
-  let previousContentWidth = trackElement?.getBoundingClientRect?.().width || trackElement?.clientWidth || 0;
-  let logicalScrollOffset = 0;
-  let latestClientX = 0;
-  let frameId = 0;
-  let spacerElement = null;
-
-  const updateTrailingSpacer = (contentWidth = previousContentWidth) => {
-    if (!enabled || !spacerElement) return;
-    const geometry = getTrimTrailingSpacerGeometry(contentWidth, scrollElement.clientWidth);
-    spacerElement.style.left = `${geometry.left}px`;
-    spacerElement.style.width = `${geometry.width}px`;
   };
-
-  if (usesDesktopTrailingSpacer && scrollElement?.ownerDocument?.createElement) {
-    const previousSpacer = scrollElement.querySelector?.("[data-timeline-trim-scroll-spacer]");
-    previousSpacer?.__timelineTrimCleanup?.();
-    previousSpacer?.remove?.();
-    spacerElement = scrollElement.ownerDocument.createElement("div");
-    spacerElement.setAttribute("data-timeline-trim-scroll-spacer", "");
-    Object.assign(spacerElement.style, {
-      position: "absolute",
-      top: "0",
-      height: "1px",
-      pointerEvents: "none",
-      visibility: "hidden",
-    });
-    updateTrailingSpacer();
-    scrollElement.appendChild(spacerElement);
-  }
 
   const syncContentWidth = () => {
     if (!enabled) return;
     const nextContentWidth = trackElement?.getBoundingClientRect?.().width || trackElement?.clientWidth || previousContentWidth;
-    updateTrailingSpacer(nextContentWidth);
     previousContentWidth = nextContentWidth;
   };
 
@@ -158,6 +169,7 @@ export function createTimelineEdgeAutoScroller({
   return {
     update(clientX) {
       latestClientX = clientX;
+      activateTrimScale();
       if (enabled && !frameId) frameId = win.requestAnimationFrame(tick);
     },
     getScrollOffset() {
@@ -168,40 +180,47 @@ export function createTimelineEdgeAutoScroller({
         ? getTimelineTrimDragClientX(clientX, scrollElement.getBoundingClientRect())
         : clientX;
     },
-    stop() {
+    getReleaseHorizon(minimumDuration = 10) {
+      const minimum = Math.max(0, Number(minimumDuration) || 0);
+      if (!scrollElement || !(dragPixelsPerSecond > 0)) return Math.max(minimum, timelineDuration);
+      const visibleEnd = (scrollElement.scrollLeft + scrollElement.clientWidth) / dragPixelsPerSecond;
+      return Math.max(minimum, Math.ceil(visibleEnd * 2) / 2);
+    },
+    stop(settle) {
       if (frameId) win.cancelAnimationFrame(frameId);
       frameId = 0;
-      if (enabled && manageTrimScale && win?.dispatchEvent && win?.CustomEvent) {
-        flushSync(() => win.dispatchEvent(new win.CustomEvent(TIMELINE_TRIM_SCALE_END_EVENT)));
+      const anchoredScrollLeft = Math.max(0, Number(scrollElement?.scrollLeft) || 0);
+      const trimScaleActive = phase === "dragging" && manageTrimScale;
+      const settleAndUnlock = () => {
+        settle?.();
+        if (trimScaleActive && win?.dispatchEvent && win?.CustomEvent) {
+          win.dispatchEvent(new win.CustomEvent(TIMELINE_TRIM_SCALE_END_EVENT));
+        }
+      };
+      if (trimScaleActive) flushSync(settleAndUnlock);
+      else settleAndUnlock();
+      if (trimScaleActive) {
+        const trimGeneration = trimScaleGenerations.get(trackElement);
+        const removeTransitionGuard = () => {
+          if (trimScaleGenerations.get(trackElement) !== trimGeneration) return;
+          trackElement?.classList?.remove("is-trimming");
+          rulerElement?.classList?.remove("is-trimming");
+        };
+        // React has committed the atomic release, but ResizeObserver-derived
+        // geometry can still publish in the next frame. Keep width transitions
+        // disabled through that frame so the settled audio clip never eases to
+        // the same pixel position after the pointer is already up.
+        if (win?.requestAnimationFrame) win.requestAnimationFrame(removeTransitionGuard);
+        else removeTransitionGuard();
       }
-      if (manageTrimScale) {
-        trackElement?.classList?.remove("is-trimming");
-        rulerElement?.classList?.remove("is-trimming");
-      }
+      phase = "settled";
       syncContentWidth();
-      if (isMobile) {
-        scrollElement.scrollLeft = getMobileTrimReleaseScrollLeft(scrollElement.scrollLeft, previousContentWidth);
-      }
-      if (spacerElement) {
-        let settleFrameId = 0;
-        const removeSpacer = () => {
-          if (settleFrameId) win.cancelAnimationFrame(settleFrameId);
-          settleFrameId = 0;
-          spacerElement?.remove?.();
-          spacerElement = null;
-        };
-        const settleSpacer = () => {
-          settleFrameId = 0;
-          const nativeMaximum = Math.max(0, previousContentWidth - scrollElement.clientWidth);
-          if (scrollElement.scrollLeft <= nativeMaximum + 0.5) {
-            removeSpacer();
-            return;
-          }
-          scrollElement.scrollLeft = getTrimScrollSettleStep(scrollElement.scrollLeft, nativeMaximum);
-          settleFrameId = win.requestAnimationFrame(settleSpacer);
-        };
-        spacerElement.__timelineTrimCleanup = removeSpacer;
-        settleSpacer();
+      if (scrollElement) {
+        const maximum = Math.max(0, scrollElement.scrollWidth - scrollElement.clientWidth);
+        const nextScrollLeft = Math.min(anchoredScrollLeft, maximum);
+        scrollElement.scrollLeft = isMobile
+          ? getMobileTrimReleaseScrollLeft(nextScrollLeft, previousContentWidth)
+          : nextScrollLeft;
       }
     },
   };

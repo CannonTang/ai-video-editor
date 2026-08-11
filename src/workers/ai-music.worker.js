@@ -9,6 +9,19 @@ const MODEL_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const LEGACY_BASE = "https://huggingface.co/lsb/stable-audio-3-small-music-onnx/resolve/main";
 const SAMPLE_RATE = 44100;
 const MODEL_CACHE_NAME = "timeline-studio-model-cache-v4";
+const MODEL_CACHE_PREFIX = `${self.location.origin}/__model-cache__/haixin/stable-audio-3-small-music-onnx/${MODEL_REVISION}/`;
+const MODEL_CACHE_READY_KEY = `${MODEL_CACHE_PREFIX}__complete__`;
+const MODEL_CACHE_LOCK_PREFIX = `timeline-studio-ai-music-${MODEL_REVISION}`;
+const MODEL_CACHE_WRITE_LOCK = `${MODEL_CACHE_LOCK_PREFIX}:write`;
+let modelCacheWriteQueue = Promise.resolve();
+const FIXED_ARTIFACT_BYTES = new Map([
+  ["onnx/text_encoder_q4.onnx", 2232988],
+  ["onnx/number_conditioner.onnx", 798844],
+  ["onnx/dit_q4.onnx", 5929366],
+  ["onnx/decoder_q4.onnx", 1653261],
+  ["tokenizer/tokenizer.json", 34362428],
+  ["tokenizer/tokenizer_config.json", 469],
+]);
 
 env.allowLocalModels = false;
 env.allowRemoteModels = true;
@@ -29,7 +42,41 @@ const GRAPH_SPECS = [
   ["decoder_q4", "decoder_q4.onnx"],
 ];
 
-async function fetchModelFile(path, modelSourcePreference) {
+async function markModelCacheComplete(paths) {
+  const cache = await caches.open(MODEL_CACHE_NAME);
+  await cache.put(MODEL_CACHE_READY_KEY, new Response(JSON.stringify({
+    revision: MODEL_REVISION,
+    paths,
+    completedAt: new Date().toISOString(),
+  }), { headers: { "content-type": "application/json" } }));
+}
+
+async function removeObsoleteMusicCacheEntries(cache) {
+  const keys = await cache.keys();
+  const currentPrefix = `/__model-cache__/haixin/stable-audio-3-small-music-onnx/${MODEL_REVISION}/`;
+  await Promise.all(keys.map(async (request) => {
+    const url = new URL(request.url);
+    const isMusic = url.pathname.includes("/stable-audio-3-small-music-onnx/");
+    const isCurrentCanonical = url.pathname.startsWith(currentPrefix);
+    if (!isMusic || isCurrentCanonical) return;
+    const revisionMarker = `/resolve/${MODEL_REVISION}/`;
+    const legacyMarker = "/resolve/main/";
+    const marker = url.pathname.includes(revisionMarker) ? revisionMarker
+      : url.hostname === "huggingface.co" && url.pathname.includes(legacyMarker) ? legacyMarker
+        : "";
+    if (!marker) {
+      await cache.delete(request);
+      return;
+    }
+    const path = url.pathname.split(marker).at(-1);
+    const canonical = path && await cache.match(`${MODEL_CACHE_PREFIX}${path}`);
+    // A current provider-specific child remains the only usable cached copy
+    // until its canonical replacement has been committed successfully.
+    if (canonical) await cache.delete(request);
+  }));
+}
+
+async function matchCachedModelFile(path, modelSourcePreference) {
   const urls = mirroredModelFileUrls({
     repository: "stable-audio-3-small-music-onnx",
     revision: MODEL_REVISION,
@@ -37,31 +84,137 @@ async function fetchModelFile(path, modelSourcePreference) {
     preference: modelSourcePreference,
   });
   const cache = await caches.open(MODEL_CACHE_NAME);
-  let cached = null;
+  const canonicalCacheRequest = new Request(`${MODEL_CACHE_PREFIX}${path}`);
+  let cached = await cache.match(canonicalCacheRequest);
+  if (cached) {
+    return { cache, canonicalCacheRequest, cached, sourceSpecific: false, urls };
+  }
+
   for (const url of [...urls, `${LEGACY_BASE}/${path}`]) {
     cached = await cache.match(url);
     if (cached) break;
   }
+  return { cache, canonicalCacheRequest, cached, sourceSpecific: Boolean(cached), urls };
+}
+
+async function readResponseBytes(response, onDownloadProgress) {
+  if (!response.body) {
+    const data = new Uint8Array(await response.arrayBuffer());
+    onDownloadProgress?.(data.byteLength, data.byteLength, true);
+    return data;
+  }
+  const reader = response.body.getReader();
+  const total = Number(response.headers.get("content-length")) || 0;
+  let loaded = 0;
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onDownloadProgress?.(loaded, total, false);
+  }
+  const data = new Uint8Array(loaded);
+  let cursor = 0;
+  for (const chunk of chunks) {
+    data.set(chunk, cursor);
+    cursor += chunk.byteLength;
+  }
+  onDownloadProgress?.(loaded, total, true);
+  return data;
+}
+
+async function fetchAndCacheModelFile(path, modelSourcePreference, onDownloadProgress) {
+  const { cache, canonicalCacheRequest, cached: matched, sourceSpecific, urls } = await matchCachedModelFile(path, modelSourcePreference);
+  let cached = matched;
   if (cached) {
-    return { response: cached, fromCache: true };
+    if (sourceSpecific) {
+      // Migrate source-specific entries written by older builds to the shared
+      // key used by both Hugging Face and ModelScope.
+      try {
+        await cache.put(canonicalCacheRequest, cached.clone());
+      } catch {
+        // The source-specific entry remains usable for this load. A later run
+        // can retry the optional canonical-key migration.
+      }
+    }
+    const data = await readResponseBytes(cached, onDownloadProgress);
+    return { data, fromCache: true, cacheWritten: true };
   }
 
-  // The service worker is the single cache writer. Writing the same large
-  // response here as well can temporarily require twice the storage and cause
-  // QuotaExceededError on otherwise capable devices.
   const { response } = await fetchFirstAvailableModel(urls);
-  return {
-    response,
-    fromCache: response.headers.get("X-Timeline-Model-Cache") === "hit",
+  const cacheStatus = response.headers.get("X-Timeline-Model-Cache");
+  if (cacheStatus === "hit") {
+    const data = await readResponseBytes(response, onDownloadProgress);
+    return { data, fromCache: true, cacheWritten: true };
+  }
+
+  if (!response.ok) throw new Error(`Model download failed (${response.status}): ${path}`);
+  // Read the network stream directly so progress reflects real transferred
+  // bytes. Cache Storage commit time is deliberately not presented as network
+  // download time.
+  const data = await readResponseBytes(response, onDownloadProgress);
+
+  const commit = async () => {
+    // Another tab may have completed this artifact while our network request
+    // was in flight. Reuse it instead of reserving space for a replacement.
+    const existing = await cache.match(canonicalCacheRequest);
+    if (existing) return true;
+    try {
+      await cache.put(canonicalCacheRequest, new Response(data));
+    } catch (error) {
+      if (error?.name !== "QuotaExceededError") return false;
+      // Older builds used provider-specific keys and could retain a second
+      // complete copy. Remove only obsolete entries from this model family,
+      // then retry the individual child file once.
+      await removeObsoleteMusicCacheEntries(cache).catch(() => {});
+      try {
+        await cache.put(canonicalCacheRequest, new Response(data));
+      } catch {
+        return false;
+      }
+    }
+    return Boolean(await cache.match(canonicalCacheRequest));
   };
+
+  const lockManager = self.navigator?.locks;
+  const queuedCommit = lockManager?.request
+    ? lockManager.request(MODEL_CACHE_WRITE_LOCK, commit)
+    : modelCacheWriteQueue.then(commit, commit);
+  modelCacheWriteQueue = queuedCommit.catch(() => {});
+  const cacheWritten = await queuedCommit;
+  return { data, fromCache: false, cacheWritten };
+}
+
+async function fetchModelFile(path, modelSourcePreference, onDownloadProgress) {
+  const lockManager = self.navigator?.locks;
+  if (!lockManager?.request) {
+    return fetchAndCacheModelFile(path, modelSourcePreference, onDownloadProgress);
+  }
+
+  // Cache Storage replaces entries atomically and may temporarily reserve
+  // space for both copies. Serialize only identical artifacts across workers
+  // and tabs, then check the cache again after acquiring the lock. Different
+  // model shards still download in parallel.
+  const lockName = `${MODEL_CACHE_LOCK_PREFIX}:${path}`;
+  return lockManager.request(lockName, () => fetchAndCacheModelFile(path, modelSourcePreference, onDownloadProgress));
 }
 
 async function downloadAllResources(modelSourcePreference) {
+  let completedManifests = 0;
+  let setupProgress = 0.02;
+  let setupPhase = "checking";
+  const reportSetup = (phase, value) => {
+    setupPhase = phase;
+    setupProgress = Math.max(setupProgress, value);
+    progress(setupPhase, setupProgress);
+  };
   const manifestResults = await Promise.all(GRAPH_SPECS.map(async ([name]) => {
     const resource = await fetchModelFile(`onnx/${name}_chunks.json`, modelSourcePreference);
-    const { response } = resource;
-    if (!response.ok) throw new Error(`Model manifest download failed (${response.status}): ${name}`);
-    return { manifest: await response.json(), resource };
+    const bytes = resource.data;
+    completedManifests += 1;
+    reportSetup("checking", 0.02 + 0.05 * (completedManifests / GRAPH_SPECS.length));
+    return { manifest: JSON.parse(new TextDecoder().decode(bytes)), resource };
   }));
   const manifests = manifestResults.map(({ manifest }) => manifest);
   const paths = [
@@ -72,51 +225,64 @@ async function downloadAllResources(modelSourcePreference) {
     "tokenizer/tokenizer.json",
     "tokenizer/tokenizer_config.json",
   ];
+  const expectedBytesByPath = new Map(FIXED_ARTIFACT_BYTES);
+  manifests.forEach((manifest) => {
+    for (const item of manifest.chunks || manifest.files || []) {
+      const itemPath = item.name || item.path;
+      if (itemPath && Number(item.size) > 0) expectedBytesByPath.set(`onnx/${itemPath}`, Number(item.size));
+    }
+  });
+  // Decide the setup mode before starting artifact reads so concurrent cache
+  // checks cannot first report a high cache percentage and later reset to a
+  // low download percentage when the final missing shard is discovered.
+  const pathCacheStates = await Promise.all(paths.map(async (path) => Boolean((await matchCachedModelFile(path, modelSourcePreference)).cached)));
+  const cachedCount = manifestResults.filter(({ resource }) => resource.fromCache).length
+    + pathCacheStates.filter(Boolean).length;
+  const totalCount = manifestResults.length + paths.length;
+  setupPhase = cachedCount === totalCount ? "cache" : cachedCount === 0 ? "download" : "repairing";
+  reportSetup(setupPhase, 0.07);
 
   // Start every request before consuming any response body. This lets Chrome
   // multiplex the model shards while keeping WebGPU session creation separate.
+  const expectedDownloadBytes = paths.reduce((sum, path) => sum + (expectedBytesByPath.get(path) || 1), 0);
+  const downloadedBytesByPath = new Map(paths.map((path, index) => [
+    path,
+    pathCacheStates[index] ? (expectedBytesByPath.get(path) || 1) : 0,
+  ]));
+  const reportDownload = (path, loaded, total, done) => {
+    const expected = expectedBytesByPath.get(path) || total || 1;
+    const bytes = done ? expected : Math.min(expected, loaded);
+    downloadedBytesByPath.set(path, Math.max(downloadedBytesByPath.get(path) || 0, bytes));
+    const downloadedBytes = [...downloadedBytesByPath.values()].reduce((sum, value) => sum + value, 0);
+    const aggregate = downloadedBytes / expectedDownloadBytes;
+    reportSetup(setupPhase, 0.07 + 0.40 * aggregate);
+  };
   const responses = await Promise.all(paths.map(async (path) => {
-    const { response, fromCache } = await fetchModelFile(path, modelSourcePreference);
-    if (!response.ok) throw new Error(`Model download failed (${response.status}): ${path}`);
-    return { path, response, fromCache };
+    const resource = await fetchModelFile(
+      path,
+      modelSourcePreference,
+      (loaded, total, done) => reportDownload(path, loaded, total, done),
+    );
+    reportDownload(path, 1, 1, true);
+    return { path, ...resource };
   }));
   const allResources = [
     ...manifestResults.map(({ resource }) => resource),
     ...responses,
   ];
-  const phase = allResources.every(({ fromCache }) => fromCache) ? "cache" : "download";
-  const expectedBytes = responses.reduce((sum, { response }) => sum + (Number(response.headers.get("content-length")) || 0), 0);
-  const loadedByPath = new Map(paths.map((path) => [path, 0]));
-  const report = (path, bytes) => {
-    loadedByPath.set(path, bytes);
-    const loaded = [...loadedByPath.values()].reduce((sum, value) => sum + value, 0);
-    progress(phase, 0.02 + 0.55 * Math.min(1, expectedBytes ? loaded / expectedBytes : loadedByPath.size / paths.length));
-  };
-  const artifacts = new Map(await Promise.all(responses.map(async ({ path, response }) => {
-    const reader = response.body?.getReader();
-    if (!reader) {
-      const data = new Uint8Array(await response.arrayBuffer());
-      report(path, data.byteLength);
-      return [path, data];
-    }
-    const chunks = [];
-    let loaded = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loaded += value.byteLength;
-      report(path, loaded);
-    }
-    const data = new Uint8Array(loaded);
-    let cursor = 0;
-    for (const chunk of chunks) {
-      data.set(chunk, cursor);
-      cursor += chunk.byteLength;
-    }
-    return [path, data];
-  })));
-  progress(phase, 0.57);
+  const phase = allResources.every(({ fromCache }) => fromCache) ? "cache" : setupPhase;
+  reportSetup(phase, 0.57);
+  const artifacts = new Map(responses.map(({ path, data }) => [path, data]));
+  const cacheComplete = allResources.every(({ cacheWritten }) => cacheWritten !== false);
+  if (cacheComplete) try {
+    await markModelCacheComplete([
+      ...GRAPH_SPECS.map(([name]) => `onnx/${name}_chunks.json`),
+      ...paths,
+    ]);
+  } catch {
+    // The marker is only an optimization. Every child artifact remains
+    // independently reusable even if this tiny final write cannot be stored.
+  }
   return { artifacts, manifests };
 }
 
@@ -189,7 +355,7 @@ function wavFromAudio(audio, seconds) {
 let runtimePromise = null;
 
 async function initializeRuntime(modelSourcePreference) {
-  progress("download", 0.02);
+  progress("checking", 0.02);
   const resources = await downloadAllResources(modelSourcePreference);
   const tokenizer = createTokenizer(resources.artifacts);
   // WebGPU permits only one EP session to be initialized at a time. Keeping

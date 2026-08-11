@@ -43,10 +43,13 @@ import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, MAX_TIMELINE_DURATION_SECO
 import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getTimedSegmentLaneStateKey, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
 import { createMainVisualFromOverlay } from "../lib/visualOverlayTimeline.js";
+import { getSampledVideoTrackFrames, getVideoTrackFrameSource } from "../lib/videoTrackFrames.js";
 import {
   createTimelineEdgeAutoScroller,
+  getTimelineActiveDragHorizon,
   getTimelineDragTimeDelta,
   getTrimLockedTrackWidth,
+  settleTimelineDrag,
   TIMELINE_TRIM_SCALE_END_EVENT,
   TIMELINE_TRIM_SCALE_START_EVENT,
 } from "../lib/timelineEdgeAutoScroll.js";
@@ -79,48 +82,6 @@ const TIMELINE_WHEEL_ZOOM_CONTENT_SELECTOR = [
   ".sticker-segment",
   ".audio-clip",
 ].join(", ");
-
-function getSampledVideoFrames(frames, count, segment = null) {
-  if (!Array.isArray(frames) || !frames.length) {
-    return [];
-  }
-
-  const safeCount = Math.max(VIDEO_FRAME_MIN_COUNT, count);
-  const sourceStart = Math.max(0, Number(segment?.sourceStart) || 0);
-  const playbackRate = Math.max(0.25, Math.min(4, Number(segment?.playbackRate) || 1));
-  const sourceSpan = Math.max(
-    0.001,
-    Number(segment?.sourceDuration) || Math.max(0.001, Number(segment?.duration) || 0) * playbackRate,
-  );
-  const frameDuration = Math.max(
-    sourceStart + sourceSpan,
-    Number(segment?.trackFrameDuration) || 0,
-  );
-
-  if (segment && frameDuration > 0) {
-    return Array.from({ length: safeCount }, (_, index) => {
-      const sourceTime = Math.min(
-        frameDuration,
-        sourceStart + ((index + 0.5) / safeCount) * sourceSpan,
-      );
-      // Extracted frames represent the center of equally sized source-time
-      // buckets. Pick the bucket nearest to this clip-local source time.
-      const frameIndex = Math.max(
-        0,
-        Math.min(frames.length - 1, Math.round((sourceTime / frameDuration) * frames.length - 0.5)),
-      );
-      return frames[frameIndex];
-    });
-  }
-
-  if (safeCount === frames.length) return frames;
-  if (safeCount === 1) return [frames[Math.floor(frames.length / 2)]];
-
-  return Array.from({ length: safeCount }, (_, index) => {
-    const frameIndex = Math.round((index / (safeCount - 1)) * (frames.length - 1));
-    return frames[frameIndex];
-  });
-}
 
 function getTimelineThumbnailCount({ duration, timelineDuration, contentWidth, timelineZoom, availableFrames = MAX_IMAGE_THUMBNAILS }) {
   if (!availableFrames || timelineDuration <= 0 || contentWidth <= 0) {
@@ -190,6 +151,8 @@ export function Timeline({
   trackScrollRef,
   startTimelineSeek,
   timelineDuration,
+  timelineContentDuration = timelineDuration,
+  setTimelineHorizon,
   currentTime,
   playheadPercent,
   snapGuide,
@@ -412,7 +375,6 @@ export function Timeline({
     if (selectedClips.length < 2) return false;
     event.preventDefault();
     event.stopPropagation();
-    if (isPlaying) handlePlayToggle();
     const trackCanvas = event.target.closest(".track-scroll") || document.querySelector(".track-scroll");
     const contentWidth = Math.max(1, trackCanvas?.getBoundingClientRect().width || 1);
     const startX = event.clientX;
@@ -425,18 +387,38 @@ export function Timeline({
     );
     const anchor = selectedClips.find((clip) => clip.track === track && clip.id === id) || selectedClips[0];
     let latest = { delta: 0, dragging: false, x: startX, y: startY };
-    setTimelineRangeDrag(latest);
-    const move = (moveEvent) => {
+    const autoScroller = createTimelineEdgeAutoScroller({
+      trackElement: trackCanvas,
+      pointerType: event.pointerType,
+      timelineDuration,
+      onScrollFrame: (clientX, scrollOffset) => move({
+        clientX,
+        clientY: latest.y,
+        pointerId,
+        preventDefault() {},
+      }, scrollOffset),
+    });
+    const move = (moveEvent, scrollOffset = autoScroller.getScrollOffset()) => {
       if (moveEvent.pointerId !== undefined && pointerId !== undefined && moveEvent.pointerId !== pointerId) return;
       const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
       if (!latest.dragging && distance < 5) return;
+      if (!latest.dragging && isPlaying) handlePlayToggle();
       moveEvent.preventDefault();
-      const rawDelta = ((moveEvent.clientX - startX) / contentWidth) * timelineDuration;
+      autoScroller.update(moveEvent.clientX);
+      const dragClientX = autoScroller.getDragClientX(moveEvent.clientX);
+      const rawDelta = getTimelineDragTimeDelta({
+        clientX: dragClientX,
+        startX,
+        scrollOffset,
+        contentWidth,
+        timelineDuration,
+      });
       const delta = Math.max(
         -minimumStart,
         Math.min(MAX_TIMELINE_DURATION_SECONDS - maximumEnd, rawDelta),
       );
       latest = { delta, dragging: true, x: moveEvent.clientX, y: moveEvent.clientY };
+      setTimelineHorizon?.((value) => getTimelineActiveDragHorizon(value, timelineDuration, maximumEnd + delta));
       setTimelineRangeDrag(latest);
     };
     const cleanup = () => {
@@ -445,14 +427,18 @@ export function Timeline({
       window.removeEventListener("pointercancel", cancel, true);
     };
     const cancel = () => {
+      settleTimelineDrag(autoScroller, {
+        active: latest.dragging,
+        setTimelineHorizon,
+        settle: () => setTimelineRangeDrag(null),
+      });
       cleanup();
-      setTimelineRangeDrag(null);
     };
     const finish = (upEvent) => {
       if (upEvent?.pointerId !== undefined && pointerId !== undefined && upEvent.pointerId !== pointerId) return;
       cleanup();
-      setTimelineRangeDrag(null);
       if (!latest.dragging) {
+        autoScroller.stop();
         if (toggleOnClick) {
           timelineRangeDragClickGuardRef.current = pressedKey;
           toggleTimelineClipInSelection(track, id);
@@ -462,68 +448,75 @@ export function Timeline({
         }
         return;
       }
-      if (Math.abs(latest.delta) < 0.001) return;
       const delta = latest.delta;
-      timelineRangeDragClickGuardRef.current = pressedKey;
-      setTimelineRangeSelection(new Set(selectedKeys));
-      const selectedVisualIds = new Set(
-        selectedClips.filter((clip) => clip.track === "image").map((clip) => clip.id),
-      );
-      if (selectedVisualIds.size) {
-        setVisualSegments((items) => {
-          const moving = items.filter((segment) => selectedVisualIds.has(segment.id));
-          const remaining = items.filter((segment) => !selectedVisualIds.has(segment.id));
-          if (!moving.length || !remaining.length) return items;
-          const targetTime = Math.max(0, anchor.start + delta);
-          let elapsed = 0;
-          let insertIndex = remaining.length;
-          for (let index = 0; index < remaining.length; index += 1) {
-            const midpoint = elapsed + (remaining[index].duration || 0) / 2;
-            if (targetTime < midpoint) {
-              insertIndex = index;
-              break;
-            }
-            elapsed += remaining[index].duration || 0;
+      settleTimelineDrag(autoScroller, {
+        active: true,
+        setTimelineHorizon,
+        settle: () => {
+          setTimelineRangeDrag(null);
+          if (Math.abs(delta) < 0.001) return;
+          timelineRangeDragClickGuardRef.current = pressedKey;
+          setTimelineRangeSelection(new Set(selectedKeys));
+          const selectedVisualIds = new Set(
+            selectedClips.filter((clip) => clip.track === "image").map((clip) => clip.id),
+          );
+          if (selectedVisualIds.size) {
+            setVisualSegments((items) => {
+              const moving = items.filter((segment) => selectedVisualIds.has(segment.id));
+              const remaining = items.filter((segment) => !selectedVisualIds.has(segment.id));
+              if (!moving.length || !remaining.length) return items;
+              const targetTime = Math.max(0, anchor.start + delta);
+              let elapsed = 0;
+              let insertIndex = remaining.length;
+              for (let index = 0; index < remaining.length; index += 1) {
+                const midpoint = elapsed + (remaining[index].duration || 0) / 2;
+                if (targetTime < midpoint) {
+                  insertIndex = index;
+                  break;
+                }
+                elapsed += remaining[index].duration || 0;
+              }
+              const next = [...remaining];
+              next.splice(insertIndex, 0, ...moving);
+              return next;
+            });
           }
-          const next = [...remaining];
-          next.splice(insertIndex, 0, ...moving);
-          return next;
-        });
-      }
-      setVisualOverlaySegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("overlay", segment.id))
-        ? { ...segment, start: Math.max(0, segment.start + delta) }
-        : segment));
-      setStickerSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("sticker", segment.id))
-        ? { ...segment, start: Math.max(0, segment.start + delta) }
-        : segment));
-      setCaptionSegments?.((items) => items.map((segment) => {
-        if (!selectedKeys.has(timelineSelectionKey("caption", segment.id))) return segment;
-        const range = selectedClips.find((clip) => clip.track === "caption" && clip.id === segment.id);
-        return {
-          ...segment,
-          start: Math.max(0, (range?.start ?? segment.start ?? 0) + delta),
-          end: Math.max(0.2, (range?.end ?? segment.end ?? 0.2) + delta),
-        };
-      }));
-      setAudioSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("audio", segment.id))
-        ? { ...segment, start: Math.max(0, segment.start + delta) }
-        : segment));
-      if (!sourceAudioLinked && selectedKeys.has(timelineSelectionKey("source", "source-audio"))) {
-        setSourceAudioStart?.((start) => Math.max(0, start + delta));
-      }
-      if (musicSegments.length) {
-        setMusicSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("music", segment.id))
-          ? { ...segment, start: Math.max(0, segment.start + delta) }
-          : segment));
-      } else if (selectedKeys.has(timelineSelectionKey("music", "music-audio"))) {
-        setMusicStart?.((start) => Math.max(0, start + delta));
-      }
-      suppressTimelineClipClickRef.current = id;
-      window.setTimeout(() => {
-        if (suppressTimelineClipClickRef.current === id) suppressTimelineClipClickRef.current = "";
-        if (timelineRangeDragClickGuardRef.current === pressedKey) timelineRangeDragClickGuardRef.current = "";
-      }, 240);
-      notify(t("timelineRangeMoved", "已移动 {count} 个片段").replace("{count}", selectedClips.length));
+          setVisualOverlaySegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("overlay", segment.id))
+            ? { ...segment, start: Math.max(0, segment.start + delta) }
+            : segment));
+          setStickerSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("sticker", segment.id))
+            ? { ...segment, start: Math.max(0, segment.start + delta) }
+            : segment));
+          setCaptionSegments?.((items) => items.map((segment) => {
+            if (!selectedKeys.has(timelineSelectionKey("caption", segment.id))) return segment;
+            const range = selectedClips.find((clip) => clip.track === "caption" && clip.id === segment.id);
+            return {
+              ...segment,
+              start: Math.max(0, (range?.start ?? segment.start ?? 0) + delta),
+              end: Math.max(0.2, (range?.end ?? segment.end ?? 0.2) + delta),
+            };
+          }));
+          setAudioSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("audio", segment.id))
+            ? { ...segment, start: Math.max(0, segment.start + delta) }
+            : segment));
+          if (!sourceAudioLinked && selectedKeys.has(timelineSelectionKey("source", "source-audio"))) {
+            setSourceAudioStart?.((start) => Math.max(0, start + delta));
+          }
+          if (musicSegments.length) {
+            setMusicSegments?.((items) => items.map((segment) => selectedKeys.has(timelineSelectionKey("music", segment.id))
+              ? { ...segment, start: Math.max(0, segment.start + delta) }
+              : segment));
+          } else if (selectedKeys.has(timelineSelectionKey("music", "music-audio"))) {
+            setMusicStart?.((start) => Math.max(0, start + delta));
+          }
+          suppressTimelineClipClickRef.current = id;
+          window.setTimeout(() => {
+            if (suppressTimelineClipClickRef.current === id) suppressTimelineClipClickRef.current = "";
+            if (timelineRangeDragClickGuardRef.current === pressedKey) timelineRangeDragClickGuardRef.current = "";
+          }, 240);
+          notify(t("timelineRangeMoved", "已移动 {count} 个片段").replace("{count}", selectedClips.length));
+        },
+      });
     };
     window.addEventListener("pointermove", move, { capture: true, passive: false });
     window.addEventListener("pointerup", finish, { capture: true, once: true });
@@ -711,7 +704,10 @@ export function Timeline({
     activeTimelineClipDrag?.track === "caption"
       ? displayedCaptionSegments.find((segment) => segment.id === activeTimelineClipDrag.segmentId)
       : null;
-  const packedAudioLanes = useMemo(() => packTimedSegmentsIntoLanes(audioSegments), [audioSegments]);
+  const packedAudioLanes = useMemo(
+    () => packTimedSegmentsIntoLanes(audioSegments, { preferredLaneKey: "lane" }),
+    [audioSegments],
+  );
   const getTimelineClipLockKey = (track, id) => track === "audio"
     ? getTimedSegmentLaneStateKey(audioSegments, id)
     : track;
@@ -963,9 +959,11 @@ export function Timeline({
   const [localTimelineZoom, setLocalTimelineZoom] = useState(() => clampTimelineZoom(timelineZoom));
   const [trimScaleLock, setTrimScaleLock] = useState(null);
   const trimScaleLockRef = useRef(null);
+  const trimScrollSeekGuardUntilRef = useRef(0);
   const mobileRulerSchemeRef = useRef(null);
   const timelineZoomRef = useRef(timelineZoom);
   const wheelZoomFrameRef = useRef(0);
+  const wheelZoomPreviewRef = useRef(null);
   const commitZoomTimerRef = useRef(0);
   const rulerViewportFrameRef = useRef(0);
   const wheelZoomActiveRef = useRef(false);
@@ -995,20 +993,13 @@ export function Timeline({
       if (!(pixelsPerSecond > 0) || !(visibleDuration > 0)) return;
       const lock = { pixelsPerSecond, visibleDuration };
       trimScaleLockRef.current = lock;
+      trimScrollSeekGuardUntilRef.current = Number.POSITIVE_INFINITY;
       mobileRulerSchemeRef.current = null;
       setTrimScaleLock(lock);
-      const nextZoom = getTimelineZoomForVisibleDuration(visibleDuration);
-      setLocalTimelineZoom(nextZoom);
-      setTimelineZoom(nextZoom);
     };
     const endTrimScaleLock = () => {
-      const lock = trimScaleLockRef.current;
-      if (lock?.visibleDuration > 0) {
-        const nextZoom = getTimelineZoomForVisibleDuration(lock.visibleDuration);
-        setLocalTimelineZoom(nextZoom);
-        setTimelineZoom(nextZoom);
-      }
       trimScaleLockRef.current = null;
+      trimScrollSeekGuardUntilRef.current = performance.now() + 80;
       setTrimScaleLock(null);
     };
     window.addEventListener(TIMELINE_TRIM_SCALE_START_EVENT, startTrimScaleLock);
@@ -1032,7 +1023,13 @@ export function Timeline({
     };
     const syncMobileTimelineTime = () => {
       const state = mobileTimelineStateRef.current;
-      if (!window.matchMedia?.("(max-width: 760px)").matches || state?.isPlaying || state?.timelineDuration <= 0) {
+      if (
+        trimScaleLockRef.current
+        || performance.now() < trimScrollSeekGuardUntilRef.current
+        || !window.matchMedia?.("(max-width: 760px)").matches
+        || state?.isPlaying
+        || state?.timelineDuration <= 0
+      ) {
         return;
       }
       const trackRect = trackElement.getBoundingClientRect();
@@ -1122,6 +1119,9 @@ export function Timeline({
       }
       trackScrollRef.current?.classList.remove("is-wheel-zooming");
       rulerCanvasRef.current?.classList.remove("is-wheel-zooming");
+      if (trackScrollRef.current) trackScrollRef.current.style.transform = "";
+      if (rulerCanvasRef.current) rulerCanvasRef.current.style.transform = "";
+      wheelZoomPreviewRef.current = null;
       wheelZoomActiveRef.current = false;
       window.clearTimeout(commitZoomTimerRef.current);
     },
@@ -1141,8 +1141,13 @@ export function Timeline({
       minimumMajorStep: (stableVisibleDuration * 88) / mobileTrackBaseWidth,
     };
   }
-  const secondsPerPixel =
-    timelineDuration > 0 && rulerViewport.contentWidth > 0
+  // A clip drag can extend the project and resize the track before the
+  // ResizeObserver publishes the new content width. Keep the ruler on the
+  // drag-start pixel scale during that gap so ticks pan instead of stretching
+  // for a frame and snapping back.
+  const secondsPerPixel = trimScaleLock?.pixelsPerSecond > 0
+    ? 1 / trimScaleLock.pixelsPerSecond
+    : timelineDuration > 0 && rulerViewport.contentWidth > 0
       ? timelineDuration / rulerViewport.contentWidth
       : 0;
   const rulerVisibleStart = Math.max(0, rulerViewport.scrollLeft * secondsPerPixel);
@@ -1237,16 +1242,24 @@ export function Timeline({
       nextTrackWidth = mobileState.nextTrackWidth;
       if (Math.abs(nextTrackWidth - anchor.trackWidth) < 0.01) return;
     } else {
-      nextZoom = clampTimelineZoom(
-        currentZoom * Math.exp(-wheelDelta * TIMELINE_WHEEL_ZOOM_SENSITIVITY),
+      const fittedMinimumZoom = getTimelineAutoFitZoom(
+        Math.max(0.5, timelineContentDuration),
+        0.9,
+      );
+      nextZoom = Math.max(
+        fittedMinimumZoom,
+        clampTimelineZoom(currentZoom * Math.exp(-wheelDelta * TIMELINE_WHEEL_ZOOM_SENSITIVITY)),
       );
       if (Math.abs(nextZoom - currentZoom) < 0.0008) return;
       const currentTrackWidthPercent = getTimelineTrackWidthPercent(timelineDuration, currentZoom);
       nextTrackWidthPercent = getTimelineTrackWidthPercent(timelineDuration, nextZoom);
+      const preview = wheelZoomPreviewRef.current;
+      const baseTrackWidth = preview?.baseTrackWidth || anchor.trackWidth;
+      const baseTrackWidthPercent = preview?.baseTrackWidthPercent || currentTrackWidthPercent;
       nextTrackWidth =
-        anchor.trackWidth * (nextTrackWidthPercent / Math.max(currentTrackWidthPercent, 0.001));
+        baseTrackWidth * (nextTrackWidthPercent / Math.max(baseTrackWidthPercent, 0.001));
       nextScrollLeft =
-        anchor.trackContentStart +
+        (preview?.trackContentStart ?? anchor.trackContentStart) +
         anchor.pointerTrackRatio * nextTrackWidth -
         anchor.pointerViewportX;
     }
@@ -1255,9 +1268,35 @@ export function Timeline({
     timelineZoomRef.current = nextZoom;
     anchor.trackElement.classList.add("is-wheel-zooming");
     rulerCanvasRef.current?.classList.add("is-wheel-zooming");
-    anchor.trackElement.style.width = anchor.isMobile ? `${nextTrackWidth}px` : `${nextTrackWidthPercent}%`;
-    if (rulerCanvasRef.current) {
-      rulerCanvasRef.current.style.width = anchor.isMobile ? `${nextTrackWidth}px` : `${nextTrackWidthPercent}%`;
+    if (anchor.isMobile) {
+      anchor.trackElement.style.width = `${nextTrackWidth}px`;
+      if (rulerCanvasRef.current) rulerCanvasRef.current.style.width = `${nextTrackWidth}px`;
+    } else {
+      const preview = wheelZoomPreviewRef.current || {
+        baseTrackWidth: anchor.trackWidth,
+        baseTrackWidthPercent: getTimelineTrackWidthPercent(timelineDuration, currentZoom),
+        trackContentStart: anchor.trackContentStart,
+        viewportLeft: anchor.viewportLeft,
+        viewportWidth: anchor.viewportWidth,
+      };
+      const viewportTrackWidth = preview.baseTrackWidth / Math.max(preview.baseTrackWidthPercent / 100, 0.001);
+      const maxScrollLeft = Math.max(0, nextTrackWidth - viewportTrackWidth);
+      // Resolve the new scroll boundary ourselves. Letting the browser clamp an
+      // out-of-range scrollLeft after the width write makes the native thumb
+      // visibly jump when the track approaches the fitted 100% width.
+      nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, nextScrollLeft));
+      preview.scale = nextTrackWidthPercent / Math.max(preview.baseTrackWidthPercent, 0.001);
+      preview.nextTrackWidthPercent = nextTrackWidthPercent;
+      preview.nextScrollLeft = nextScrollLeft;
+      wheelZoomPreviewRef.current = preview;
+      // Keep clip geometry and text undistorted. Geometry reads are cached for
+      // the gesture, so this layout write is not followed by a synchronous
+      // getBoundingClientRect() on every wheel event.
+      anchor.trackElement.style.width = `${nextTrackWidthPercent}%`;
+      if (rulerCanvasRef.current) {
+        rulerCanvasRef.current.style.width = `${nextTrackWidthPercent}%`;
+        rulerCanvasRef.current.style.transform = `translateX(${-anchor.scrollElement.scrollLeft}px)`;
+      }
     }
     anchor.trackElement.style.setProperty("--timeline-zoom", String(nextZoom));
     if (anchor.isMobile) {
@@ -1280,6 +1319,17 @@ export function Timeline({
     window.clearTimeout(commitZoomTimerRef.current);
     commitZoomTimerRef.current = window.setTimeout(() => {
       wheelZoomActiveRef.current = false;
+      const preview = wheelZoomPreviewRef.current;
+      if (preview && !anchor.isMobile) {
+        anchor.trackElement.style.width = `${preview.nextTrackWidthPercent}%`;
+        if (rulerCanvasRef.current) rulerCanvasRef.current.style.width = `${preview.nextTrackWidthPercent}%`;
+        anchor.trackElement.style.transform = "";
+        wheelZoomPreviewRef.current = null;
+        anchor.scrollElement.scrollLeft = preview.nextScrollLeft;
+        if (rulerCanvasRef.current) {
+          rulerCanvasRef.current.style.transform = `translateX(${-anchor.scrollElement.scrollLeft}px)`;
+        }
+      }
       setLocalTimelineZoom(nextZoom);
       setTimelineZoom(nextZoom);
       window.requestAnimationFrame(() => {
@@ -1327,14 +1377,24 @@ export function Timeline({
     }
 
     event.preventDefault();
-    const trackRect = trackElement.getBoundingClientRect();
-    const scrollRect = scrollElement.getBoundingClientRect();
-    const trackContentStart = trackRect.left - scrollRect.left + scrollElement.scrollLeft;
+    const activePreview = wheelZoomPreviewRef.current;
+    const trackRect = activePreview ? null : trackElement.getBoundingClientRect();
+    const scrollRect = activePreview ? null : scrollElement.getBoundingClientRect();
+    const viewportLeft = scrollRect?.left ?? activePreview.viewportLeft;
+    const viewportWidth = scrollRect?.width ?? activePreview.viewportWidth;
+    const renderedTrackWidth = activePreview
+      ? activePreview.baseTrackWidth * activePreview.scale
+      : trackRect.width;
+    const renderedTrackLeft = activePreview
+      ? viewportLeft + activePreview.trackContentStart - scrollElement.scrollLeft
+      : trackRect.left;
+    const trackContentStart = activePreview?.trackContentStart
+      ?? trackRect.left - scrollRect.left + scrollElement.scrollLeft;
     const isMobile = window.matchMedia?.("(max-width: 760px)").matches ?? false;
-    const fixedPlayheadX = scrollRect.left + scrollRect.width / 2;
+    const fixedPlayheadX = viewportLeft + viewportWidth / 2;
     const pointerTrackRatio = Math.max(
       0,
-      Math.min(1, (event.clientX - trackRect.left) / Math.max(trackRect.width, 1)),
+      Math.min(1, (event.clientX - renderedTrackLeft) / Math.max(renderedTrackWidth, 1)),
     );
     const deltaModeMultiplier =
       event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scrollElement.clientHeight : 1;
@@ -1349,17 +1409,24 @@ export function Timeline({
     );
     pendingWheelAnchorRef.current = {
       pointerTrackRatio,
-      pointerViewportX: event.clientX - scrollRect.left,
+      pointerViewportX: event.clientX - viewportLeft,
       scrollElement,
       trackElement,
       trackContentStart,
-      trackWidth: trackRect.width,
+      trackWidth: renderedTrackWidth,
       isMobile,
       anchorTimeRatio: Math.max(
         0,
-        Math.min(1, (fixedPlayheadX - trackRect.left) / Math.max(trackRect.width, 1)),
+        Math.min(1, (fixedPlayheadX - renderedTrackLeft) / Math.max(renderedTrackWidth, 1)),
       ),
     };
+    if (!activePreview) {
+      pendingWheelAnchorRef.current.viewportLeft = scrollRect.left;
+      pendingWheelAnchorRef.current.viewportWidth = scrollRect.width;
+    } else {
+      pendingWheelAnchorRef.current.viewportLeft = activePreview.viewportLeft;
+      pendingWheelAnchorRef.current.viewportWidth = activePreview.viewportWidth;
+    }
 
     if (!wheelZoomFrameRef.current) {
       wheelZoomFrameRef.current = window.requestAnimationFrame(flushWheelZoom);
@@ -1751,7 +1818,7 @@ export function Timeline({
         const width = timelineDuration > 0 ? Math.max(0.01, Math.min(100 - left, segment.duration / timelineDuration * 100)) : 0;
         const active = currentTime >= segment.start && currentTime < segment.start + segment.duration;
         const overlayFrames = segment.type === "video" && segment.trackFrames?.length
-          ? getSampledVideoFrames(segment.trackFrames, getTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth, timelineZoom: localTimelineZoom, availableFrames: MAX_IMAGE_THUMBNAILS }), segment)
+          ? getSampledVideoTrackFrames(segment.trackFrames, getTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth, timelineZoom: localTimelineZoom, availableFrames: MAX_IMAGE_THUMBNAILS }), segment)
           : [];
         const overlayImageCount = segment.type !== "video"
           ? getImageTimelineThumbnailCount({ duration: segment.duration, timelineDuration, contentWidth: rulerViewport.contentWidth })
@@ -1767,7 +1834,7 @@ export function Timeline({
           const startX = event.clientX; const startY = event.clientY; const initialStart = segment.start; const initialDuration = segment.duration;
           const autoScroller = createTimelineEdgeAutoScroller({
             trackElement: trackScrollRef.current,
-            pointerType: mode === "move" ? "" : event.pointerType,
+            pointerType: event.pointerType,
             timelineDuration,
             onScrollFrame: (clientX, scrollOffset) => move({ clientX, clientY: startY, preventDefault() {} }, scrollOffset),
           });
@@ -1778,7 +1845,11 @@ export function Timeline({
             const deltaY = moveEvent.clientY - startY;
             if (!dragging && isMobileTouch && Math.abs(deltaY) > Math.abs(deltaX)) return;
             if (!dragging && Math.abs(deltaX) < 4) return;
-            if (!dragging) { dragging = true; if (isPlaying) handlePlayToggle(); }
+            if (!dragging) {
+              dragging = true;
+              setTimelineHorizon?.((value) => Math.max(value, timelineDuration));
+              if (isPlaying) handlePlayToggle();
+            }
             moveEvent.preventDefault();
             autoScroller?.update(moveEvent.clientX);
             const mainTrack = mode === "move" && !trackLocks.image
@@ -1809,34 +1880,41 @@ export function Timeline({
               return { ...item, duration: Math.max(0.1, Math.min(timelineDuration - initialStart, initialDuration + delta)) };
             }));
           };
-          const cleanup = () => {
-            autoScroller.stop();
+          const cleanup = (settle) => {
+            settleTimelineDrag(autoScroller, {
+              active: dragging,
+              setTimelineHorizon,
+              settle: () => {
+                setOverlayPromotionTarget(null);
+                settle?.();
+              },
+            });
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", end);
             window.removeEventListener("pointercancel", cancel);
-            setOverlayPromotionTarget(null);
           };
           const cancel = () => {
-            cleanup();
-            if (!dragging || promoteToMain) return;
-            setVisualOverlaySegments((items) => items.map((item) => item.id === segment.id
-              ? { ...item, start: initialStart, duration: initialDuration }
-              : item));
+            cleanup(() => {
+              setVisualOverlaySegments((items) => items.map((item) => item.id === segment.id
+                ? { ...item, start: initialStart, duration: initialDuration }
+                : item));
+            });
           };
           const end = () => {
-            cleanup();
-            if (!dragging || !promoteToMain) return;
-            const promoted = createMainVisualFromOverlay(segment);
-            if (!promoted) return;
-            setVisualOverlaySegments((items) => items.filter((item) => item.id !== segment.id));
-            setVisualSegments((items) => {
-              const next = [...items];
-              next.splice(Math.max(0, Math.min(next.length, mainInsertIndex)), 0, promoted);
-              return next;
+            cleanup(() => {
+              if (!promoteToMain) return;
+              const promoted = createMainVisualFromOverlay(segment);
+              if (!promoted) return;
+              setVisualOverlaySegments((items) => items.filter((item) => item.id !== segment.id));
+              setVisualSegments((items) => {
+                const next = [...items];
+                next.splice(Math.max(0, Math.min(next.length, mainInsertIndex)), 0, promoted);
+                return next;
+              });
+              clearClipSelections("visual");
+              setSelectedVisualSegmentId(promoted.id);
+              setSelectedTrack("image");
             });
-            clearClipSelections("visual");
-            setSelectedVisualSegmentId(promoted.id);
-            setSelectedTrack("image");
           };
           window.addEventListener("pointermove", move, { passive: false });
           window.addEventListener("pointerup", end, { once: true });
@@ -1861,7 +1939,7 @@ export function Timeline({
           <div className="visual-overlay-thumbnails">
             {segment.type === "video"
               ? overlayFrames.length
-                ? overlayFrames.map((frame, frameIndex) => <img src={frame} alt="" crossOrigin="anonymous" draggable={false} key={`${segment.id}-overlay-frame-${frameIndex}`} />)
+                ? overlayFrames.map((frame, frameIndex) => <img src={getVideoTrackFrameSource(frame)} alt="" crossOrigin="anonymous" draggable={false} key={`${segment.id}-overlay-frame-${frameIndex}`} />)
                 : <video src={segment.src} crossOrigin="anonymous" muted playsInline preload="metadata" />
               : Array.from({ length: overlayImageCount }, (_, thumbnailIndex) => <img src={segment.src} alt="" crossOrigin="anonymous" draggable={false} key={`${segment.id}-overlay-image-${thumbnailIndex}`} />)}
           </div>
@@ -2255,7 +2333,7 @@ export function Timeline({
                     });
                     const visibleVideoFrames = segmentType === "video"
                       ? videoTrackFrames.length
-                        ? getSampledVideoFrames(videoTrackFrames, desiredVideoFrameCount, segment)
+                        ? getSampledVideoTrackFrames(videoTrackFrames, desiredVideoFrameCount, segment)
                         : segment.thumbnail
                           ? Array.from({ length: desiredVideoFrameCount }, () => segment.thumbnail)
                           : []
@@ -2338,9 +2416,9 @@ export function Timeline({
                         >
                           {segmentType === "video" ? (
                             visibleVideoFrames.length ? (
-                              visibleVideoFrames.map((frameSrc, frameIndex) => (
+                              visibleVideoFrames.map((frame, frameIndex) => (
                                 <img
-                                  src={frameSrc}
+                                  src={getVideoTrackFrameSource(frame)}
                                   alt=""
                                   crossOrigin="anonymous"
                                   draggable={false}
@@ -2604,6 +2682,7 @@ export function Timeline({
                 onDragLeave={(event) => laneIndex === 0 && handleTrackAssetDragLeave(event, "audio")}
                 onDrop={(event) => laneIndex === 0 && handleTrackAssetDrop(event, "audio")}
                 data-asset-drop-track={laneIndex === 0 ? "audio" : undefined}
+                data-audio-lane-index={laneIndex}
                 onContextMenu={(event) => showTrackContextMenu(event, "audio", "", rowKey, rowKey)}
               >
                 {laneIndex === 0 && assetDropTargetTrack === "audio" ? (
@@ -2621,7 +2700,7 @@ export function Timeline({
                         data-timeline-segment-id={segment.id}
                         data-range-selected={isRangeSelected("audio", segment.id) || undefined}
                         style={{ left: `${left}%`, width: `${width}%` }}
-                        onPointerDown={(event) => startAudioSegmentMove(event, segment.id)}
+                        onPointerDown={(event) => startAudioSegmentMove(event, segment.id, laneIndex)}
                         onContextMenu={(event) => showTrackContextMenu(event, "audio", segment.id)}
                         onClick={(event) => {
                           event.stopPropagation();
@@ -2630,8 +2709,7 @@ export function Timeline({
                           activateAudioToolForClipSelection();
                           clearClipSelections("voice");
                           setSelectedAudioSegmentId(segment.id);
-                          if (window.matchMedia?.("(max-width: 760px)").matches) ensureMobileTimedClipVisible(segment.id);
-                          else seekTo(segment.start);
+                          ensureMobileTimedClipVisible(segment.id);
                           revealMobileClipActions("audio");
                         }}
                       >
@@ -2663,7 +2741,7 @@ export function Timeline({
                 ) : null}
               {renderAssetDropSlot("music")}
               {musicBlob ? (musicSegments.length ? musicSegments : [{ id: "music-audio", start: musicStartPercent / 100 * timelineDuration, duration: musicDuration, peaks: musicPeaks }]).map((segment) => (
-                <div className={`audio-clip is-music ${selectedMusicSegmentId === segment.id ? "is-selected" : ""}`} key={segment.id} data-timeline-segment-track="music" data-timeline-segment-id={segment.id} data-range-selected={isRangeSelected("music", segment.id) || undefined} style={{ width: `${timelineDuration > 0 ? segment.duration / timelineDuration * 100 : 0}%`, left: `${timelineDuration > 0 ? segment.start / timelineDuration * 100 : 0}%` }} onPointerDown={startMusicMove} onContextMenu={(event) => showTrackContextMenu(event, "music", segment.id)} onClick={(event) => { event.stopPropagation(); if (suppressTimelineClipClickRef.current === "music") return void (suppressTimelineClipClickRef.current = ""); setSelectedTrack("music"); activateAudioToolForClipSelection(); clearClipSelections("music"); setSelectedMusicSegmentId?.(segment.id); ensureMobileTimedClipVisible(segment.id); revealMobileClipActions("music"); }}>
+                <div className={`audio-clip is-music ${selectedMusicSegmentId === segment.id ? "is-selected" : ""}`} key={segment.id} data-timeline-segment-track="music" data-timeline-segment-id={segment.id} data-range-selected={isRangeSelected("music", segment.id) || undefined} style={{ width: `${timelineDuration > 0 ? segment.duration / timelineDuration * 100 : 0}%`, left: `${timelineDuration > 0 ? segment.start / timelineDuration * 100 : 0}%` }} onPointerDown={(event) => startMusicMove(event, segment.id)} onContextMenu={(event) => showTrackContextMenu(event, "music", segment.id)} onClick={(event) => { event.stopPropagation(); if (suppressTimelineClipClickRef.current === "music") return void (suppressTimelineClipClickRef.current = ""); setSelectedTrack("music"); activateAudioToolForClipSelection(); clearClipSelections("music"); setSelectedMusicSegmentId?.(segment.id); ensureMobileTimedClipVisible(segment.id); revealMobileClipActions("music"); }}>
                   <WaveformStrip peaks={segment.peaks?.length ? segment.peaks : musicPeaks} active />
                   <span className="audio-clip-duration" data-compact-duration={formatCompactDuration(segment.duration)}>{formatTime(segment.duration)}</span>
                 </div>
