@@ -778,11 +778,18 @@ function AssetPreviewDialog({ asset, t, onClose }) {
   const mediaSrc = asset.type === "image" ? (asset.originalSrc || asset.src) : (asset.previewSrc || asset.src);
   const assetDisplayName = asset.nameKey ? t(asset.nameKey, asset.name) : asset.name;
   const assetMeta = asset.metaKey ? t(asset.metaKey, asset.meta) : asset.meta;
+  const [videoDimensions, setVideoDimensions] = useState(() => ({
+    width: Math.max(0, Number(asset.width) || 0),
+    height: Math.max(0, Number(asset.height) || 0),
+  }));
   const [audioPreviewStatus, setAudioPreviewStatus] = useState(asset.type === "audio" ? "loading" : "ready");
   const [audioPreviewProgress, setAudioPreviewProgress] = useState(0);
   const [audioPreviewSrc, setAudioPreviewSrc] = useState(asset.type === "audio" && !/^https?:/i.test(mediaSrc) ? mediaSrc : "");
   const audioFallbacksRef = useRef([]);
   const audioFallbackIndexRef = useRef(-1);
+  const videoAspectRatio = videoDimensions.width > 0 && videoDimensions.height > 0
+    ? videoDimensions.width / videoDimensions.height
+    : 16 / 9;
   const tryNextAudioFallback = () => {
     const nextIndex = audioFallbackIndexRef.current + 1;
     const nextSrc = audioFallbacksRef.current[nextIndex];
@@ -851,7 +858,25 @@ function AssetPreviewDialog({ asset, t, onClose }) {
         </header>
         <div className={`asset-preview-media type-${asset.type} ${asset.kind === "vector" ? "is-vector" : ""}`}>
           {asset.type === "video" ? (
-            <video key={mediaSrc} src={mediaSrc} poster={asset.thumbnail} crossOrigin="anonymous" controls autoPlay playsInline />
+            <div
+              className={`asset-preview-video-frame ${videoAspectRatio < 1 ? "is-portrait" : "is-landscape"}`}
+              style={{ aspectRatio: `${videoAspectRatio}` }}
+            >
+              <video
+                key={mediaSrc}
+                src={mediaSrc}
+                poster={asset.thumbnail}
+                crossOrigin="anonymous"
+                controls
+                autoPlay
+                playsInline
+                onLoadedMetadata={(event) => {
+                  const width = Math.max(0, Number(event.currentTarget.videoWidth) || 0);
+                  const height = Math.max(0, Number(event.currentTarget.videoHeight) || 0);
+                  if (width && height) setVideoDimensions({ width, height });
+                }}
+              />
+            </div>
           ) : asset.type === "audio" ? (
             <div className="asset-preview-audio">
               <MusicNote size={58} weight="duotone" />
