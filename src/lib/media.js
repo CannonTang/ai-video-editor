@@ -38,6 +38,7 @@ import { resolveSubjectMaterialShadow } from "./subjectMaterialRendering.js";
 import { drawCinematicDepthFrame, normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./depthOfField.js";
 import { drawPhotoParallaxFrame, normalizePhotoParallax } from "./photoParallax.js";
 import { createVideoTrackFrame } from "./videoTrackFrames.js";
+import { composeColorGradeFilter, resolveColorGrade } from "./colorGrade.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -933,13 +934,14 @@ export function drawPreviewFrame(context, visual, canvas, options) {
   const usesAlphaMask = mask.type && mask.type !== "none" && (mask.inverted || Number(mask.feather) > 0);
   const cinematicDepth = normalizeCinematicDepth(visualEffects?.cinematicDepth);
   const photoParallax = normalizePhotoParallax(visualEffects?.photoParallax);
+  const primaryFilter = composeColorGradeFilter(filter, resolveColorGrade(visualEffects?.keyframes, visualTime, visualEffects?.colorGrade));
   const drawPrimaryVisual = (targetContext, targetCanvas) => {
     if ((photoParallax.enabled || cinematicDepth.enabled) && depth?.depthVisual) {
       if (photoParallax.enabled) drawPhotoParallaxFrame(targetContext, visual, targetCanvas, {
-        effect: photoParallax, depthVisual: depth.depthVisual, fitMode, filter, time: visualTime, clear: false,
+        effect: photoParallax, depthVisual: depth.depthVisual, fitMode, filter: primaryFilter, time: visualTime, clear: false,
       });
       else drawCinematicDepthFrame(targetContext, visual, targetCanvas, {
-        effect: cinematicDepth, depthVisual: depth.depthVisual, fitMode, filter, clear: false,
+        effect: cinematicDepth, depthVisual: depth.depthVisual, fitMode, filter: primaryFilter, clear: false,
       });
       const sourceSize = getVisualDimensions(visual);
       const fitRect = getVisualFitRect(sourceSize, targetCanvas, fitMode);
@@ -953,7 +955,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     }
     const smartFrameSourceTime = getVisualSourceTime(visualEffects, visualTime);
     const smartFrameCrop = resolveSmartFrameCropAtTime(visualEffects?.smartFrame, smartFrameSourceTime);
-    return drawFittedVisual(targetContext, visual, targetCanvas, fitMode, filter, vision, visualEffects?.subjectEffect, smartFrameCrop);
+    return drawFittedVisual(targetContext, visual, targetCanvas, fitMode, primaryFilter, vision, visualEffects?.subjectEffect, smartFrameCrop);
   };
   if (usesAlphaMask) {
     const layers = getVisualEffectsLayers(canvas);
@@ -1006,7 +1008,11 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       const scale = 1.12 - amount * 0.12;
       context.translate(width / 2, height / 2); context.scale(scale, scale); context.translate(-width / 2, -height / 2);
     }
-    const nextFilter = transitionId === "blur" ? `blur(${Math.max(0, (1 - amount) * 14)}px)` : transitionNext.filter || filter;
+    const nextBaseFilter = composeColorGradeFilter(
+      transitionNext.filter || filter,
+      resolveColorGrade(transitionNext.visualEffects?.keyframes, transitionNext.visualTime || 0, transitionNext.visualEffects?.colorGrade),
+    );
+    const nextFilter = transitionId === "blur" ? `${nextBaseFilter === "none" ? "" : nextBaseFilter} blur(${Math.max(0, (1 - amount) * 14)}px)`.trim() : nextBaseFilter;
     const nextSourceTime = getVisualSourceTime(transitionNext.visualEffects, transitionNext.visualTime || 0);
     const nextSmartFrameCrop = resolveSmartFrameCropAtTime(transitionNext.visualEffects?.smartFrame, nextSourceTime);
     drawFittedVisual(context, transitionNext.visual, canvas, fitMode, nextFilter, transitionNext.vision || null, null, nextSmartFrameCrop);
@@ -1782,6 +1788,7 @@ export async function exportBrowserVideo({
       transitionId,
       vision: finalFrameVision,
       depth: finalFrameDepth,
+      visualEffects: finalVisualItem.segment,
       visualTime: finalLocalTime,
       visualOverlays: finalVisualOverlays.map(({ segment }) => ({
         ...segment,

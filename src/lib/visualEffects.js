@@ -1,7 +1,9 @@
 import { MAX_TIMELINE_DURATION_SECONDS, MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
+import { COLOR_GRADE_KEYFRAME_KEYS, normalizeColorGradeProperty } from "./colorGrade.js";
 
 const DEFAULT_TRANSFORM = Object.freeze({ x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 });
 export const VISUAL_TRANSFORM_KEYS = Object.freeze(["scale", "x", "y", "rotation", "opacity"]);
+export const VISUAL_PROPERTY_KEYS = Object.freeze([...VISUAL_TRANSFORM_KEYS, ...COLOR_GRADE_KEYFRAME_KEYS]);
 const KEYFRAME_TIME_TOLERANCE = 0.04;
 export const MIN_VISUAL_PLAYBACK_RATE = 0.25;
 export const MAX_VISUAL_PLAYBACK_RATE = 4;
@@ -40,6 +42,7 @@ export function updateVisualSegmentPlaybackRate(segment, value) {
 }
 
 function normalizeVisualProperty(key, value) {
+  if (COLOR_GRADE_KEYFRAME_KEYS.includes(key)) return normalizeColorGradeProperty(key, value);
   if (key === "scale") return Math.max(0.1, Number(value) || 1);
   if (key === "opacity") return Math.max(0, Math.min(1, Number.isFinite(Number(value)) ? Number(value) : 1));
   return Number(value) || 0;
@@ -108,7 +111,7 @@ export function hasVisualPropertyKeyframe(keyframes = [], time, key) {
 }
 
 export function upsertVisualPropertyKeyframe(keyframes = [], time, key, value) {
-  if (!VISUAL_TRANSFORM_KEYS.includes(key)) return keyframes;
+  if (!VISUAL_PROPERTY_KEYS.includes(key)) return keyframes;
   const safeTime = Math.max(0, Number(time) || 0);
   const normalized = normalizeVisualKeyframes(keyframes);
   const matching = normalized.filter((frame) => Math.abs(frame.time - safeTime) <= KEYFRAME_TIME_TOLERANCE);
@@ -121,7 +124,7 @@ export function removeVisualPropertyKeyframe(keyframes = [], time, key) {
   return normalizeVisualKeyframes(keyframes).flatMap((frame) => {
     if (Math.abs(frame.time - (Number(time) || 0)) > KEYFRAME_TIME_TOLERANCE || !(key in frame)) return [frame];
     const { [key]: _removed, ...rest } = frame;
-    return VISUAL_TRANSFORM_KEYS.some((property) => property in rest) ? [rest] : [];
+    return VISUAL_PROPERTY_KEYS.some((property) => property in rest) ? [rest] : [];
   });
 }
 

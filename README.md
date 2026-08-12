@@ -27,6 +27,7 @@ Users are solely responsible for any legal liability arising from violations of 
 
 ## Project updates
 
+- **August 12, 2026 — Desktop color wheels:** added a dedicated desktop Color Wheels tab before AI Repair, with separate shadows, midtones, highlights, and offset wheels plus temperature, tint, and saturation controls. All 15 grading properties support per-property keyframes, shortest-path hue interpolation, and matching animated preview, transition, and export rendering. Mobile keeps its focused video Speed workflow without exposing Color Wheels.
 - **August 7, 2026 — v0.9.2 cross-platform Agent Skill:** synchronized the complete `edit-timeline-studio` package across GitHub Releases, GitHub Skill installation, skills.sh, Codex, Claude Code, GitHub Copilot, and Gemini CLI. This release adds reference-video reconstruction, highlight and tension shaping, promotion narrative planning, provider-neutral footage sourcing, local model routing, explicit host dependency setup, Chinese/English voiceover preparation, and audio timing and loudness validation.
 - **August 5, 2026 — v0.9.1 Agent Skill:** published the professional auto-editing workflow through skills.sh and GitHub Skill installation. The Skill now classifies raw footage, product/tutorial videos, multi-shot highlights, multi-speaker conversations, and website walkthroughs; plans from multimodal image, speech, OCR, and motion evidence; guides stabilization, tracking, and deliberate enhancement; preserves sentence-level portable voiceover clips; and requires both a verified editable `.timeline` project and rendered video for completed edits.
 - **July 31, 2026 — Face swap:** replace the identity in a selected visual clip with browser-local face detection, tracking, and preview.
@@ -93,7 +94,7 @@ Browser AI models are mirrored on both Hugging Face and ModelScope. Timeline Stu
 ## Editing and export
 
 - Contiguous main Visuals track plus timed picture-in-picture overlays.
-- Direct canvas selection, movement, proportional resize, rotation, masks, filters, effects, animation, speed, and explicit keyframes.
+- Direct canvas selection, movement, proportional resize, rotation, masks, filters, effects, animation, speed, and explicit keyframes, plus desktop four-way color grading with fully keyframeable temperature, tint, saturation, hue, wheel saturation, and luminance controls.
 - Captions, stickers, voiceover, separated source audio, and music on independent timed tracks.
 - CapCut-style snapping, alignment guides, clip menus, split/duplicate/delete, timeline zoom, undo/redo, and portable `.timeline` projects.
 - Native media playback for a responsive preview; export uses a separate deterministic offline rendering path.

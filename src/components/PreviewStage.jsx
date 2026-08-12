@@ -32,6 +32,7 @@ import { hasSubjectEffect, normalizeSubjectEffect } from "../lib/subjectEffects.
 import { SubjectMaterialFilterDefs } from "./SubjectMaterialFilter.jsx";
 import { drawCinematicDepthFrame, normalizeCinematicDepth } from "../lib/depthOfField.js";
 import { drawPhotoParallaxFrame, normalizePhotoParallax } from "../lib/photoParallax.js";
+import { composeColorGradeFilter, resolveColorGrade } from "../lib/colorGrade.js";
 
 function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
   const videoRef = useRef(null);
@@ -186,6 +187,14 @@ export function PreviewStage({
   const visualTransform = resolveVisualTransform(visualEffects?.keyframes, visualLocalTime, visualEffects?.baseTransform);
   const visualAnimation = resolveVisualClipAnimation(visualEffects?.animation, visualLocalTime, visualEffects?.duration);
   const visualMask = visualEffects?.mask ?? {};
+  const resolvedColorGrade = useMemo(
+    () => resolveColorGrade(visualEffects?.keyframes, visualLocalTime, visualEffects?.colorGrade),
+    [visualEffects?.colorGrade, visualEffects?.keyframes, visualLocalTime],
+  );
+  const selectedFilterCss = useMemo(
+    () => composeColorGradeFilter(selectedFilter.css, resolvedColorGrade),
+    [resolvedColorGrade, selectedFilter.css],
+  );
   const normalizedSubjectEffect = normalizeSubjectEffect(subjectEffect);
   const normalizedCinematicDepth = useMemo(() => normalizeCinematicDepth(cinematicDepth), [cinematicDepth]);
   const cinematicDepthActive = normalizedCinematicDepth.enabled && Boolean(depthAnalysis?.depthUrl);
@@ -282,19 +291,19 @@ export function PreviewStage({
         effect: normalizedPhotoParallax,
         depthVisual: depthImage,
         fitMode: activeObjectFit,
-        filter: selectedFilter.css,
+        filter: selectedFilterCss,
         time: visualLocalTime,
       });
       else drawCinematicDepthFrame(context, source, canvas, {
         effect: normalizedCinematicDepth,
         depthVisual: depthImage,
         fitMode: activeObjectFit,
-        filter: selectedFilter.css,
+        filter: selectedFilterCss,
       });
     };
     depthImage.src = depthAnalysis.depthUrl;
     return () => { canceled = true; };
-  }, [activeObjectFit, depthAnalysis?.depthUrl, depthRenderActive, frameHeight, frameWidth, normalizedCinematicDepth, normalizedPhotoParallax, photoParallaxActive, previewPixelRatio, previewVideoRef, previewVisualType, selectedFilter.css, visualLocalTime]);
+  }, [activeObjectFit, depthAnalysis?.depthUrl, depthRenderActive, frameHeight, frameWidth, normalizedCinematicDepth, normalizedPhotoParallax, photoParallaxActive, previewPixelRatio, previewVideoRef, previewVisualType, selectedFilterCss, visualLocalTime]);
   const startMaskEdit = (event, mode) => {
     const frame = previewCanvasRef.current;
     if (!frame || !onUpdateVisualMask) return;
@@ -634,7 +643,7 @@ export function PreviewStage({
                     ...visualTransformStyle,
                     objectFit: activeObjectFit,
                     objectPosition: activeObjectPosition,
-                    filter: `${selectedFilter.css === "none" ? "" : selectedFilter.css} ${outlineFilter}`.trim() || "none",
+                    filter: `${selectedFilterCss === "none" ? "" : selectedFilterCss} ${outlineFilter}`.trim() || "none",
                   }}
                 />
               </div>
@@ -674,7 +683,7 @@ export function PreviewStage({
                   src={renderedVisualSrc}
                   alt={t("currentMediaAlt")}
                   crossOrigin="anonymous"
-                  style={{ ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined }}
+                  style={{ ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilterCss, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined }}
                 /> : null}
                 {previewVisualType === "video" ? <video
                   key={previewVisualSrc}
@@ -695,7 +704,7 @@ export function PreviewStage({
                     onPreviewVideoTimeUpdate?.(event.currentTarget.currentTime);
                   }}
                   style={{
-                    ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined,
+                    ...visualTransformStyle, opacity: depthRenderActive ? 0 : visualTransformStyle.opacity, filter: selectedFilterCss, objectFit: activeObjectFit, objectPosition: activeObjectPosition, background: smartContainActive ? "transparent" : undefined,
                     WebkitMaskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     maskImage: previewVisionMaskUrl ? `url("${previewVisionMaskUrl}")` : undefined,
                     WebkitMaskSize: previewVisionMaskUrl ? activeObjectFit : undefined,
@@ -711,7 +720,7 @@ export function PreviewStage({
                   className="remaster-preview-frame"
                   src={enhancement.previewUrl}
                   alt={t("remasterPreviewAlt")}
-                  style={{ ...visualTransformStyle, filter: selectedFilter.css, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
+                  style={{ ...visualTransformStyle, filter: selectedFilterCss, objectFit: activeObjectFit, objectPosition: activeObjectPosition }}
                 /> : null}
               </div>
             ) : null}

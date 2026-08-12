@@ -363,6 +363,7 @@ export function App() {
       isVideo: segment.type === "video",
       isOverlay: mobilePanelOrigin === "overlay-clip",
       hasVectorEditor: isVector,
+      isMobile: true,
     });
     if (mobileInspectorSection !== "effects" && !supportedSections.includes(mobileInspectorSection)) setMobileInspectorSection(supportedSections[0] || "transform");
   }, [
@@ -401,6 +402,8 @@ export function App() {
       if (Number.isFinite(change.removeKeyframeAt)) return { ...item, keyframes: (item.keyframes ?? []).filter((frame) => Math.abs(frame.time - change.removeKeyframeAt) > 0.04) };
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
+      if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
+      if (change.colorGrade) return { ...item, colorGrade: change.colorGrade };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
       if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
       if (change.photoParallax) return { ...item, photoParallax: normalizePhotoParallax(change.photoParallax) };

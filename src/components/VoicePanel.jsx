@@ -1584,9 +1584,13 @@ export function VoicePanel({
             onChange={updateSelectedVisualEffects}
             onPreviewAnimation={onPreviewAnimation}
             onSeek={(time) => seekTo(visualTimelineStart + time)}
-            selectedFilterId={selectedFilterId}
+            selectedFilterId={selectedVisualSegment.filterId ?? selectedFilterId}
             trOption={trOption}
-            onSelectFilter={(id) => { setSelectedFilterId(id); notify(t("effectApplied")); }}
+            onSelectFilter={(id) => {
+              setSelectedFilterId(id);
+              updateSelectedVisualEffects?.({ filterId: id });
+              notify(t("effectApplied"));
+            }}
             onCanvasEditModeChange={setVisualCanvasEditMode}
             sourceAudioLinked={sourceAudioLinked}
             miganRepair={miganRepair}

@@ -3,6 +3,7 @@ export function getVisualPropertyTabIds({
   isVideo = false,
   isOverlay = false,
   hasVectorEditor = false,
+  isMobile = false,
 } = {}) {
   if (isVector) {
     return [
@@ -17,7 +18,8 @@ export function getVisualPropertyTabIds({
     "mask",
     "filters",
     "animation",
-    ...(isVideo ? ["speed"] : []),
+    ...(isMobile && isVideo ? ["speed"] : []),
+    ...(!isMobile && !isOverlay ? ["colorWheels"] : []),
     ...(isOverlay ? ["timing"] : ["repair"]),
   ];
 }

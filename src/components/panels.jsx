@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 
 import {
+  ArrowCounterClockwise,
   CaretDown,
   CaretLeft,
   CaretRight,
@@ -15,6 +16,7 @@ import {
   MusicNote,
   MagicWand,
   Pause,
+  Palette,
   PlayCircle,
   PersonSimpleRun,
   Scan,
@@ -50,6 +52,7 @@ import { VECTOR_CATEGORIES } from "../lib/vectorAssets.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
 import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL_CLIP_ANIMATION_OPTIONS } from "../lib/visualClipAnimations.js";
 import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
+import { COLOR_GRADE_KEYFRAME_KEYS, DEFAULT_COLOR_GRADE, getColorGradeProperty, normalizeColorGrade, resolveColorGrade } from "../lib/colorGrade.js";
 import { Popover } from "./ui.jsx";
 import { SubjectEffectsWorkspace } from "./SubjectEffectsPanel.jsx";
 import { convertVoiceBlob, extractVoiceEmbedding, OPENVOICE_EMBEDDING_VERSION } from "../lib/openVoiceRuntime.js";
@@ -997,6 +1000,8 @@ export function ToolPanel(props) {
     setCaptionsEnabled,
     selectedFilterId,
     setSelectedFilterId,
+    selectedVisualSegment,
+    updateSelectedVisualEffects,
     selectedTransitionId,
     setSelectedTransitionId,
     selectedStickerId,
@@ -1445,14 +1450,173 @@ export function ToolPanel(props) {
       title={t("filters")}
       kind="effect"
       options={FILTER_OPTIONS}
-      selectedId={selectedFilterId}
+      selectedId={selectedVisualSegment?.filterId ?? selectedFilterId}
       trOption={trOption}
       onSelect={(id) => {
         setSelectedFilterId(id);
+        updateSelectedVisualEffects?.({ filterId: id });
         notify(t("filterApplied"));
       }}
     />
   );
+}
+
+function ColorGradeKeyframeButton({ path, label, keyframes, localTime, value, onChange, t }) {
+  const keyed = hasVisualPropertyKeyframe(keyframes, localTime, path);
+  return <button
+    className={`color-grade-keyframe-button ${keyed ? "is-active" : ""}`}
+    type="button"
+    aria-label={`${keyed ? t("visualRemovePropertyKeyframe") : t("visualAddPropertyKeyframe")} · ${label}`}
+    onClick={() => keyed
+      ? onChange?.({ removePropertyKeyframe: { time: localTime, key: path } })
+      : onChange?.({ propertyKeyframe: { time: localTime, key: path, value } })}
+  ><Diamond size={10} weight={keyed ? "fill" : "regular"} /></button>;
+}
+
+function ColorGradeWheel({ label, value, keyframePrefix, keyframes, localTime, onChange, onReset, onKeyframeChange, t }) {
+  const wheel = value || DEFAULT_COLOR_GRADE.shadows;
+  const radians = (270 - (wheel.hue || 0)) * Math.PI / 180;
+  const radius = Math.max(0, Math.min(100, wheel.saturation || 0)) * 0.42;
+  const markerStyle = {
+    left: `calc(50% + ${Math.cos(radians) * radius}%)`,
+    top: `calc(50% + ${Math.sin(radians) * radius}%)`,
+    "--marker-color": wheel.saturation > 0 ? `hsl(${wheel.hue} 82% 60%)` : "#dce7e8",
+  };
+  const updateFromPointer = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const dx = event.clientX - centerX;
+    const dy = event.clientY - centerY;
+    const maxRadius = Math.max(1, Math.min(rect.width, rect.height) * 0.44);
+    onChange({
+      ...wheel,
+      hue: (270 - Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360,
+      saturation: Math.min(100, Math.hypot(dx, dy) / maxRadius * 100),
+    });
+  };
+  const onPointerDown = (event) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateFromPointer(event);
+  };
+  const onPointerMove = (event) => {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    updateFromPointer(event);
+  };
+  const onKeyDown = (event) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      onChange({ ...wheel, hue: (wheel.hue + (event.key === "ArrowRight" ? 3 : -3) + 360) % 360 });
+      return;
+    }
+    onChange({ ...wheel, saturation: Math.max(0, Math.min(100, wheel.saturation + (event.key === "ArrowUp" ? 2 : -2))) });
+  };
+  const updateLuminanceFromPointer = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const position = Math.max(0, Math.min(1, (event.clientY - rect.top) / Math.max(1, rect.height)));
+    onChange({ ...wheel, luminance: Math.round(100 - position * 200) });
+  };
+  const onLuminancePointerDown = (event) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    updateLuminanceFromPointer(event);
+  };
+  const onLuminancePointerMove = (event) => {
+    if (!event.currentTarget.hasPointerCapture?.(event.pointerId)) return;
+    updateLuminanceFromPointer(event);
+  };
+  const onLuminanceKeyDown = (event) => {
+    if (!["ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    onChange({ ...wheel, luminance: Math.max(-100, Math.min(100, wheel.luminance + (event.key === "ArrowUp" ? 2 : -2))) });
+  };
+  return (
+    <section className="color-grade-wheel-card">
+      <div className="color-grade-wheel-heading"><strong>{label}</strong><button type="button" aria-label={`${label} · ${t("colorGradeResetWheel")}`} onClick={onReset}><ArrowCounterClockwise size={13} weight="bold" /></button></div>
+      <div className="color-grade-wheel-control">
+        <div
+          className="color-grade-wheel"
+          role="slider"
+          tabIndex="0"
+          aria-label={label}
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={Math.round(wheel.saturation)}
+          aria-valuetext={`${t("colorGradeHue")} ${Math.round(wheel.hue)}°, ${t("colorGradeStrength")} ${Math.round(wheel.saturation)}%`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onKeyDown={onKeyDown}
+        ><span className="color-grade-wheel-marker" style={markerStyle} /></div>
+        <div
+          className="color-grade-luminance-arc"
+          role="slider"
+          tabIndex="0"
+          aria-label={`${label} · ${t("colorGradeLuminance")}`}
+          aria-valuemin="-100"
+          aria-valuemax="100"
+          aria-valuenow={Math.round(wheel.luminance)}
+          onPointerDown={onLuminancePointerDown}
+          onPointerMove={onLuminancePointerMove}
+          onKeyDown={onLuminanceKeyDown}
+        >
+          <svg viewBox="0 0 22 100" preserveAspectRatio="none" aria-hidden="true">
+            <path className="color-grade-luminance-track" pathLength="100" d="M 4 3 C 17 29, 17 71, 4 97" />
+            <path className="color-grade-luminance-fill" pathLength="100" d="M 4 3 C 17 29, 17 71, 4 97" style={{ strokeDasharray: `${Math.max(0, Math.min(100, (wheel.luminance + 100) / 2))} 100` }} />
+          </svg>
+        </div>
+      </div>
+      <div className="color-grade-wheel-values">
+        {[["hue", `H ${Math.round(wheel.hue)}°`, wheel.hue], ["saturation", `S ${Math.round(wheel.saturation)}%`, wheel.saturation], ["luminance", `L ${Math.round(wheel.luminance)}`, wheel.luminance]].map(([field, text, fieldValue]) => <span key={field}>{text}<ColorGradeKeyframeButton path={`${keyframePrefix}.${field}`} label={`${label} · ${field}`} keyframes={keyframes} localTime={localTime} value={fieldValue} onChange={onKeyframeChange} t={t} /></span>)}
+      </div>
+    </section>
+  );
+}
+
+function ColorWheelsPanel({ t, value, keyframes = [], localTime = 0, onChange }) {
+  const baseGrade = normalizeColorGrade(value);
+  const grade = resolveColorGrade(keyframes, localTime, baseGrade);
+  const updateBasic = (key, nextValue) => {
+    const path = `colorGrade.${key}`;
+    if (hasVisualPropertyKeyframe(keyframes, localTime, path)) onChange?.({ propertyKeyframe: { time: localTime, key: path, value: nextValue } });
+    else onChange?.({ colorGrade: normalizeColorGrade({ ...baseGrade, [key]: nextValue }) });
+  };
+  const updateWheel = (key, wheel) => {
+    const changedFields = ["hue", "saturation", "luminance"].filter((field) => Math.abs(Number(wheel[field]) - Number(grade[key][field])) > 0.0001);
+    if (!changedFields.length) return;
+    const nextBaseWheel = { ...baseGrade[key] };
+    let baseChanged = false;
+    changedFields.forEach((field) => {
+      const path = `colorGrade.${key}.${field}`;
+      if (hasVisualPropertyKeyframe(keyframes, localTime, path)) onChange?.({ propertyKeyframe: { time: localTime, key: path, value: wheel[field] } });
+      else { nextBaseWheel[field] = wheel[field]; baseChanged = true; }
+    });
+    if (baseChanged) onChange?.({ colorGrade: normalizeColorGrade({ ...baseGrade, [key]: nextBaseWheel }) });
+  };
+  const addAllColorKeyframes = () => COLOR_GRADE_KEYFRAME_KEYS.forEach((key) => onChange?.({ propertyKeyframe: { time: localTime, key, value: getColorGradeProperty(grade, key) } }));
+  return (
+    <section className="visual-editor-card color-grade-card">
+      <div className="visual-editor-heading"><span><Palette size={16} weight="duotone" />{t("colorGradeTitle")}</span><button className="color-grade-reset-all" type="button" onClick={() => onChange?.({ colorGrade: DEFAULT_COLOR_GRADE })}>{t("colorGradeResetAll")}</button></div>
+      <p className="color-grade-hint">{t("colorGradeHint")}</p>
+      <div className="color-grade-keyframe-summary"><span><Diamond size={12} weight="fill" />{localTime.toFixed(2)}s · {keyframes.filter((frame) => COLOR_GRADE_KEYFRAME_KEYS.some((key) => key in frame)).length} {t("visualFrames")}</span><button type="button" onClick={addAllColorKeyframes}>{t("visualAddAllKeyframes")}</button></div>
+      <div className="color-grade-basics">
+        {[["temperature", t("colorGradeTemperature")], ["tint", t("colorGradeTint")], ["saturation", t("colorGradeSaturation")]].map(([key, label]) => <div className="slider-field compact-slider" key={key}><div><label>{label}</label><span className="color-grade-basic-value">{Math.round(grade[key])}<ColorGradeKeyframeButton path={`colorGrade.${key}`} label={label} keyframes={keyframes} localTime={localTime} value={grade[key]} onChange={onChange} t={t} /></span></div><input aria-label={label} type="range" min="-100" max="100" value={grade[key]} onChange={(event) => updateBasic(key, Number(event.target.value))} /></div>)}
+      </div>
+      <div className="color-grade-wheel-grid">
+        {[["shadows", t("colorGradeShadows")], ["midtones", t("colorGradeMidtones")], ["highlights", t("colorGradeHighlights")], ["offset", t("colorGradeOffset")]].map(([key, label]) => <ColorGradeWheel key={key} label={label} value={grade[key]} keyframePrefix={`colorGrade.${key}`} keyframes={keyframes} localTime={localTime} onKeyframeChange={onChange} t={t} onChange={(wheel) => updateWheel(key, wheel)} onReset={() => updateWheel(key, DEFAULT_COLOR_GRADE[key])} />)}
+      </div>
+    </section>
+  );
+}
+
+function getSegmentFilterPreview(segment) {
+  if (!segment) return "";
+  if (segment.type === "video") {
+    const firstFrame = Array.isArray(segment.trackFrames) ? segment.trackFrames[0] : null;
+    return (typeof firstFrame === "string" ? firstFrame : firstFrame?.src) || segment.thumbnail || "";
+  }
+  return segment.src || segment.thumbnail || "";
 }
 
 export function VisualEffectsPanel({
@@ -1490,6 +1654,7 @@ export function VisualEffectsPanel({
   const isVideo = segment?.type === "video";
   const isVector = segment?.kind === "vector" || Boolean(segment?.vectorBody);
   const isOverlay = mode === "overlay";
+  const isMobileFocusedSection = Boolean(singleSection);
   const playbackRate = Math.max(0.25, Math.min(4, Number(segment?.playbackRate) || 1));
   const clipAnimation = normalizeVisualClipAnimation(segment?.animation);
   const activeAnimation = clipAnimation[animationSection];
@@ -1505,6 +1670,7 @@ export function VisualEffectsPanel({
     filters: t("visualTabEffects"),
     animation: t("visualTabAnimation"),
     speed: t("visualTabSpeed"),
+    colorWheels: t("visualTabColorWheels"),
     vector: t("vectorProperties"),
     timing: t("overlayTiming", "Timing & layer"),
     repair: t("repairTab"),
@@ -1514,6 +1680,7 @@ export function VisualEffectsPanel({
     isVideo,
     isOverlay,
     hasVectorEditor: Boolean(vectorEditor),
+    isMobile: isMobileFocusedSection,
   }).map((id) => [id, tabLabels[id]]);
   const updateTabEdges = useCallback(() => {
     const node = tabsRef.current;
@@ -1533,7 +1700,7 @@ export function VisualEffectsPanel({
   };
   useEffect(() => {
     if (!tabs.some(([id]) => id === activeTab)) setActiveTab(tabs[0]?.[0] || "transform");
-  }, [activeTab, isOverlay, isVector, isVideo, vectorEditor]);
+  }, [activeTab, isMobileFocusedSection, isOverlay, isVector, isVideo, vectorEditor]);
   useEffect(() => {
     const nextTab = tabs.some(([id]) => id === requestedTab) ? requestedTab : "transform";
     setActiveTab(nextTab);
@@ -1542,6 +1709,9 @@ export function VisualEffectsPanel({
   useEffect(() => {
     onCanvasEditModeChange?.(activeTab === "mask" ? "mask" : "transform");
   }, [activeTab, onCanvasEditModeChange]);
+  useEffect(() => {
+    tabsRef.current?.closest(".voice-tab-body")?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeTab, segment?.id]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const node = tabsRef.current;
@@ -1624,7 +1794,7 @@ export function VisualEffectsPanel({
           ) : null}
         </div> : null}
         {activeTab === "transform" ?
-        <section className="visual-editor-card">
+        <section className="visual-editor-card visual-transform-card">
           <div className="visual-editor-heading"><span><Diamond size={16} weight="fill" />{t("visualKeyframes")}</span><em>{localTime.toFixed(2)}s · {keyframes.length} {t("visualFrames")}</em></div>
           <button className="panel-secondary visual-add-all-keyframes" type="button" onClick={() => onChange?.({ keyframe: { time: localTime, ...transform } })}><Diamond size={14} weight="fill" />{t("visualAddAllKeyframes")}</button>
           {keyframes.length ? <div className="visual-keyframe-times" aria-label={t("visualKeyframes")}>{keyframes.map((frame) => <button type="button" aria-label={`${frame.time.toFixed(2)}s · ${t("visualKeyframes")}`} className={Math.abs(frame.time - localTime) <= 0.04 ? "is-current" : ""} key={frame.time} onClick={() => onSeek?.(frame.time)}>{frame.time.toFixed(2)}s</button>)}</div> : null}
@@ -1656,7 +1826,7 @@ export function VisualEffectsPanel({
             <p className="visual-speed-hint">{sourceAudioLinked ? t("sourceAudioSynced") : t("visualSpeedVisualOnlyHint")}</p>
           </> : <div className="empty-state visual-speed-empty">{t("visualSpeedImageHint")}</div>}
         </section> : null}
-        {activeTab === "filters" ? <VisualChoicePanel title={t("visualEffects")} hideTitle={Boolean(singleSection)} previewImage={segment?.src} kind="filter" options={FILTER_OPTIONS} selectedId={selectedFilterId} trOption={trOption} onSelect={onSelectFilter} /> : null}
+        {activeTab === "filters" ? <VisualChoicePanel title={t("visualEffects")} hideTitle={Boolean(singleSection)} previewImage={getSegmentFilterPreview(segment)} allowFallbackPreview={false} kind="filter" options={FILTER_OPTIONS} selectedId={selectedFilterId} trOption={trOption} onSelect={onSelectFilter} /> : null}
         {activeTab === "animation" ? <section className="visual-editor-card visual-animation-card">
           {!singleSection ? <div className="visual-editor-heading"><strong>{t("visualAnimation")}</strong><em>{t("visualAnimationHoverHint")}</em></div> : null}
           <div className="visual-animation-sections" role="tablist" aria-label={t("visualAnimation")}>
@@ -1676,6 +1846,7 @@ export function VisualEffectsPanel({
           </div>
           {activeAnimation.id !== "none" ? <div className="slider-field compact-slider visual-animation-duration"><div><label>{t("visualAnimationDuration")}</label><strong>{activeAnimation.duration.toFixed(1)}s</strong></div><input aria-label={t("visualAnimationDuration")} type="range" min="0.1" max={Math.min(3, Math.max(0.1, Number(segment.duration) || 0.1))} step="0.1" value={activeAnimation.duration} onChange={(event) => onChange?.({ animation: { ...clipAnimation, [animationSection]: { ...activeAnimation, duration: Number(event.target.value) } } })} /></div> : null}
         </section> : null}
+        {activeTab === "colorWheels" ? <ColorWheelsPanel t={t} value={segment.colorGrade} keyframes={keyframes} localTime={localTime} onChange={onChange} /> : null}
         {activeTab === "vector" ? <section className="visual-editor-card visual-vector-card">{vectorEditor}</section> : null}
         {activeTab === "timing" ? <section className="visual-editor-card visual-overlay-timing-card">
           {!singleSection ? <div className="visual-editor-heading"><strong>{t("overlayTiming", "Timing & layer")}</strong><em>{t("visualClipScoped")}</em></div> : null}
@@ -1717,7 +1888,8 @@ export function VisualEffectsPanel({
   );
 }
 
-function VisualChoicePanel({ title, hideTitle = false, previewImage = SAMPLE_IMAGE, kind, options, selectedId, trOption = (name) => name, onSelect }) {
+function VisualChoicePanel({ title, hideTitle = false, previewImage = SAMPLE_IMAGE, allowFallbackPreview = true, kind, options, selectedId, trOption = (name) => name, onSelect }) {
+  const resolvedPreviewImage = previewImage || (allowFallbackPreview ? SAMPLE_IMAGE : "");
   return (
     <div className="tool-panel">
       {!hideTitle ? <h2>{title}</h2> : null}
@@ -1731,7 +1903,7 @@ function VisualChoicePanel({ title, hideTitle = false, previewImage = SAMPLE_IMA
             key={option.id}
             draggable={option.id !== "none"}
             style={{
-              "--choice-image": `url(${previewImage || SAMPLE_IMAGE})`,
+              "--choice-image": resolvedPreviewImage ? `url(${resolvedPreviewImage})` : "none",
               "--choice-filter": option.css ?? "none",
             }}
             onClick={() => onSelect(option.id)}
@@ -1741,7 +1913,9 @@ function VisualChoicePanel({ title, hideTitle = false, previewImage = SAMPLE_IMA
               event.dataTransfer.setData("text/plain", `visual-style:${kind}:${option.id}`);
             }}
           >
-            <span className="visual-choice-thumb" aria-hidden="true" />
+            <span className={`visual-choice-thumb ${resolvedPreviewImage ? "has-source-preview" : "is-preview-empty"}`} aria-hidden="true">
+              {resolvedPreviewImage && kind !== "transition" ? <img src={resolvedPreviewImage} alt="" crossOrigin="anonymous" draggable={false} /> : null}
+            </span>
             <span className="visual-choice-label">
               <span>{trOption(option.name, option)}</span>
               {selectedId === option.id ? <Check size={14} weight="bold" /> : null}
