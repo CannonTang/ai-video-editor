@@ -44,7 +44,7 @@ The wrapper prefers the dedicated environment and falls back to a compatible exi
 
 ## Pre-voiceover environment
 
-Agent-driven Chinese and mixed Chinese/English narration uses Timeline Studio's browser-local Kokoro multi-lang v1.1 FP16 sherpa-onnx worker. It needs no separate Python voiceover environment, MeloTTS package, or UniDic installation. Do not run or recommend `--capability voiceover`.
+Agent-driven Chinese and mixed Chinese/English narration uses Timeline Studio's browser-local Hojo TTS Light 80M FP16 worker, with WebGPU autoregressive generation and stable WASM waveform decoding. It needs no separate Python voiceover environment, MeloTTS package, or UniDic installation. Do not run or recommend `--capability voiceover`.
 
 The model remains a separately managed large artifact. Use only the owned, immutable Hugging Face and ModelScope voice-model revisions recorded in [voiceover-workflow.md](voiceover-workflow.md), let the editor's service worker own persistent browser caching, and keep the initialized inference worker alive for repeat generations. ModelScope is preferred for Chinese/domestic sessions, Hugging Face is the fallback, and both routes must resolve to one cache identity.
 

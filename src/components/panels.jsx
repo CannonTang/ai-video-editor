@@ -2303,7 +2303,7 @@ export function VoiceSynthesisPanel({
           <label htmlFor="speed">{t("speed")}</label>
           <span>{speed.toFixed(2)} x</span>
         </div>
-        <input id="speed" type="range" min="0.7" max="1.3" step="0.05" value={speed} onChange={(event) => setSpeed(Number(event.target.value))} />
+        <input id="speed" type="range" min="0.7" max="1.3" step="0.05" value={selectedVoice.engine === "hojo" ? 1 : speed} disabled={selectedVoice.engine === "hojo"} onChange={(event) => setSpeed(Number(event.target.value))} />
       </div>
 
       <div className="slider-field">

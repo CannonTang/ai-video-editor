@@ -25,7 +25,9 @@ export const ASSET_DRAG_MIME = "application/x-ai-voiceover-asset";
 export const DEFAULT_SCRIPT = "";
 
 const LEGACY_VOICE_ID_ALIASES = {
-  zh_m_yansheng: "zh_m_jingche",
+  zh_m_yansheng: "zh_f_ruoxi",
+  zh_m_yunzhou: "zh_f_qinglan",
+  zh_m_jingche: "zh_f_ruoxi",
 };
 
 export function normalizeVoiceId(voiceId) {
@@ -77,10 +79,9 @@ export const VOICES = [
     id: "zh_f_qinglan",
     name: "晴岚",
     language: "中文",
-    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    detail: "Hojo TTS Light 80M · 自然中英双语",
     gender: "自然女声",
-    engine: "kokoro-multilang",
-    badge: "推荐",
+    engine: "hojo",
     defaultSpeed: 1,
     avatarUrl: "/assets/voice-avatars/zh_f_qinglan.webp",
     sampleUrl: "/assets/voice-samples/zh_f_qinglan.mp3",
@@ -89,37 +90,12 @@ export const VOICES = [
     id: "zh_f_ruoxi",
     name: "若溪",
     language: "中文",
-    detail: "Kokoro v1.1 · 中英双语 · FP16",
+    detail: "Hojo TTS Light 80M · 自然中英双语",
     gender: "自然女声",
-    engine: "kokoro-multilang",
-    badge: "FP16",
+    engine: "hojo",
     defaultSpeed: 1,
     avatarUrl: "/assets/voice-avatars/zh_f_ruoxi.webp",
     sampleUrl: "/assets/voice-samples/zh_f_ruoxi.mp3",
-  },
-  {
-    id: "zh_m_yunzhou",
-    name: "云舟",
-    language: "中文",
-    detail: "Kokoro v1.1 · 中英双语 · FP16",
-    gender: "自然男声",
-    engine: "kokoro-multilang",
-    badge: "FP16",
-    defaultSpeed: 1,
-    avatarUrl: "/assets/voice-avatars/zh_m_yunzhou.webp",
-    sampleUrl: "/assets/voice-samples/zh_m_yunzhou.mp3",
-  },
-  {
-    id: "zh_m_jingche",
-    name: "景澈",
-    language: "中文",
-    detail: "Kokoro v1.1 · 中英双语 · FP16",
-    gender: "年轻清亮男声",
-    engine: "kokoro-multilang",
-    badge: "FP16",
-    defaultSpeed: 1,
-    avatarUrl: "/assets/voice-avatars/zh_m_jingche.webp",
-    sampleUrl: "/assets/voice-samples/zh_m_jingche.mp3",
   },
   {
     id: "af_heart",

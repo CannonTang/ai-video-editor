@@ -1,6 +1,6 @@
 import { isBuiltInPinyinVoice, predictPiperVoice } from "./piperVoiceRuntime.js";
 import { clearKokoroVoiceCacheIfStorageTight, predictKokoroVoice } from "./kokoroVoiceRuntime.js";
-import { predictKokoroMultilangVoice } from "./kokoroMultilangRuntime.js";
+import { predictHojoVoice } from "./hojoTtsRuntime.js";
 import { predictMmsVoice } from "./mmsVoiceRuntime.js";
 import { clearPiperCacheIfStorageTight, isStorageQuotaError, prepareTextForVoice } from "./ttsText.js";
 
@@ -43,10 +43,10 @@ export async function synthesizeBaseVoice({ voice, text, speed = 1, onProgress, 
       if (!isStorageQuotaError(error)) throw error;
       onStatus?.("ttsStatusClearingCache"); await tts?.flush?.(); blob = await predictPiperVoice(tts, input, progress);
     }
-  } else if (voice.engine === "kokoro-multilang") {
-    onStatus?.("ttsStatusLoadingKokoro");
-    blob = await predictKokoroMultilangVoice({ text: prepared.text, voiceId: voice.id, speed }, (event) => {
-      if (event?.backend) onStatus?.("ttsStatusGeneratingWasm");
+  } else if (voice.engine === "hojo") {
+    onStatus?.("ttsStatusPreparingModel");
+    blob = await predictHojoVoice({ text: prepared.text, voiceId: voice.id, speed }, (event) => {
+      if (event?.backend) onStatus?.(event.backend === "wasm" ? "ttsStatusGeneratingWasm" : "ttsStatusGeneratingWebGpu");
       if (Number.isFinite(event?.progress)) onProgress?.(event.progress);
     });
   } else if (voice.engine === "mms") {
