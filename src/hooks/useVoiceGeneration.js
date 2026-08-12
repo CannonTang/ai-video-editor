@@ -1,6 +1,8 @@
 import { useCallback } from "react";
 import { isModelDownloadError } from "../lib/modelSources.js";
-import { isPiperSymbolError, isStorageQuotaError, TtsInputError } from "../lib/ttsText.js";
+import {
+  isPiperSymbolError, isStorageQuotaError, splitTextAtSentenceEnd, TtsInputError,
+} from "../lib/ttsText.js";
 import {
   applyVoiceOutputGain, convertVoiceBlob, extractVoiceEmbedding, OPENVOICE_EMBEDDING_VERSION,
 } from "../lib/openVoiceRuntime.js";
@@ -15,15 +17,11 @@ export function useVoiceGeneration(d) {
     if (!rawText || d.status === "generating" || d.status === "captioning") return;
     d.setVoiceTab("synthesis"); d.setStatus("generating"); d.setStatusText("ttsStatusPreparingModel"); d.setProgress(6);
     try {
-      let { blob } = await synthesizeBaseVoice({
-        voice: d.selectedVoice, text: rawText, speed: d.speed, notify: d.notify, t: d.t,
-        onStatus: d.setStatusText,
-        onProgress: (value) => d.setProgress((current) => Math.max(current, Math.min(88, Math.max(10, Math.round(value * 0.78 + 10))))),
-      });
-      if (d.selectedVoiceProfile?.embedding) {
-        d.setStatusText(d.t("cloneStageTwo", "第 2 步：转换为克隆音色"));
-        d.setProgress(0);
-        let targetEmbedding = d.selectedVoiceProfile.embedding;
+      const sentenceSegments = d.selectedVoice.engine === "hojo"
+        ? splitTextAtSentenceEnd(rawText)
+        : [rawText];
+      let targetEmbedding = d.selectedVoiceProfile?.embedding;
+      if (targetEmbedding) {
         if (
           d.selectedVoiceProfile.embeddingVersion !== OPENVOICE_EMBEDDING_VERSION
           && d.selectedVoiceProfile.referenceBlob
@@ -40,28 +38,60 @@ export function useVoiceGeneration(d) {
             updatedAt: new Date().toISOString(),
           });
         }
-        blob = await convertVoiceBlob(blob, targetEmbedding, {
-          seed: 2026,
-          onProgress: (event) => {
-            d.setStatusText(event.phase || d.t("cloneStageTwo", "第 2 步：转换为克隆音色"));
-            if (Number.isFinite(event.progress)) d.setProgress(Math.max(1, Math.min(96, Math.round(event.progress))));
+      }
+      const generatedItems = [];
+      for (let index = 0; index < sentenceSegments.length; index += 1) {
+        const sentence = sentenceSegments[index];
+        if (sentenceSegments.length > 1) {
+          d.setStatusText(d.t("ttsStatusGeneratingSegment")
+            .replace("{current}", index + 1)
+            .replace("{total}", sentenceSegments.length));
+        }
+        let { blob } = await synthesizeBaseVoice({
+          voice: d.selectedVoice, text: sentence, speed: d.speed, notify: d.notify, t: d.t,
+          onStatus: sentenceSegments.length > 1 ? undefined : d.setStatusText,
+          onProgress: (value) => {
+            const overall = 8 + ((index + Math.max(0, Math.min(100, value)) / 100) / sentenceSegments.length) * 82;
+            d.setProgress(Math.min(90, Math.round(overall)));
           },
         });
+        if (targetEmbedding) {
+          d.setStatusText(sentenceSegments.length > 1
+            ? d.t("ttsStatusConvertingSegment").replace("{current}", index + 1).replace("{total}", sentenceSegments.length)
+            : d.t("cloneStageTwo", "第 2 步：转换为克隆音色"));
+          blob = await convertVoiceBlob(blob, targetEmbedding, {
+            seed: 2026 + index,
+            onProgress: (event) => {
+              if (sentenceSegments.length === 1 && event.phase) d.setStatusText(event.phase);
+              if (Number.isFinite(event.progress)) {
+                const overall = 8 + ((index + Math.max(0, Math.min(100, event.progress)) / 100) / sentenceSegments.length) * 82;
+                d.setProgress(Math.min(90, Math.round(overall)));
+              }
+            },
+          });
+        }
+        blob = await applyVoiceOutputGain(blob, d.volume);
+        generatedItems.push({ blob, script: sentence });
       }
-      blob = await applyVoiceOutputGain(blob, d.volume);
       d.setStatusText("ttsStatusDecodingWaveform");
       d.setProgress((current) => Math.max(current, 96));
-      await d.commitAudio(blob, `${d.selectedVoice.name} · ${d.t("ttsGenerated")}`, {
-        captionSegment,
-        script: rawText,
+      const commitOptions = {
+        captionSegment, script: rawText,
         sourceKind: d.selectedVoiceProfile ? "cloned-voiceover" : "ai-voiceover",
         cloneVoiceProfileId: d.selectedVoiceProfile?.id || "",
         cloneVoiceProfileName: d.selectedVoiceProfile?.name || "",
-      });
-      d.notify(d.t("ttsNoticeGenerated"));
+      };
+      if (generatedItems.length > 1) {
+        await d.commitAudioBatch(generatedItems, `${d.selectedVoice.name} · ${d.t("ttsGenerated")}`, commitOptions);
+        d.notify(d.t("ttsNoticeSegmentedGenerated").replace("{count}", generatedItems.length));
+      } else {
+        await d.commitAudio(generatedItems[0].blob, `${d.selectedVoice.name} · ${d.t("ttsGenerated")}`, commitOptions);
+        d.notify(d.t("ttsNoticeGenerated"));
+      }
     } catch (error) {
       console.error(error);
       const message = error instanceof TtsInputError ? d.t(error.code)
+        : /^HOJO_(?:DECODER_)?(?:SILENT|INVALID)_WAVEFORM$/.test(error?.message) ? d.t("ttsErrorSilentWaveform")
         : d.selectedVoice.engine === "piper" && isPiperSymbolError(error) ? d.t("ttsErrorUnsupportedPiperSymbols")
           : isStorageQuotaError(error) ? d.t("ttsErrorStorageQuota")
             : isModelDownloadError(error) ? d.t("ttsErrorModelDownload")

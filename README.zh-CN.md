@@ -67,7 +67,7 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 
 ## AI 能力
 
-- **多语言 AI 配音：** 中文及中英混合 Kokoro multi-lang v1.1 FP16（女声 2 条、男声 2 条）、英文 Kokoro 82M，以及德语、西班牙语、法语、意大利语和巴西葡萄牙语的浏览器 Piper 声音。
+- **多语言 AI 配音：** 中文及中英混合使用 Hojo TTS Light 80M FP16 的晴岚、若溪两条内置参考女声，自回归生成走 WebGPU、稳定波形解码走 WASM；英文使用 Kokoro 82M，德语、西班牙语、法语、意大利语和巴西葡萄牙语使用浏览器 Piper 声音。
 - **本地 AI 音乐：** Stable Audio 3 Small Q4 ONNX 通过 WebGPU 在浏览器运行，支持自由提示词自动翻译、30/60/90/120 秒选项、长音乐波形感知循环、模型持久缓存，并在完成后自动加入“我的素材”。
 - **自动字幕：** Whisper small q8 ONNX，结合音频能量修正时间戳，并对中文识别结果做克制的高置信纠错。
 - **智能画面：** YOLOS tiny 主体检测与 MODNet 人像抠图，用于图片和完整视频的智能裁切、字幕避让与背景移除。
@@ -81,6 +81,7 @@ https://github.com/user-attachments/assets/304a744e-d620-4380-9c17-19af3726f5a4
 浏览器 AI 模型同时镜像在 Hugging Face 和 ModelScope。Timeline Studio 会在首次请求时进行轻量连通性竞速，记住当前运行环境中更快且可用的线路；网络发生变化或下载失败时会自动切换另一条线路。两家平台共用同一缓存标识，因此切换线路不会重复下载相同版本。
 
 - Stable Audio：[Hugging Face](https://huggingface.co/haixin/stable-audio-3-small-music-onnx) · [ModelScope](https://www.modelscope.cn/models/martindelophy/stable-audio-3-small-music-onnx/files?version=main)
+- 语音模型：[Hugging Face](https://huggingface.co/haixin/timeline-studio-voice-models/tree/074a57bc4dac9c58568b031898ea79da6f36b282) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-voice-models/files?version=9cb5ab964c014b182701153bd00f7a2202f5dce8)（含不同上游许可证，详见模型仓库说明）
 - Timeline Studio ONNX 模型：[Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=main)
 - Depth Anything V2 Small Q4F16：[Hugging Face](https://huggingface.co/haixin/timeline-studio-onnx-models/tree/a0806c6fb9484894dcb78df523156d244461515d/depth-anything-v2-small) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-onnx-models/files?version=4cc757f80330e22cb8f82b628c53ceca6307fd12&subpath=depth-anything-v2-small)（Apache-2.0）
 - 人声分离模型：[Hugging Face](https://huggingface.co/haixin/timeline-studio-vocal-remover) · [ModelScope](https://www.modelscope.cn/models/martindelophy/timeline-studio-vocal-remover/files?version=main)

@@ -11,7 +11,7 @@ Timeline Studio is a free, open-source, local-first AI video editor that runs in
 
 ## AI voiceover
 
-- Chinese and mixed Chinese/English: Kokoro multi-lang v1.1 FP16 sherpa-onnx WASM with two female voices (晴岚, 若溪) and two male voices (云舟, 景澈).
+- Chinese and mixed Chinese/English: Hojo TTS Light 80M FP16 WebGPU with two built-in female reference voices (晴岚, 若溪).
 - English: Kokoro 82M v1.0 ONNX q8 on WASM.
 - Additional browser Piper voices: German, Spanish, French, Italian and Brazilian Portuguese.
 - Generated speech is inserted at the current playhead as a voiceover clip.

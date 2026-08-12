@@ -1,4 +1,4 @@
-const MODEL_CACHE_NAME = "timeline-studio-model-cache-v4";
+const MODEL_CACHE_NAME = "timeline-studio-model-cache-v5";
 const APP_CACHE_NAME = "timeline-studio-app-shell-v3";
 const APP_SHELL_URLS = [
   "/",
@@ -40,9 +40,14 @@ const MIRRORED_REPOSITORIES = new Set([
 ]);
 const STABLE_AUDIO_REVISION = "0b8a05e0bc3511e674b4cb3413d3ef6c48880cdb";
 const VOCAL_REMOVER_REVISION = "927cd9272154b85c53518daf44063ee033ee22c3";
-const PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISION = "8471955b41238ec0b231d0e3e8e3ac852be6652b";
-const VOICE_MODEL_HUGGING_FACE_REVISION = "b5ea1e4dce976b03cc56b1bdc354412cc9cc77b0";
-const VOICE_MODEL_MODELSCOPE_REVISION = "db384702f9dbc647d1d387236473fbf4e4ba5581";
+const PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISIONS = new Set([
+  "8471955b41238ec0b231d0e3e8e3ac852be6652b",
+  "b5ea1e4dce976b03cc56b1bdc354412cc9cc77b0",
+  "75946ddacf692c9ac75cee206d63cf0b82afc2a6",
+  "4e6aeeebef1832b1eb128c61dae04c19dc7112c1",
+]);
+const VOICE_MODEL_HUGGING_FACE_REVISION = "074a57bc4dac9c58568b031898ea79da6f36b282";
+const VOICE_MODEL_MODELSCOPE_REVISION = "9cb5ab964c014b182701153bd00f7a2202f5dce8";
 const OPENVOICE_HUGGING_FACE_REVISION = "d9e0542e0e4e8fcfb849240f7e8e7fa8147df1a3";
 const OPENVOICE_MODELSCOPE_REVISION = "226b24270b69b38781a35566c7d442061f9e3b81";
 const DEPTH_MODEL_HUGGING_FACE_REVISION = "a0806c6fb9484894dcb78df523156d244461515d";
@@ -137,7 +142,6 @@ async function removeLegacyKokoroFp32Model() {
 async function migratePreviousVoiceRevision() {
   const cache = await caches.open(MODEL_CACHE_NAME);
   const keys = await cache.keys();
-  const oldPrefix = `/__model-cache__/haixin/timeline-studio-voice-models/${PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISION}/`;
   const changedPaths = new Set([
     "kokoro-multi-lang-v1_1-fp16-4voices/README.md",
     "kokoro-multi-lang-v1_1-fp16-4voices/SOURCE_NOTES.md",
@@ -147,9 +151,17 @@ async function migratePreviousVoiceRevision() {
   ]);
   await Promise.all(keys.map(async (request) => {
     const pathname = new URL(request.url).pathname;
-    if (!pathname.startsWith(oldPrefix)) return;
-    const relativePath = pathname.slice(oldPrefix.length);
-    if (changedPaths.has(relativePath)) {
+    const oldRevision = [...PREVIOUS_VOICE_MODEL_HUGGING_FACE_REVISIONS].find((revision) => (
+      pathname.startsWith(`/__model-cache__/haixin/timeline-studio-voice-models/${revision}/`)
+    ));
+    if (!oldRevision) return;
+    const relativePath = pathname.slice(`/__model-cache__/haixin/timeline-studio-voice-models/${oldRevision}/`.length);
+    if (
+      changedPaths.has(relativePath)
+      || relativePath.startsWith("kokoro-multi-lang-v1_1-fp16-4voices/")
+      || relativePath.startsWith("hojo-tts-light-40m-zh-2voices-fp32-v1/")
+      || relativePath.startsWith("hojo-tts-light-80m-zh-2voices-fp16-v1/")
+    ) {
       await cache.delete(request);
       return;
     }

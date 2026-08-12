@@ -6,7 +6,7 @@ import {
   formatSavedTime,
   getCaptionTimeline,
 } from "./timeline.js";
-import { getGeneratedVoiceAppendStart } from "./generatedVoicePlacement.js";
+import { DEFAULT_GENERATED_VOICE_GAP, getGeneratedVoiceAppendStart } from "./generatedVoicePlacement.js";
 
 export function createAudioTrackActions(d) {
   function replaceAudio(blob, duration, nextPeaks, nextStatusText, options = {}) {
@@ -202,7 +202,7 @@ export function createAudioTrackActions(d) {
     };
     const rememberedVoiceEnd = Number(d.generatedVoiceEndRef?.current) || 0;
     const appendStart = Math.max(
-      rememberedVoiceEnd ? rememberedVoiceEnd + 0.6 : 0,
+      rememberedVoiceEnd ? rememberedVoiceEnd + DEFAULT_GENERATED_VOICE_GAP : 0,
       getGeneratedVoiceAppendStart(d.audioSegmentsRef?.current ?? d.audioSegments, d.currentTimeRef.current),
     );
     const audioSegment = replaceAudio(blob, decoded.duration, decoded.peaks, nextStatusText, captionSegment ? {
@@ -241,7 +241,8 @@ export function createAudioTrackActions(d) {
       return;
     }
 
-    const generatedCaptions = createCaptionSegments(d.script);
+    const generatedScript = options.script || d.script;
+    const generatedCaptions = createCaptionSegments(generatedScript);
     const generatedTimeline = getCaptionTimeline(generatedCaptions, audioSegment.duration);
     const alignedCaptions = generatedCaptions.map((segment, index) => ({
       ...segment,
@@ -260,11 +261,84 @@ export function createAudioTrackActions(d) {
       blob,
       voiceId: d.selectedVoiceId,
       voiceName: d.selectedVoice.name,
-      script: d.script,
-      duration: decoded.duration || estimateDuration(d.script),
+      script: generatedScript,
+      duration: decoded.duration || estimateDuration(generatedScript),
       peaks: decoded.peaks,
       createdAt: formatSavedTime(),
     }, ...items.slice(0, 8)]);
+  }
+
+  async function commitAudioBatch(items, nextStatusText, options = {}) {
+    const validItems = (items || []).filter((item) => item?.blob && String(item.script || "").trim());
+    if (!validItems.length) return [];
+    const decodedItems = await Promise.all(validItems.map(async (item) => ({
+      ...item,
+      decoded: await decodeWaveform(item.blob),
+    })));
+    const captionSegment = options.captionSegment;
+    const rememberedVoiceEnd = Number(d.generatedVoiceEndRef?.current) || 0;
+    let cursor = captionSegment
+      ? Math.max(0, Number(captionSegment.start) || 0)
+      : Math.max(
+        rememberedVoiceEnd ? rememberedVoiceEnd + DEFAULT_GENERATED_VOICE_GAP : 0,
+        getGeneratedVoiceAppendStart(d.audioSegmentsRef?.current ?? d.audioSegments, d.currentTimeRef.current),
+      );
+    const created = [];
+    for (let index = 0; index < decodedItems.length; index += 1) {
+      const item = decodedItems[index];
+      const segment = replaceAudio(item.blob, item.decoded.duration, item.decoded.peaks, nextStatusText, {
+        start: cursor,
+        script: item.script,
+        replaceSegmentId: index === 0 && captionSegment
+          ? captionSegment.audioSegmentId || captionSegment.detachedAudioSegmentId || ""
+          : "",
+        sourceKind: options.sourceKind || "ai-voice",
+        voiceId: d.selectedVoiceId,
+        voiceName: options.cloneVoiceProfileName
+          ? `${options.cloneVoiceProfileName} · ${d.selectedVoice.name}`
+          : d.selectedVoice.name,
+        name: options.cloneVoiceProfileName || d.selectedVoice.name,
+        cloneVoiceProfileId: options.cloneVoiceProfileId || "",
+        cloneVoiceProfileName: options.cloneVoiceProfileName || "",
+      });
+      created.push({ ...item, audioSegment: segment });
+      cursor = segment.start + segment.duration + DEFAULT_GENERATED_VOICE_GAP;
+    }
+    const finalEnd = Math.max(0, cursor - DEFAULT_GENERATED_VOICE_GAP);
+    if (!captionSegment && d.generatedVoiceEndRef) d.generatedVoiceEndRef.current = finalEnd;
+
+    const generatedCaptions = created.map((item, index) => {
+      const template = captionSegment
+        ? { ...captionSegment, id: index === 0 ? captionSegment.id : crypto.randomUUID() }
+        : createCaptionSegments(item.script)[0] || { id: crypto.randomUUID(), hidden: false, fontId: "default" };
+      return {
+        ...template,
+        text: item.script,
+        audioSegmentId: "",
+        detachedAudioSegmentId: item.audioSegment.id,
+        start: item.audioSegment.start,
+        end: item.audioSegment.start + item.audioSegment.duration,
+      };
+    });
+    d.setCaptionSegments((segments) => [
+      ...segments.filter((segment) => !captionSegment || segment.id !== captionSegment.id),
+      ...generatedCaptions,
+    ].sort((left, right) => (left.start || 0) - (right.start || 0)));
+    d.setSelectedSegmentId(generatedCaptions[0]?.id || "");
+    d.setHistoryItems((history) => [
+      ...created.map((item) => ({
+        id: crypto.randomUUID(),
+        blob: item.blob,
+        voiceId: d.selectedVoiceId,
+        voiceName: d.selectedVoice.name,
+        script: item.script,
+        duration: item.decoded.duration || estimateDuration(item.script),
+        peaks: item.decoded.peaks,
+        createdAt: formatSavedTime(),
+      })),
+      ...history,
+    ].slice(0, 9));
+    return created.map((item) => item.audioSegment);
   }
 
   return {
@@ -272,6 +346,7 @@ export function createAudioTrackActions(d) {
     clearMusicTrack,
     clearSourceAudioTrack,
     commitAudio,
+    commitAudioBatch,
     replaceAudio,
     replaceMusic,
     replaceSourceAudio,

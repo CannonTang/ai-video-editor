@@ -619,7 +619,7 @@ export function App() {
     setTrackVisibility, setSelectedSegmentId, setSelectedTrack, notify, t,
   });
   const {
-    clearAudioTrack, clearMusicTrack, clearSourceAudioTrack, commitAudio,
+    clearAudioTrack, clearMusicTrack, clearSourceAudioTrack, commitAudio, commitAudioBatch,
     replaceAudio, replaceMusic, replaceSourceAudio,
   } = createAudioTrackActions({
     audioBlob, audioDuration, audioSegmentRefs, audioSegments, audioSegmentsRef, captionDuration, generatedVoiceEndRef,
@@ -729,8 +729,8 @@ export function App() {
   });
 
   const generateVoiceover = useVoiceGeneration({
-    addVoiceProfile, commitAudio, notify, script, selectedVoice, setProgress, setStatus,
-    setStatusText, setVoiceTab, speed, status, t, selectedVoiceProfile,
+    addVoiceProfile, commitAudio, commitAudioBatch, notify, script, selectedVoice, setProgress, setStatus,
+    setStatusText, setVoiceTab, speed, status, t, selectedVoiceProfile, volume,
   });
 
   const { deleteAudioSegment, toggleAudioSegmentReverse, updateAudioSegment } = createAudioClipActions({

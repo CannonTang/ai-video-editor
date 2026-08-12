@@ -57,6 +57,22 @@ export class TtsInputError extends Error {
   }
 }
 
+export function splitTextAtSentenceEnd(rawText) {
+  const normalized = normalizeBaseText(rawText);
+  if (!normalized) return [];
+
+  if (typeof Intl?.Segmenter === "function") {
+    const segmenter = new Intl.Segmenter("zh", { granularity: "sentence" });
+    const segments = Array.from(segmenter.segment(normalized), ({ segment }) => segment.trim()).filter(Boolean);
+    if (segments.length) return segments;
+  }
+
+  return normalized
+    .match(/[^。！？!?\.\n]+(?:[。！？!?\.]+|(?=\n|$))/g)
+    ?.map((segment) => segment.trim())
+    .filter(Boolean) ?? [normalized];
+}
+
 function countMatches(text, pattern) {
   return text.match(pattern)?.join("").length ?? 0;
 }
@@ -172,7 +188,7 @@ export function prepareTextForVoice(rawText, voice) {
     return prepareKokoroText(rawText);
   }
 
-  if (voice?.engine === "kokoro-multilang") {
+  if (voice?.engine === "hojo") {
     return prepareKokoroMultilangText(rawText);
   }
 

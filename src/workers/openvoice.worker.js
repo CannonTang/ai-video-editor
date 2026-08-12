@@ -220,8 +220,8 @@ function finishConvertedAudio(output, source) {
     finished[fadeStart + index] *= gain;
   }
 
-  // OpenVoice returns unclipped float audio. Some of the new four-speaker
-  // Kokoro bases can drive isolated samples above full scale; encodeWav would
+  // OpenVoice returns unclipped float audio. Some built-in base voices can
+  // drive isolated samples above full scale; encodeWav would
   // otherwise hard-clip those overshoots into audible grit. Limit only the
   // over-limit samples: scaling the whole file from one decoder spike can make
   // the actual speech nearly inaudible while leaving its noise floor obvious.
