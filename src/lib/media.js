@@ -24,6 +24,7 @@ import { resolveSmartFrameCropAtTime, smartFrameCropToPixels } from "./smartFram
 import {
   getVisualMaskFeatherPixels,
   getVisualMaskGeometry,
+  getVisualPlaybackRateAtTime,
   getVisualSourceTime,
   normalizeVisualPlaybackRate,
   resolveVisualTransform,
@@ -1573,7 +1574,7 @@ export async function exportBrowserVideo({
     }
 
     const video = visualItem.visual;
-    const playbackRate = normalizeVisualPlaybackRate(visualItem.segment.playbackRate);
+    const playbackRate = getVisualPlaybackRateAtTime(visualItem.segment, localTime);
     video.playbackRate = playbackRate;
     const maximumTime = Math.max(0, (Number(video.duration) || 0) - 0.001);
     const expectedTime = Math.min(
@@ -1617,7 +1618,7 @@ export async function exportBrowserVideo({
       if (segment.type !== "video") return;
       const expectedTime = sourceTime;
       if (!visual.seeking && Math.abs((visual.currentTime || 0) - expectedTime) > 0.12) visual.currentTime = expectedTime;
-      visual.playbackRate = normalizeVisualPlaybackRate(segment.playbackRate);
+      visual.playbackRate = getVisualPlaybackRateAtTime(segment, Math.max(0, timelineTime - segment.start));
       visual.play().catch(() => {});
     });
   };

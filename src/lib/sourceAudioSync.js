@@ -1,5 +1,5 @@
 import { getVisualSegmentTimeline } from "./timeline.js";
-import { getVisualSourceTime, normalizeVisualPlaybackRate } from "./visualEffects.js";
+import { getVisualPlaybackRateAtTime, getVisualSourceTime, normalizeVisualPlaybackRate } from "./visualEffects.js";
 
 function resolveLinkedAssetId(visualSegments, sourceAudioAssetId) {
   if (sourceAudioAssetId) return sourceAudioAssetId;
@@ -54,6 +54,7 @@ export function getLinkedSourceAudioSegments(visualSegments = [], sourceAudioAss
       sourceStart,
       sourceDuration,
       playbackRate,
+      speedCurve: segment.speedCurve,
     }];
   });
 }
@@ -66,7 +67,7 @@ export function getLinkedSourceAudioState(linkedSegments = [], timelineTime = 0)
   return {
     active: true,
     sourceTime: getVisualSourceTime(segment, localTime),
-    playbackRate: normalizeVisualPlaybackRate(segment.playbackRate),
+    playbackRate: getVisualPlaybackRateAtTime(segment, localTime),
     segment,
   };
 }

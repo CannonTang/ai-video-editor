@@ -3,6 +3,7 @@ import { PLAYBACK_UI_FRAME_MS, getAudioSegmentPreviewVolume, getTimelineTrackLoc
 import { getLinkedSourceAudioState } from "../lib/sourceAudioSync.js";
 import { isTimedSegmentLaneVisible } from "../lib/timeline.js";
 import { requestLatestVideoFrame } from "../lib/videoFrameSync.js";
+import { getVisualPlaybackRateAtTime } from "../lib/visualEffects.js";
 
 export function syncTimelineAudioElement(media, { active, shouldPlay, expectedTime, playbackRate = 1 }) {
   if (!media) return;
@@ -79,9 +80,10 @@ export function useMediaSync(d) {
   useEffect(() => { d.setPreviewVideoMediaTime(d.previewVisualType === "video" ? Math.max(0, Number(d.previewVisualSegment?.sourceStart) || 0) : 0); }, [d.previewVisualSegment?.id, d.previewVisualSrc, d.previewVisualType]);
   useEffect(() => {
     const v = d.previewVideoRef.current; if (!v || d.previewVisualType !== "video") return;
-    v.playbackRate = Math.max(0.25, Math.min(4, Number(d.previewVisualSegment?.playbackRate) || 1));
+    const localTime = Math.max(0, d.currentTime - (d.previewVisualRange?.start || 0));
+    v.playbackRate = getVisualPlaybackRateAtTime(d.previewVisualSegment, localTime);
     if ("preservesPitch" in v) v.preservesPitch = true;
-  }, [d.previewVisualSegment?.playbackRate, d.previewVisualSrc, d.previewVisualType]);
+  }, [d.currentTime, d.previewVisualRange?.start, d.previewVisualSegment, d.previewVisualSrc, d.previewVisualType]);
   useEffect(() => {
     const v = d.previewVideoRef.current; if (!v || d.previewVisualType !== "video") return;
     const sourceStart = Math.max(0, Number(d.previewVisualSegment?.sourceStart) || 0);

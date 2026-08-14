@@ -44,6 +44,7 @@ import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, ge
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
 import { createMainVisualFromOverlay } from "../lib/visualOverlayTimeline.js";
 import { getSampledVideoTrackFrames, getVideoTrackFrameSource } from "../lib/videoTrackFrames.js";
+import { normalizeVisualSpeedCurve } from "../lib/visualSpeedCurve.js";
 import {
   createTimelineEdgeAutoScroller,
   getTimelineActiveDragHorizon,
@@ -2446,6 +2447,13 @@ export function Timeline({
                             )
                           )}
                         </div> : null}
+                        {!segment.preparing && segment.speedCurve?.enabled ? (
+                          <span className="image-clip-speed-markers" aria-label={t("visualSpeedCurveTitle", "速度曲线")}>
+                            {normalizeVisualSpeedCurve(segment.speedCurve).points.slice(1, -1).map((point) => (
+                              <i key={point.id} style={{ left: `${point.progress * 100}%` }} />
+                            ))}
+                          </span>
+                        ) : null}
                         {!segment.preparing ? <span className="image-clip-duration">{formatClock(segment.duration)}</span> : null}
                         {!segment.preparing && !activeTimelineClipDrag ? (
                           <button

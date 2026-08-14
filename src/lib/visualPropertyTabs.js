@@ -19,6 +19,7 @@ export function getVisualPropertyTabIds({
     "filters",
     "animation",
     ...(isMobile && isVideo ? ["speed"] : []),
+    ...(!isMobile && !isOverlay && isVideo ? ["speedCurve"] : []),
     ...(!isMobile && !isOverlay ? ["colorWheels"] : []),
     ...(isOverlay ? ["timing"] : ["repair"]),
   ];

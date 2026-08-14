@@ -74,6 +74,7 @@ import { useMiganRepair } from "./hooks/useMiganRepair.js";
 import { useNanoVsrRestoration } from "./hooks/useNanoVsrRestoration.js";
 import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentIds } from "./lib/timeline.js";
 import { getVisualSourceTime, normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
+import { getVisualSpeedCurveTimelineProgress, updateVisualSegmentSpeedCurve } from "./lib/visualSpeedCurve.js";
 import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
 import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
 import { getVisionKey } from "./lib/vision.js";
@@ -392,6 +393,7 @@ export function App() {
       const nextItems = items.map((item) => {
       if (item.id !== selectedVisualSegment.id) return item;
       if (Number.isFinite(change.playbackRate) && item.type === "video") return updateVisualSegmentPlaybackRate(item, change.playbackRate);
+      if (change.speedCurve && item.type === "video") return updateVisualSegmentSpeedCurve(item, change.speedCurve);
       if (change.baseTransform) return {
         ...item,
         baseTransform: normalizeVisualTransform({ ...item.baseTransform, ...change.baseTransform }),
@@ -443,18 +445,26 @@ export function App() {
       }
       return item;
       });
-      if (Number.isFinite(change.playbackRate)) {
+      if (Number.isFinite(change.playbackRate) || change.speedCurve) {
         const nextSegment = nextItems.find((item) => item.id === selectedVisualSegment.id);
-        const previousRate = Math.max(0.25, Math.min(4, Number(selectedVisualSegment.playbackRate) || 1));
-        const nextRate = Math.max(0.25, Math.min(4, Number(nextSegment?.playbackRate) || 1));
         const nextDuration = getVisualSegmentsTotal(nextItems);
         setImageDuration(nextDuration);
         setImageClipCount(getImageThumbnailCount(nextDuration));
-        setCurrentTime((time) => Math.max(
+        const previousSourceStart = Math.max(0, Number(selectedVisualSegment.sourceStart) || 0);
+        const previousSourceDuration = Math.max(0.1, Number(selectedVisualSegment.sourceDuration)
+          || (Number(selectedVisualSegment.duration) || 0.1) * (Number(selectedVisualSegment.playbackRate) || 1));
+        const sourceProgress = Math.max(0, Math.min(
+          1,
+          (getVisualSourceTime(selectedVisualSegment, visualLocalTime) - previousSourceStart) / previousSourceDuration,
+        ));
+        const nextLocalTime = nextSegment?.speedCurve?.enabled
+          ? getVisualSpeedCurveTimelineProgress(nextSegment.speedCurve, sourceProgress) * (nextSegment.duration || 0)
+          : sourceProgress * (nextSegment?.duration || 0);
+        setCurrentTime(() => Math.max(
           selectedVisualRange?.start ?? 0,
           Math.min(
             (selectedVisualRange?.start ?? 0) + (nextSegment?.duration ?? 0),
-            (selectedVisualRange?.start ?? 0) + visualLocalTime * previousRate / nextRate,
+            (selectedVisualRange?.start ?? 0) + nextLocalTime,
           ),
         ));
       }

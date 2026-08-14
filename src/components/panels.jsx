@@ -18,6 +18,7 @@ import {
   Pause,
   Palette,
   PlayCircle,
+  Plus,
   PersonSimpleRun,
   Scan,
   Scissors,
@@ -50,6 +51,12 @@ import { downloadBlob as downloadMediaBlob } from "../lib/media.js";
 import { formatClock, formatTime, getSegmentStartTime } from "../lib/timeline.js";
 import { VECTOR_CATEGORIES } from "../lib/vectorAssets.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
+import {
+  DEFAULT_VISUAL_SPEED_CURVE_POINTS,
+  getVisualSpeedCurveRateAtProgress,
+  normalizeVisualSpeedCurve,
+  VISUAL_SPEED_STAGE_KEYS,
+} from "../lib/visualSpeedCurve.js";
 import { DEFAULT_VISUAL_ANIMATION_DURATION, normalizeVisualClipAnimation, VISUAL_CLIP_ANIMATION_OPTIONS } from "../lib/visualClipAnimations.js";
 import { getVisualPropertyTabIds } from "../lib/visualPropertyTabs.js";
 import { COLOR_GRADE_KEYFRAME_KEYS, DEFAULT_COLOR_GRADE, getColorGradeProperty, normalizeColorGrade, resolveColorGrade } from "../lib/colorGrade.js";
@@ -1644,6 +1651,182 @@ function getSegmentFilterPreview(segment) {
   return segment.src || segment.thumbnail || "";
 }
 
+const SPEED_GRAPH = Object.freeze({ width: 340, height: 198, left: 34, right: 10, top: 14, bottom: 27 });
+
+function speedGraphPoint(progress, rate) {
+  const width = SPEED_GRAPH.width - SPEED_GRAPH.left - SPEED_GRAPH.right;
+  const height = SPEED_GRAPH.height - SPEED_GRAPH.top - SPEED_GRAPH.bottom;
+  return {
+    x: SPEED_GRAPH.left + Math.max(0, Math.min(1, progress)) * width,
+    y: SPEED_GRAPH.top + ((2 - Math.log2(Math.max(0.25, Math.min(4, rate)))) / 4) * height,
+  };
+}
+
+function speedGraphValue(clientX, clientY, rect) {
+  const x = (clientX - rect.left) / Math.max(1, rect.width) * SPEED_GRAPH.width;
+  const y = (clientY - rect.top) / Math.max(1, rect.height) * SPEED_GRAPH.height;
+  const width = SPEED_GRAPH.width - SPEED_GRAPH.left - SPEED_GRAPH.right;
+  const height = SPEED_GRAPH.height - SPEED_GRAPH.top - SPEED_GRAPH.bottom;
+  const progress = Math.max(0, Math.min(1, (x - SPEED_GRAPH.left) / width));
+  const rate = Math.max(0.25, Math.min(4, 2 ** (2 - ((y - SPEED_GRAPH.top) / height) * 4)));
+  return { progress, rate };
+}
+
+function buildSpeedCurvePath(curve) {
+  return Array.from({ length: 81 }, (_, index) => {
+    const progress = index / 80;
+    const point = speedGraphPoint(progress, getVisualSpeedCurveRateAtProgress(curve, progress));
+    return `${index ? "L" : "M"}${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+  }).join(" ");
+}
+
+function SpeedStageSparkline({ startRate, endRate, smooth }) {
+  const startY = Math.max(5, Math.min(27, 24 - Math.log2(startRate) * 6));
+  const endY = Math.max(5, Math.min(27, 24 - Math.log2(endRate) * 6));
+  const delta = endRate - startRate;
+  const trend = Math.abs(delta) < 0.08 ? "steady" : delta > 0 ? "faster" : "slower";
+  const curvePath = smooth
+    ? `M4 ${startY.toFixed(1)} C21 ${startY.toFixed(1)} 43 ${endY.toFixed(1)} 60 ${endY.toFixed(1)}`
+    : `M4 ${startY.toFixed(1)} L60 ${endY.toFixed(1)}`;
+  return (
+    <svg className={`visual-speed-stage-spark is-${trend}`} viewBox="0 0 64 32" aria-hidden="true">
+      <line x1="4" x2="60" y1="27.5" y2="27.5" />
+      <path className="visual-speed-stage-area" d={`${curvePath} L60 28 L4 28 Z`} />
+      <path className="visual-speed-stage-line" d={curvePath} />
+      <circle cx="4" cy={startY} r="1.8" />
+      <circle cx="60" cy={endY} r="2.4" />
+    </svg>
+  );
+}
+
+function VisualSpeedCurvePanel({ t, segment, localTime, onChange }) {
+  const graphRef = useRef(null);
+  const curve = normalizeVisualSpeedCurve(segment?.speedCurve);
+  const [selectedNodeId, setSelectedNodeId] = useState(curve.points[1]?.id || curve.points[0]?.id || "");
+  const dragNodeRef = useRef("");
+  const clipProgress = Math.max(0, Math.min(1, Number(localTime) / Math.max(0.001, Number(segment?.duration) || 0.001)));
+  const selectedIndex = Math.max(0, curve.points.findIndex((point) => point.id === selectedNodeId));
+  const selectedPoint = curve.points[selectedIndex] || curve.points[0];
+  const playhead = speedGraphPoint(clipProgress, 1);
+  const commit = (nextCurve) => onChange?.({ speedCurve: { ...normalizeVisualSpeedCurve(nextCurve), enabled: true } });
+  const updatePoint = (index, patch) => {
+    const points = curve.points.map((point, pointIndex) => pointIndex === index ? { ...point, ...patch } : point);
+    if (index > 0 && index < points.length - 1) {
+      points[index].progress = Math.max(points[index - 1].progress + 0.025, Math.min(points[index + 1].progress - 0.025, points[index].progress));
+    } else points[index].progress = index === 0 ? 0 : 1;
+    commit({ ...curve, points });
+  };
+  const addStageAt = (progress, rate) => {
+    if (curve.points.length >= 8) return;
+    const id = `speed-${Date.now().toString(36)}`;
+    const points = [...curve.points, { id, progress, rate }].sort((left, right) => left.progress - right.progress);
+    setSelectedNodeId(id);
+    commit({ ...curve, points });
+  };
+  const addWidestStage = () => {
+    const interval = curve.points.slice(0, -1).reduce((best, point, index) => {
+      const width = curve.points[index + 1].progress - point.progress;
+      return width > best.width ? { index, width } : best;
+    }, { index: 0, width: 0 });
+    const left = curve.points[interval.index];
+    const right = curve.points[interval.index + 1];
+    addStageAt((left.progress + right.progress) / 2, (left.rate + right.rate) / 2);
+  };
+  const moveDraggedNode = (event) => {
+    if (!dragNodeRef.current || !graphRef.current) return;
+    const index = curve.points.findIndex((point) => point.id === dragNodeRef.current);
+    if (index < 0) return;
+    const value = speedGraphValue(event.clientX, event.clientY, graphRef.current.getBoundingClientRect());
+    updatePoint(index, value);
+  };
+  const resetCurve = () => {
+    setSelectedNodeId("speed-1");
+    commit({ enabled: true, smooth: true, points: DEFAULT_VISUAL_SPEED_CURVE_POINTS });
+  };
+  return (
+    <section className="visual-editor-card visual-speed-curve-card">
+      <div className="visual-editor-heading">
+        <strong>{t("visualSpeedCurveTitle")}</strong>
+        <button className="visual-speed-curve-reset" type="button" onClick={resetCurve}><ArrowCounterClockwise size={13} />{t("reset")}</button>
+      </div>
+      <div className="visual-speed-curve-readout"><strong>{Math.round(selectedPoint.progress * 100)}%</strong><span>· {selectedPoint.rate.toFixed(2)}×</span></div>
+      <svg
+        ref={graphRef}
+        className="visual-speed-curve-graph"
+        viewBox={`0 0 ${SPEED_GRAPH.width} ${SPEED_GRAPH.height}`}
+        role="img"
+        aria-label={t("visualSpeedCurveTitle")}
+        onPointerMove={moveDraggedNode}
+        onPointerUp={(event) => { dragNodeRef.current = ""; event.currentTarget.releasePointerCapture?.(event.pointerId); }}
+        onPointerCancel={() => { dragNodeRef.current = ""; }}
+        onDoubleClick={(event) => {
+          const value = speedGraphValue(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect());
+          addStageAt(value.progress, value.rate);
+        }}
+      >
+        {[4, 2, 1, 0.5, 0.25].map((rate) => {
+          const point = speedGraphPoint(0, rate);
+          return <g key={rate}><line className="speed-grid-line" x1={SPEED_GRAPH.left} x2={SPEED_GRAPH.width - SPEED_GRAPH.right} y1={point.y} y2={point.y} /><text x="2" y={point.y + 4}>{rate}×</text></g>;
+        })}
+        {[0, 0.25, 0.5, 0.75, 1].map((progress) => {
+          const point = speedGraphPoint(progress, 1);
+          return <g key={progress}><line className="speed-grid-line" x1={point.x} x2={point.x} y1={SPEED_GRAPH.top} y2={SPEED_GRAPH.height - SPEED_GRAPH.bottom} /><text className="speed-x-label" x={point.x} y={SPEED_GRAPH.height - 5}>{Math.round(progress * 100)}%</text></g>;
+        })}
+        <line className="speed-playhead" x1={playhead.x} x2={playhead.x} y1={SPEED_GRAPH.top} y2={SPEED_GRAPH.height - SPEED_GRAPH.bottom} />
+        <path className="speed-curve-path" d={buildSpeedCurvePath(curve)} />
+        {curve.points.map((point, index) => {
+          const graphPoint = speedGraphPoint(point.progress, point.rate);
+          const selected = point.id === selectedNodeId;
+          return <circle
+            key={point.id}
+            className={`speed-curve-node ${selected ? "is-selected" : ""}`}
+            cx={graphPoint.x}
+            cy={graphPoint.y}
+            r={selected ? 7 : 5}
+            tabIndex="0"
+            aria-label={`${Math.round(point.progress * 100)}% · ${point.rate.toFixed(2)}×`}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setSelectedNodeId(point.id);
+              dragNodeRef.current = point.id;
+              event.currentTarget.ownerSVGElement?.setPointerCapture?.(event.pointerId);
+            }}
+            onKeyDown={(event) => {
+              if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+              event.preventDefault();
+              updatePoint(index, {
+                progress: point.progress + (event.key === "ArrowLeft" ? -0.01 : event.key === "ArrowRight" ? 0.01 : 0),
+                rate: point.rate + (event.key === "ArrowDown" ? -0.05 : event.key === "ArrowUp" ? 0.05 : 0),
+              });
+            }}
+          />;
+        })}
+      </svg>
+      <p className="visual-speed-curve-hint">{t("visualSpeedCurveHint")}</p>
+      <div className="visual-speed-stage-list">
+        {curve.points.slice(0, -1).map((point, index) => {
+          const next = curve.points[index + 1];
+          const active = point.id === selectedNodeId
+            || (index === curve.points.length - 2 && next.id === selectedNodeId);
+          return (
+            <div className={`visual-speed-stage-row ${active ? "is-active" : ""}`} role="button" tabIndex="0" key={point.id} onClick={() => setSelectedNodeId(point.id)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedNodeId(point.id); } }}>
+              <span className="visual-speed-stage-index"><i>{index + 1}</i></span>
+              <span className="visual-speed-stage-name"><strong>{t(VISUAL_SPEED_STAGE_KEYS[index] || "visualSpeedStageGeneric", `${t("visualSpeedStageGeneric")} ${index + 1}`)}</strong><em>{Math.round(point.progress * 100)}–{Math.round(next.progress * 100)}%</em></span>
+              <SpeedStageSparkline startRate={point.rate} endRate={next.rate} smooth={curve.smooth} />
+              <label className="visual-speed-stage-rate" onClick={(event) => event.stopPropagation()}><input aria-label={t("visualSpeedStageRate")} type="number" min="0.25" max="4" step="0.05" value={Math.round(point.rate * 100) / 100} onChange={(event) => updatePoint(index, { rate: Number(event.target.value) || 1 })} /><i>×</i></label>
+              <Diamond size={15} weight="fill" />
+            </div>
+          );
+        })}
+      </div>
+      <div className="visual-speed-stage-actions">
+        <button className="panel-secondary" type="button" disabled={curve.points.length >= 8} onClick={addWidestStage}><Plus size={14} />{t("visualSpeedAddStage")}</button>
+        <label className="visual-speed-smooth-toggle"><span>{t("visualSpeedSmooth")}</span><input type="checkbox" checked={curve.smooth} onChange={(event) => commit({ ...curve, smooth: event.target.checked })} /></label>
+      </div>
+    </section>
+  );
+}
+
 export function VisualEffectsPanel({
   t,
   segment,
@@ -1695,6 +1878,7 @@ export function VisualEffectsPanel({
     filters: t("visualTabEffects"),
     animation: t("visualTabAnimation"),
     speed: t("visualTabSpeed"),
+    speedCurve: t("visualTabSpeedCurve"),
     colorWheels: t("visualTabColorWheels"),
     vector: t("vectorProperties"),
     timing: t("overlayTiming", "Timing & layer"),
@@ -1851,6 +2035,7 @@ export function VisualEffectsPanel({
             <p className="visual-speed-hint">{sourceAudioLinked ? t("sourceAudioSynced") : t("visualSpeedVisualOnlyHint")}</p>
           </> : <div className="empty-state visual-speed-empty">{t("visualSpeedImageHint")}</div>}
         </section> : null}
+        {activeTab === "speedCurve" ? <VisualSpeedCurvePanel t={t} segment={segment} localTime={localTime} onChange={onChange} /> : null}
         {activeTab === "filters" ? <VisualChoicePanel title={t("visualEffects")} hideTitle={Boolean(singleSection)} previewImage={getSegmentFilterPreview(segment)} allowFallbackPreview={false} kind="filter" options={FILTER_OPTIONS} selectedId={selectedFilterId} trOption={trOption} onSelect={onSelectFilter} /> : null}
         {activeTab === "animation" ? <section className="visual-editor-card visual-animation-card">
           {!singleSection ? <div className="visual-editor-heading"><strong>{t("visualAnimation")}</strong><em>{t("visualAnimationHoverHint")}</em></div> : null}

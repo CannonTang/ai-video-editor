@@ -3443,9 +3443,11 @@ button:disabled {
 .visual-context-tabs-arrow.is-right { right: 5px; }
 .visual-context-tabs {
   display: flex;
+  align-items: stretch;
   gap: 4px;
   min-height: 42px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px;
   scrollbar-width: none;
   overscroll-behavior-x: contain;
@@ -3454,14 +3456,16 @@ button:disabled {
 }
 .visual-context-tabs::-webkit-scrollbar { display: none; }
 .visual-context-tabs button {
-  flex: 0 0 72px;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: 72px;
   border: 0;
   border-radius: 6px;
-  padding: 8px 5px;
+  padding: 8px 12px;
   color: #82919b;
   background: transparent;
   font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   scroll-snap-align: start;
 }
@@ -3576,6 +3580,54 @@ button:disabled {
 .visual-speed-summary strong { color: #d9e6eb; font-size: 12px; font-variant-numeric: tabular-nums; }
 .visual-speed-hint { margin: 0; color: #7f8d97; font-size: 10px; line-height: 1.55; }
 .visual-speed-empty { min-height: 92px; }
+.visual-speed-curve-card { gap: 9px; padding: 11px; }
+.visual-speed-curve-card .visual-editor-heading strong { color: #dce8ed; font-size: 12px; }
+.visual-speed-curve-reset { display: inline-flex; align-items: center; gap: 4px; border: 0; padding: 4px 2px; color: #82929c; background: transparent; font-size: 10px; cursor: pointer; }
+.visual-speed-curve-reset:hover { color: #9af4eb; }
+.visual-speed-curve-readout { display: flex; align-items: baseline; justify-content: center; gap: 4px; min-height: 18px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.visual-speed-curve-readout strong { color: #35ead9; font-size: 13px; }
+.visual-speed-curve-readout span { color: #b4c0c7; }
+.visual-speed-curve-graph { display: block; width: 100%; min-height: 186px; overflow: visible; border-radius: 7px; background: rgba(4,10,14,.38); touch-action: none; user-select: none; }
+.visual-speed-curve-graph text { fill: #72818a; font-size: 9px; font-variant-numeric: tabular-nums; }
+.visual-speed-curve-graph .speed-x-label { text-anchor: middle; }
+.speed-grid-line { stroke: rgba(255,255,255,.075); stroke-width: 1; stroke-dasharray: 2 3; }
+.speed-playhead { stroke: rgba(234,255,252,.8); stroke-width: 1.25; }
+.speed-curve-path { fill: none; stroke: #35ead9; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.speed-curve-node { fill: #0c171b; stroke: #35ead9; stroke-width: 2.5; cursor: grab; outline: none; }
+.speed-curve-node:hover,
+.speed-curve-node:focus-visible { fill: #dffffb; stroke-width: 3; }
+.speed-curve-node.is-selected { fill: #eafffd; stroke: #35ead9; stroke-width: 4; filter: drop-shadow(0 0 3px rgba(53,234,217,.55)); }
+.speed-curve-node:active { cursor: grabbing; }
+.visual-speed-curve-hint { margin: 0; color: #76858f; font-size: 10px; line-height: 1.4; text-align: center; }
+.visual-speed-stage-list { display: grid; gap: 5px; }
+.visual-speed-stage-row { display: grid; grid-template-columns: 23px minmax(62px,1fr) 64px 82px 16px; align-items: center; gap: 7px; min-width: 0; border: 1px solid transparent; border-radius: 7px; padding: 6px 7px; color: #aebbc3; background: rgba(5,10,14,.34); cursor: pointer; outline: none; }
+.visual-speed-stage-row:hover { border-color: rgba(53,234,217,.28); background: rgba(53,234,217,.055); }
+.visual-speed-stage-row.is-active { border-color: rgba(53,234,217,.72); color: #e7fffc; background: rgba(53,234,217,.09); }
+.visual-speed-stage-index { display: grid; width: 18px; height: 18px; place-items: center; transform: rotate(45deg); border-radius: 4px; color: #06211f; background: #35ead9; font-size: 9px; font-weight: 800; }
+.visual-speed-stage-index i { transform: rotate(-45deg); font-style: normal; }
+.visual-speed-stage-name { display: grid; gap: 1px; min-width: 0; }
+.visual-speed-stage-name strong { overflow: hidden; color: inherit; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.visual-speed-stage-name em { color: #74838d; font-size: 9px; font-style: normal; font-variant-numeric: tabular-nums; }
+.visual-speed-stage-spark { width: 64px; height: 32px; overflow: visible; color: #8aa0aa; }
+.visual-speed-stage-spark.is-faster { color: #35ead9; }
+.visual-speed-stage-spark.is-slower { color: #efb96e; }
+.visual-speed-stage-spark > line { stroke: rgba(255,255,255,.09); stroke-width: 1; stroke-dasharray: 2 3; }
+.visual-speed-stage-spark .visual-speed-stage-area { fill: currentColor; fill-opacity: .09; stroke: none; }
+.visual-speed-stage-spark .visual-speed-stage-line { fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; }
+.visual-speed-stage-spark circle { fill: currentColor; }
+.visual-speed-stage-rate { position: relative; display: grid; min-width: 0; }
+.visual-speed-stage-rate input { width: 100%; min-width: 0; height: 28px; border: 1px solid rgba(255,255,255,.075); border-radius: 5px; padding: 0 25px 0 9px; color: #d8e5e9; background: rgba(255,255,255,.035); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; appearance: textfield; outline: none; }
+.visual-speed-stage-rate input::-webkit-inner-spin-button,
+.visual-speed-stage-rate input::-webkit-outer-spin-button { margin: 0; appearance: none; }
+.visual-speed-stage-rate input:focus { border-color: rgba(53,234,217,.72); box-shadow: 0 0 0 1px rgba(53,234,217,.12); }
+.visual-speed-stage-rate i { position: absolute; top: 50%; right: 9px; transform: translateY(-50%); color: #82939c; font-size: 10px; font-style: normal; pointer-events: none; }
+.visual-speed-stage-row > svg:last-child { color: #35ead9; }
+.visual-speed-stage-actions { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
+.visual-speed-stage-actions > button { display: inline-flex; min-height: 31px; align-items: center; gap: 5px; padding: 6px 9px; font-size: 10px; }
+.visual-speed-smooth-toggle { display: inline-flex; align-items: center; gap: 7px; color: #91a0a8; font-size: 10px; white-space: nowrap; cursor: pointer; }
+.visual-speed-smooth-toggle input { width: 30px; height: 17px; margin: 0; accent-color: #35ead9; cursor: pointer; }
+.image-clip-speed-markers { position: absolute; z-index: 7; top: 3px; left: 0; right: 0; height: 0; pointer-events: none; }
+.image-clip-speed-markers i { position: absolute; width: 7px; height: 7px; transform: translateX(-50%) rotate(45deg); border: 1px solid rgba(2,16,16,.92); border-radius: 2px; background: #35ead9; box-shadow: 0 0 0 1px rgba(53,234,217,.22); }
 .visual-animation-card { gap: 11px; }
 .visual-animation-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; padding: 3px; border-radius: 7px; background: rgba(4,10,14,.42); }
 .visual-animation-sections button { border: 0; border-radius: 5px; padding: 7px; color: #8998a1; background: transparent; font-size: 11px; cursor: pointer; }

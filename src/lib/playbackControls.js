@@ -2,7 +2,7 @@ import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
 import { getAudioSegmentPreviewVolume, getTimelineTrackLocalTime, isTimelineTimeInsideTrack, requestTimelineMediaPlay, setTimelineAudioGain } from "./editorRuntime.js";
 import { getVisualSegmentIndexAtTime, isTimedSegmentLaneVisible } from "./timeline.js";
 import { getLinkedSourceAudioState } from "./sourceAudioSync.js";
-import { getVisualSourceTime, normalizeVisualPlaybackRate } from "./visualEffects.js";
+import { getVisualPlaybackRateAtTime, getVisualSourceTime } from "./visualEffects.js";
 import { requestLatestVideoFrame } from "./videoFrameSync.js";
 
 export function createPlaybackControls(deps) {
@@ -47,7 +47,7 @@ export function createPlaybackControls(deps) {
       ? Math.max(0, duration - 0.001)
       : sourceTime;
     const targetTime = Math.max(0, Math.min(sourceTime, maxTime));
-    video.playbackRate = normalizeVisualPlaybackRate(segment?.playbackRate);
+    video.playbackRate = getVisualPlaybackRateAtTime(segment, localTime);
     if ("preservesPitch" in video) video.preservesPitch = true;
     if (Number.isFinite(targetTime)) {
       requestLatestVideoFrame(video, targetTime, {

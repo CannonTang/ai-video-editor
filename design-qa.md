@@ -416,3 +416,38 @@ The full browser capture verifies the shared secondary action in its surrounding
 3. Post-fix evidence — live computed styles and the focused comparison show the persistent glass surface; no actionable P0/P1/P2 mismatch remains.
 
 final result: passed
+
+---
+
+## 2026-08-14 — Visual speed curve editor
+
+- Source visual truth path: `/Users/yanghaixin/.codex/generated_images/019ffe2e-3594-78d1-bbea-db9301a2fb7c/exec-e51b9303-b84f-4994-b19d-5366a08ede75.png`, amended by the user's explicit instruction to remove the separate 匀速 / 渐快 / 渐慢 preset row.
+- Implementation screenshot path: unavailable; the Codex in-app Browser repeatedly timed out while attaching or navigating to the running local Vite page.
+- Intended viewport: 1440 × 1024 CSS px, device scale factor 1.
+- Source pixels: 1536 × 1024. Implementation pixels: unavailable, so density normalization could not be performed.
+- State: selected desktop video clip, 曲线 tab active, four default speed stages visible.
+
+### Full-view and focused comparison evidence
+
+The source visual was opened at original resolution. The right inspector and selected Visuals clip are the required focused regions. The implementation could not be captured, so neither a same-state full-view comparison nor a combined focused-region comparison was possible.
+
+### Required fidelity surfaces
+
+- Fonts and typography: blocked pending browser capture.
+- Spacing and layout rhythm: blocked pending browser capture; panel height and clipping require direct evidence.
+- Colors and visual tokens: code uses the existing charcoal/cyan tokens, but rendered fidelity remains blocked.
+- Image quality and asset fidelity: no new raster assets were introduced; existing thumbnails are reused. Rendered sharpness remains blocked.
+- Copy and content: localized Curve, stage, hint, add-stage, and smoothing copy is present; separate speed presets are intentionally absent.
+
+### Interaction and runtime checks
+
+- `npm run check`: passed.
+- Variable-rate normalization, average-rate duration calculation, and monotonic source-progress mapping were exercised from the command line.
+- Browser interaction checks pending: open 曲线, drag a node, double-click to add a stage, edit a stage rate, toggle smoothing, reset, verify timeline diamonds, and inspect console errors.
+
+### Comparison history and findings
+
+1. P1 — browser-rendered implementation evidence is missing because the in-app Browser could not attach to the local page even though the Vite server returns HTTP 200.
+2. Required fix — reopen the running preview in the in-app Browser, capture the 1440 × 1024 state, exercise the primary interactions, and compare it with the amended source visual.
+
+final result: blocked
