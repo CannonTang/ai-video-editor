@@ -41,7 +41,6 @@ The card grid was inspected directly because it is the affected region. The AI M
 No actionable P0, P1, or P2 differences remain for the reported loading-layout defect.
 
 final result: passed
-
 ---
 
 ## 2026-08-08 — Unified glass Tab hover
@@ -451,3 +450,33 @@ The source visual was opened at original resolution. The right inspector and sel
 2. Required fix — reopen the running preview in the in-app Browser, capture the 1440 × 1024 state, exercise the primary interactions, and compare it with the amended source visual.
 
 final result: blocked
+
+---
+
+## 2026-08-18 — Space effects inspector
+
+- Reference: Product Design direction 2 (`exec-443227f0-9af6-4b9d-93a7-f1645afaac25.png`)
+- Implementation: `AudioClipContextPanel` in `src/components/VoicePanel.jsx`
+- State reviewed: Space effects tab, selected scene, strength control, two-column catalog
+
+### Visual comparison
+
+- Typography: all Audio inspector tabs use the same 13px / 650 token at every tab count.
+- Structure: one grouped two-column selector replaces detached cards; row and column dividers preserve scanability.
+- Hierarchy: scene radio, scene icon, localized label, and acoustic-intensity icon share one baseline.
+- Selection: restrained cyan row tint and leading accent match the selected direction without overpowering the panel.
+- Density: 52px rows remain readable in the narrow inspector while the panel scroll continues to handle the expanded catalog.
+- Functional fidelity: each listed scene maps to a distinct real-time and export acoustic preset; strength remains editable.
+- User review: the live implementation was directly accepted as “非常好看”.
+
+### Severity review and verification
+
+- P0 blockers: none.
+- P1 functional or layout defects: none.
+- P2 polish issues: none remaining after unifying tab typography and replacing the detached-card layout.
+- ESLint: passed.
+- Production build: passed.
+- Local preview server: running.
+- Localized catalog: 16 scenes across all 11 supported interface languages.
+
+final result: passed

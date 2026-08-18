@@ -123,7 +123,7 @@ export function createPlaybackControls(deps) {
       const active = isTimelineTimeInsideTrack(timelineTime, segment.start, segment.duration);
       const playbackRate = Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1));
       audio.currentTime = Math.max(0, Number(segment.sourceStart) || 0) + getTimelineTrackLocalTime(timelineTime, segment.start, segment.duration) * playbackRate;
-      setTimelineAudioGain(audio, getAudioSegmentPreviewVolume(segment, timelineTime)); audio.playbackRate = playbackRate;
+      setTimelineAudioGain(audio, getAudioSegmentPreviewVolume(segment, timelineTime), segment.spatialEffect, segment.spatialAmount); audio.playbackRate = playbackRate;
       if ("preservesPitch" in audio) audio.preservesPitch = true;
       playIf(audio, active);
     });
@@ -131,10 +131,11 @@ export function createPlaybackControls(deps) {
       const sourceState = getSourceState(timelineTime);
       source.currentTime = sourceState.sourceTime;
       source.playbackRate = sourceState.playbackRate;
+      setTimelineAudioGain(source, deps.sourceAudioVolume, deps.sourceAudioSpatialEffect, deps.sourceAudioSpatialAmount);
       if ("preservesPitch" in source) source.preservesPitch = true;
       playIf(source, sourceState.active);
     }
-    if (music && deps.musicUrl) { const state = getMusicState(timelineTime); music.currentTime = state.sourceTime; music.playbackRate = state.playbackRate; if ("preservesPitch" in music) music.preservesPitch = true; playIf(music, state.active); }
+    if (music && deps.musicUrl) { const state = getMusicState(timelineTime); const segment = deps.musicSegments?.find((item) => isTimelineTimeInsideTrack(timelineTime, item.start, item.duration)); music.currentTime = state.sourceTime; music.playbackRate = state.playbackRate; setTimelineAudioGain(music, segment ? getAudioSegmentPreviewVolume({ ...segment, volume: segment.volume ?? deps.musicVolume }, timelineTime) : deps.musicVolume, segment?.spatialEffect, segment?.spatialAmount); if ("preservesPitch" in music) music.preservesPitch = true; playIf(music, state.active); }
     if (video && deps.previewVisualType === "video") {
       syncPreviewVideoTime(timelineTime);
       playIf(video, true);

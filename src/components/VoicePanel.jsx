@@ -1,10 +1,23 @@
 import {
+  Armchair,
   ArrowsOut,
+  Bathtub,
+  Bed,
+  Buildings,
   CaretDown,
   CaretRight,
+  CellSignalFull,
+  CellSignalHigh,
+  CellSignalLow,
+  CellSignalMedium,
+  CellSignalNone,
+  ChalkboardTeacher,
   CheckCircle,
+  Church,
   ClosedCaptioning,
+  Coffee,
   CursorClick,
+  DoorOpen,
   Drop,
   DownloadSimple,
   Eye,
@@ -14,15 +27,23 @@ import {
   Link,
   LinkBreak,
   ListBullets,
+  Mountains,
+  MicrophoneStage,
+  OfficeChair,
+  Park,
   PersonSimpleRun,
   Plus,
+  RadioButton,
   Scissors,
   ShieldCheck,
   SlidersHorizontal,
   Sparkle,
   Stack,
+  Subway,
   Sun,
+  Ticket,
   Trash,
+  Tree,
   UploadSimple,
   Waveform,
   X,
@@ -46,6 +67,7 @@ import { getCaptionVoiceSegment } from "../lib/captionVoice.js";
 import { findCaptionAudioLinkTarget } from "../lib/captionEditingActions.js";
 import { resolveInspectorPanelContext } from "../lib/mobileClipActions.js";
 import { normalizeVisualKeyframes } from "../lib/visualEffects.js";
+import { AUDIO_SPATIAL_EFFECTS, normalizeAudioSpatialAmount, normalizeAudioSpatialEffect } from "../lib/audioSpatialEffects.js";
 import {
   buildVectorDesignPatch,
   getVectorDesignAppearance,
@@ -65,6 +87,25 @@ import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
 import { CinematicDepthPanel } from "./CinematicDepthPanel.jsx";
 import { PhotoParallaxPanel } from "./PhotoParallaxPanel.jsx";
+
+const AUDIO_SPATIAL_PRESENTATION = {
+  original: { Icon: Waveform, Signal: CellSignalNone },
+  bedroom: { Icon: Bed, Signal: CellSignalLow },
+  "living-room": { Icon: Armchair, Signal: CellSignalMedium },
+  bathroom: { Icon: Bathtub, Signal: CellSignalHigh },
+  hall: { Icon: Buildings, Signal: CellSignalHigh },
+  corridor: { Icon: DoorOpen, Signal: CellSignalMedium },
+  plaza: { Icon: Park, Signal: CellSignalMedium },
+  valley: { Icon: Mountains, Signal: CellSignalFull },
+  studio: { Icon: MicrophoneStage, Signal: CellSignalLow },
+  office: { Icon: OfficeChair, Signal: CellSignalLow },
+  cafe: { Icon: Coffee, Signal: CellSignalMedium },
+  classroom: { Icon: ChalkboardTeacher, Signal: CellSignalMedium },
+  theater: { Icon: Ticket, Signal: CellSignalHigh },
+  church: { Icon: Church, Signal: CellSignalFull },
+  forest: { Icon: Tree, Signal: CellSignalMedium },
+  subway: { Icon: Subway, Signal: CellSignalHigh },
+};
 
 function AutoEditReviewDialog({ t, autoEdit }) {
   const { review, job } = autoEdit || {};
@@ -819,16 +860,19 @@ function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegm
   const [activeTab, setActiveTab] = useState("audio");
   const isVoiceClip = segment.track === "audio";
   const canVoiceColor = segment.track !== "music" && Boolean(segment.blob);
-  const shownTab = requestedSection === "voice-color" ? "voice-color" : requestedSection === "fade" ? "fade" : requestedSection === "audio" ? "audio" : activeTab;
+  const canSpatial = true;
+  const shownTab = requestedSection === "spatial" ? "spatial" : requestedSection === "voice-color" ? "voice-color" : requestedSection === "fade" ? "fade" : requestedSection === "audio" ? "audio" : activeTab;
   const canFade = segment.track !== "source";
   useEffect(() => {
-    if (["audio", "fade", "voice-color"].includes(requestedSection)) setActiveTab(requestedSection);
+    if (["audio", "fade", "spatial", "voice-color"].includes(requestedSection)) setActiveTab(requestedSection);
   }, [requestedSection, segment.id]);
+  const tabCount = 1 + Number(canFade) + Number(canSpatial) + Number(canVoiceColor);
   return (
     <div className="audio-clip-context-panel">
-      {!requestedSection && (canFade || canVoiceColor) ? <div className={`audio-context-tabs ${canVoiceColor && canFade ? "has-three-tabs" : ""}`} role="tablist" aria-label={t("audioClipProperties")}>
+      {!requestedSection && (canFade || canSpatial || canVoiceColor) ? <div className={`audio-context-tabs has-${tabCount}-tabs`} role="tablist" aria-label={t("audioClipProperties")}>
         <button className={shownTab === "audio" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "audio"} onClick={() => setActiveTab("audio")}>{t("mobileClipAudio")}</button>
         {canFade ? <button className={shownTab === "fade" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "fade"} onClick={() => setActiveTab("fade")}>{t("mobileClipFade")}</button> : null}
+        {canSpatial ? <button className={shownTab === "spatial" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "spatial"} onClick={() => setActiveTab("spatial")}>{t("audioSpaceTab")}</button> : null}
         {canVoiceColor ? <button className={shownTab === "voice-color" ? "is-active" : ""} type="button" role="tab" aria-selected={shownTab === "voice-color"} onClick={() => setActiveTab("voice-color")}>{t("voiceColorTab", "音色")}</button> : null}
       </div> : null}
       {shownTab === "audio" ? <div className="audio-context-section">
@@ -860,6 +904,27 @@ function AudioClipContextPanel({ t, segment, updateAudioSegment, toggleAudioSegm
           <span><b>{t("fadeOut")}</b><em>{(segment.fadeOut ?? 0).toFixed(1)}s</em></span>
           <input aria-label={t("fadeOut")} type="range" min="0" max={Math.min(3, segment.duration / 2)} step="0.1" value={segment.fadeOut ?? 0} onChange={(event) => updateAudioSegment(segment.id, { fadeOut: Number(event.target.value) })} />
         </label>
+      </div> : null}
+      {shownTab === "spatial" && canSpatial ? <div className="audio-context-section audio-spatial-section">
+        <p>{t("audioSpaceHint")}</p>
+        <div className="audio-spatial-picker">
+          <div className="audio-spatial-grid" role="radiogroup" aria-label={t("audioSpaceTab")}>
+            {AUDIO_SPATIAL_EFFECTS.map((preset) => {
+              const selected = normalizeAudioSpatialEffect(segment.spatialEffect) === preset.id;
+              const { Icon, Signal } = AUDIO_SPATIAL_PRESENTATION[preset.id] || AUDIO_SPATIAL_PRESENTATION.original;
+              return <button type="button" role="radio" aria-checked={selected} className={selected ? "is-active" : ""} key={preset.id} onClick={() => updateAudioSegment(segment.id, { spatialEffect: preset.id })}>
+                <RadioButton className="audio-spatial-radio" size={15} weight={selected ? "fill" : "regular"} aria-hidden="true" />
+                <Icon className="audio-spatial-scene-icon" size={18} weight="duotone" aria-hidden="true" />
+                <span>{t(preset.labelKey)}</span>
+                <Signal className="audio-spatial-signal" size={18} weight="fill" aria-hidden="true" />
+              </button>;
+            })}
+          </div>
+          {normalizeAudioSpatialEffect(segment.spatialEffect) !== "original" ? <label className="audio-property-slider audio-spatial-strength">
+            <span><b>{t("audioSpaceStrength")}</b><em>{Math.round(normalizeAudioSpatialAmount(segment.spatialAmount) * 100)}%</em></span>
+            <input aria-label={t("audioSpaceStrength")} type="range" min="0" max="1" step="0.01" value={normalizeAudioSpatialAmount(segment.spatialAmount)} onChange={(event) => updateAudioSegment(segment.id, { spatialAmount: Number(event.target.value) })} />
+          </label> : null}
+        </div>
       </div> : null}
       {shownTab === "voice-color" && canVoiceColor ? <AudioVoiceColorSection t={t} segment={segment} voiceProfiles={voiceProfiles} onAssetReady={onVoiceColorAssetReady} onApply={onApplyVoiceColor} onRestore={onRestoreVoiceColor} /> : null}
       {shownTab === "audio" ? <div className="audio-context-actions">
@@ -1395,6 +1460,7 @@ export function VoicePanel({
     voice: t("aiVoice"),
     audio: t("mobileClipAudio"),
     fade: t("mobileClipFade"),
+    spatial: t("audioSpaceTab"),
     "voice-color": t("voiceColorTab", "音色"),
     sticker: t("stickerProperties"),
     effects: t("effects"),
