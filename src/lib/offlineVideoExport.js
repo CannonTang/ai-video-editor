@@ -36,6 +36,7 @@ import { getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect } from "./subjectEffects.js";
 import { getGeneratedMediaTags } from "./generatedMediaMetadata.js";
 import { resolveDepthAnalysisAtTime } from "./depthOfField.js";
+import { connectAudioSpatialEffect } from "./audioSpatialEffects.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 let aacFallbackRegistered = false;
@@ -95,6 +96,8 @@ export async function mixOfflineAudio({
   sourceAudioBlob = null,
   sourceAudioSegments = [],
   sourceAudioVolume = 1,
+  sourceAudioSpatialEffect = "original",
+  sourceAudioSpatialAmount = 1,
   sourceAudioStart = 0,
   musicBlob = null,
   musicVolume = 0.35,
@@ -107,16 +110,19 @@ export async function mixOfflineAudio({
       blob: item.blob, start: Math.max(0, item.start || 0), volume: item.volume ?? 1,
       sourceOffset: Math.max(0, item.sourceStart || 0), sourceDuration: Math.max(0, item.sourceDuration || (item.duration || 0) * (Number(item.playbackRate) || 1)), playbackRate: clamp(Number(item.playbackRate) || 1, 0.25, 4),
       fadeIn: Math.max(0, item.fadeIn || 0), fadeOut: Math.max(0, item.fadeOut || 0),
+      spatialEffect: item.spatialEffect, spatialAmount: item.spatialAmount,
     })),
     ...(sourceAudioBlob && sourceAudioSegments.length ? sourceAudioSegments.map((item) => ({
       blob: sourceAudioBlob, start: Math.max(0, item.start || 0), volume: sourceAudioVolume,
       sourceOffset: Math.max(0, item.sourceStart || 0), sourceDuration: Math.max(0, item.sourceDuration || 0),
       playbackRate: clamp(Number(item.playbackRate) || 1, 0.25, 4), fadeIn: 0, fadeOut: 0,
-    })) : sourceAudioBlob ? [{ blob: sourceAudioBlob, start: Math.max(0, sourceAudioStart), volume: sourceAudioVolume, sourceOffset: 0, sourceDuration: 0, playbackRate: 1, fadeIn: 0, fadeOut: 0 }] : []),
+      spatialEffect: sourceAudioSpatialEffect, spatialAmount: sourceAudioSpatialAmount,
+    })) : sourceAudioBlob ? [{ blob: sourceAudioBlob, start: Math.max(0, sourceAudioStart), volume: sourceAudioVolume, sourceOffset: 0, sourceDuration: 0, playbackRate: 1, fadeIn: 0, fadeOut: 0, spatialEffect: sourceAudioSpatialEffect, spatialAmount: sourceAudioSpatialAmount }] : []),
     ...(musicBlob ? (musicSegments.length ? musicSegments.map((item) => ({
       blob: musicBlob, start: Math.max(0, item.start || 0), volume: item.volume ?? musicVolume,
       sourceOffset: Math.max(0, item.sourceStart || 0), sourceDuration: Math.max(0, item.sourceDuration || (item.duration || 0) * (Number(item.playbackRate) || 1)),
       playbackRate: clamp(Number(item.playbackRate) || 1, 0.25, 4), fadeIn: Math.max(0, item.fadeIn || 0), fadeOut: Math.max(0, item.fadeOut || 0),
+      spatialEffect: item.spatialEffect, spatialAmount: item.spatialAmount,
     })) : [{ blob: musicBlob, start: Math.max(0, musicStart), volume: musicVolume, sourceOffset: 0, sourceDuration: 0, playbackRate: 1, fadeIn: 0, fadeOut: 0 }]) : []),
   ];
   if (!inputs.length) return null;
@@ -169,7 +175,8 @@ export async function mixOfflineAudio({
         outputStart + outputDuration,
       );
     }
-    source.connect(gain).connect(context.destination);
+    source.connect(gain);
+    connectAudioSpatialEffect(context, gain, context.destination, input.spatialEffect, input.spatialAmount, { smooth: false });
     source.start(outputStart, preservePitch ? 0 : offset, preservePitch ? outputDuration : sourceDuration);
   });
   return context.startRendering();

@@ -1,4 +1,5 @@
 import { RATIO_OPTIONS } from "../config/editor.js";
+import { applyAudioSpatialEffect, createAudioSpatialGraph } from "./audioSpatialEffects.js";
 import {
   BufferTarget,
   CanvasSource,
@@ -29,7 +30,7 @@ export function getAudioSegmentPreviewVolume(segment, timelineTime) {
 let timelineAudioContext = null;
 const timelineAudioGainNodes = new WeakMap();
 
-export function setTimelineAudioGain(media, value) {
+export function setTimelineAudioGain(media, value, spatialEffect = "original", spatialAmount = 1) {
   if (!media) return;
   const gainValue = Math.max(0, Math.min(4, Number(value) || 0));
   let entry = timelineAudioGainNodes.get(media);
@@ -40,8 +41,9 @@ export function setTimelineAudioGain(media, value) {
       if (timelineAudioContext) {
         const source = timelineAudioContext.createMediaElementSource(media);
         const gain = timelineAudioContext.createGain();
-        source.connect(gain).connect(timelineAudioContext.destination);
-        entry = { context: timelineAudioContext, gain };
+        const spatialGraph = createAudioSpatialGraph(timelineAudioContext, source, gain);
+        gain.connect(timelineAudioContext.destination);
+        entry = { context: timelineAudioContext, gain, spatialGraph };
         timelineAudioGainNodes.set(media, entry);
       }
     } catch {
@@ -51,6 +53,7 @@ export function setTimelineAudioGain(media, value) {
   if (entry) {
     media.volume = 1;
     entry.gain.gain.value = gainValue;
+    applyAudioSpatialEffect(entry.spatialGraph, spatialEffect, spatialAmount);
   } else {
     media.volume = Math.min(1, gainValue);
   }

@@ -122,6 +122,8 @@ export function createAudioTrackActions(d) {
     d.setSourceAudioDuration(duration || 0);
     d.setSourceAudioPeaks(nextPeaks);
     d.setSourceAudioVolume(1);
+    d.setSourceAudioSpatialEffect?.("original");
+    d.setSourceAudioSpatialAmount?.(1);
     d.setSourceAudioStart(nextStart);
     d.setSourceAudioAssetId(assetId || "");
     d.setSourceAudioLinked(true);
@@ -148,6 +150,8 @@ export function createAudioTrackActions(d) {
     d.setSourceAudioPeaks([]);
     d.setSourceAudioStart(0);
     d.setSourceAudioAssetId("");
+    d.setSourceAudioSpatialEffect?.("original");
+    d.setSourceAudioSpatialAmount?.(1);
     d.setSourceAudioLinked(true);
     d.setCurrentTime((time) => Math.min(time, Math.max(
       d.audioBlob ? d.audioDuration : 0,

@@ -149,6 +149,7 @@ export function useVideoExport(d) {
         visualSegments: exportedVisualSegments,
         audioBlob: null, voiceAudioSegments, voiceVolume: d.volume,
         sourceAudioBlob: exportSourceAudioBlob, sourceAudioVolume: d.sourceAudioBlob ? d.sourceAudioVolume : 1,
+        sourceAudioSpatialEffect: d.sourceAudioSpatialEffect, sourceAudioSpatialAmount: d.sourceAudioSpatialAmount,
         sourceAudioSegments: exportSourceAudioSegments,
         sourceAudioStart: d.sourceAudioStart, musicBlob: exportAudio && d.trackVisibility.music ? d.musicBlob : null,
         musicVolume: d.musicVolume, musicStart: d.musicStart, musicSegments: d.musicSegments, text: d.script, captionSegments: d.captionSegments,

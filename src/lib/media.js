@@ -32,6 +32,7 @@ import {
 import { resolveVisualClipAnimation } from "./visualClipAnimations.js";
 import { getStickerRenderGeometry } from "./stickerGeometry.js";
 import { createPitchPreservedAudioBuffer } from "./pitchPreservingTimeStretch.js";
+import { connectAudioSpatialEffect } from "./audioSpatialEffects.js";
 import { emitMediaBackendDiagnostic, getMediaFileExtension, isLibavCompatibilityEnabled, MEDIA_BACKENDS } from "./mediaCompatibility.js";
 import { getVectorDesignAppearance, getVectorRenderSource } from "./vectorDesign.js";
 import { hasSubjectEffect, normalizeSubjectEffect } from "./subjectEffects.js";
@@ -1229,6 +1230,8 @@ export async function exportBrowserVideo({
   voiceVolume = 1,
   sourceAudioBlob,
   sourceAudioVolume = 1,
+  sourceAudioSpatialEffect = "original",
+  sourceAudioSpatialAmount = 1,
   sourceAudioStart = 0,
   sourceAudioSegments = [],
   musicBlob,
@@ -1397,6 +1400,8 @@ export async function exportBrowserVideo({
       outputDuration: Math.max(0, segment.duration || 0),
       fadeIn: Math.max(0, segment.fadeIn || 0),
       fadeOut: Math.max(0, segment.fadeOut || 0),
+      spatialEffect: segment.spatialEffect,
+      spatialAmount: segment.spatialAmount,
     })),
     audioBlob && !voiceAudioSegments.length
       ? { blob: audioBlob, volume: voiceVolume, role: "voice", start: 0, fadeIn: 0, fadeOut: 0 }
@@ -1411,9 +1416,11 @@ export async function exportBrowserVideo({
           sourceDuration: Math.max(0, segment.sourceDuration || 0),
           playbackRate: normalizeVisualPlaybackRate(segment.playbackRate),
           outputDuration: Math.max(0, segment.duration || 0),
+          spatialEffect: sourceAudioSpatialEffect,
+          spatialAmount: sourceAudioSpatialAmount,
         }))
       : sourceAudioBlob
-        ? [{ blob: sourceAudioBlob, volume: sourceAudioVolume, role: "source", start: Math.max(0, sourceAudioStart || 0) }]
+        ? [{ blob: sourceAudioBlob, volume: sourceAudioVolume, role: "source", start: Math.max(0, sourceAudioStart || 0), spatialEffect: sourceAudioSpatialEffect, spatialAmount: sourceAudioSpatialAmount }]
         : []),
     ...(musicBlob ? (musicSegments.length ? musicSegments.map((segment) => ({
       blob: musicBlob, volume: segment.volume ?? musicVolume, role: "music",
@@ -1421,6 +1428,7 @@ export async function exportBrowserVideo({
       sourceDuration: Math.max(0, segment.sourceDuration || (segment.duration || 0) * normalizeVisualPlaybackRate(segment.playbackRate)),
       playbackRate: normalizeVisualPlaybackRate(segment.playbackRate), outputDuration: Math.max(0, segment.duration || 0),
       fadeIn: Math.max(0, segment.fadeIn || 0), fadeOut: Math.max(0, segment.fadeOut || 0),
+      spatialEffect: segment.spatialEffect, spatialAmount: segment.spatialAmount,
     })) : [{ blob: musicBlob, volume: musicVolume, role: "music", start: Math.max(0, musicStart || 0) }]) : []),
   ].filter(Boolean);
 
@@ -1507,7 +1515,7 @@ export async function exportBrowserVideo({
         gain.gain.linearRampToValueAtTime(input.finalGain, audioContext.currentTime + input.start + input.outputDuration);
       }
       source.connect(gain);
-      gain.connect(destination);
+      connectAudioSpatialEffect(audioContext, gain, destination, input.spatialEffect, input.spatialAmount, { smooth: false });
       sources.push({
         node: source,
         start: input.start,

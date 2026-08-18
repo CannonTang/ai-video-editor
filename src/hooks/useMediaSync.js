@@ -39,7 +39,7 @@ export function syncVoiceAudioSegments({ segments, refs, timelineTime, isPlaying
 }
 
 export function useMediaSync(d) {
-  useEffect(() => { d.audioSegments.forEach((s) => { const a = d.audioSegmentRefs.current.get(s.id); if (a) setTimelineAudioGain(a, getAudioSegmentPreviewVolume(s, d.currentTime)); }); }, [d.audioSegments, d.currentTime]);
+  useEffect(() => { d.audioSegments.forEach((s) => { const a = d.audioSegmentRefs.current.get(s.id); if (a) setTimelineAudioGain(a, getAudioSegmentPreviewVolume(s, d.currentTime), s.spatialEffect, s.spatialAmount); }); }, [d.audioSegments, d.currentTime]);
   useEffect(() => {
     syncVoiceAudioSegments({
       segments: d.audioSegments,
@@ -49,7 +49,7 @@ export function useMediaSync(d) {
       visibility: d.trackVisibility,
     });
   }, [d.audioSegments, d.currentTime, d.isPlaying, d.trackVisibility]);
-  useEffect(() => { if (d.sourceAudioRef.current) setTimelineAudioGain(d.sourceAudioRef.current, d.sourceAudioVolume); }, [d.sourceAudioVolume, d.sourceAudioUrl]);
+  useEffect(() => { if (d.sourceAudioRef.current) setTimelineAudioGain(d.sourceAudioRef.current, d.sourceAudioVolume, d.sourceAudioSpatialEffect, d.sourceAudioSpatialAmount); }, [d.sourceAudioSpatialAmount, d.sourceAudioSpatialEffect, d.sourceAudioVolume, d.sourceAudioUrl]);
   useEffect(() => {
     const a = d.sourceAudioRef.current; if (!a || !d.sourceAudioUrl) return;
     const state = d.sourceAudioLinked && d.linkedSourceAudioSegments?.length
@@ -64,7 +64,7 @@ export function useMediaSync(d) {
     const segment = d.musicSegments?.find((item) => isTimelineTimeInsideTrack(d.currentTime, item.start, item.duration));
     setTimelineAudioGain(music, segment
       ? getAudioSegmentPreviewVolume({ ...segment, volume: segment.volume ?? d.musicVolume }, d.currentTime)
-      : d.musicVolume);
+      : d.musicVolume, segment?.spatialEffect, segment?.spatialAmount);
   }, [d.currentTime, d.musicSegments, d.musicVolume, d.musicUrl]);
   useEffect(() => {
     const music = d.musicRef.current; if (!music || !d.musicUrl) return;
