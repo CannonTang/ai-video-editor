@@ -4,7 +4,9 @@
 
 - Editable main Visuals sequence plus timed picture-in-picture overlays
 - Captions, stickers, voiceover, separated source audio, and music tracks
-- Visual transforms, property keyframes, masks, filters, effects, speed, and animations
+- Visual transforms, property keyframes, masks, filters, effects, constant speed, and editable source-time speed curves with up to eight nodes and optional smooth joins
+- Keyframeable Color Wheels for shadows, midtones, highlights, and global offset, plus temperature, tint, and saturation controls
+- Person cutout for images and video, product/object cutout analysis, person and object outline styling, and local authorized face swap for a selected image or video target
 - Automatic captions; Hojo TTS Light 80M FP16 WebGPU Chinese/mixed Chinese-English TTS with 晴岚 and 若溪; other owned multilingual browser TTS; vocal separation; and vision analysis
 - Portable `.timeline` ZIP archives containing `project.json` and media binaries
 - Offline WebCodecs composition/export with a recorder fallback
@@ -22,6 +24,8 @@
 - Transactional local `project.render` for the portable Visuals + Voiceover + Music subset, with ffprobe verification and explicit rejection of unsupported composition features
 
 Browser-driven editing is a compatibility mechanism, not a stable public API. UI labels, selection state, drag thresholds, and file pickers make it unsuitable for unattended or idempotent jobs.
+
+Color Wheels, speed curves, and the advanced subject-effect stack are currently editor/browser capabilities. The portable headless renderer explicitly rejects projects containing color grading, `speedCurve`, vision-derived masks, or other visual effects; do not claim headless render parity for them. Face-swap results are generated as new My assets and are not inserted into or substituted on the timeline automatically.
 
 Observed browser-path constraints:
 
