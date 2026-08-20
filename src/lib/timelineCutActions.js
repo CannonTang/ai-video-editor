@@ -205,11 +205,11 @@ export function createTimelineCutActions(d) {
   };
   const handleCutTrack = () => {
     if (d.selectedTrack === "image") return void handleCutVisualSegment();
-    if (d.selectedTrack === "overlay") return void handleCutOverlaySegment();
-    if (d.selectedTrack === "caption") return void handleCutCaption();
-    if (d.selectedTrack === "audio") return void handleCutAudioSegment();
-    if (d.selectedTrack === "music") return void handleCutMusicSegment();
-    if (d.selectedTrack === "sticker") {
+    if (d.selectedTrack === "overlay" && d.selectedVisualOverlayId) return void handleCutOverlaySegment();
+    if (d.selectedTrack === "caption" && d.selectedSegmentId) return void handleCutCaption();
+    if (d.selectedTrack === "audio" && d.selectedAudioSegmentId) return void handleCutAudioSegment();
+    if (d.selectedTrack === "music" && d.selectedMusicSegmentId) return void handleCutMusicSegment();
+    if (d.selectedTrack === "sticker" && d.selectedStickerSegmentId) {
       if (d.trackLocks.sticker) return void d.notify("贴纸轨已锁定，无法剪切");
       const selected = d.selectedStickerSegmentId && d.stickerSegments.findIndex((segment) => segment.id === d.selectedStickerSegmentId);
       const index = selected >= 0 ? selected : d.currentStickerSegmentIndex >= 0 ? d.currentStickerSegmentIndex : 0;
@@ -221,7 +221,10 @@ export function createTimelineCutActions(d) {
       const next = [...d.stickerSegments]; next.splice(index, 1, first, second);
       return void d.commitStickerSegments(next, "已在播放头位置切开贴纸片段", second.id);
     }
-    d.notify("当前轨道暂不支持剪切片段");
+    // The toolbar split action should remain useful even after the user clicks a
+    // track background (which clears clip selection). In that state, treat the
+    // primary visual under the playhead as the default editing target.
+    return void handleCutVisualSegment();
   };
   return { handleCutTrack };
 }

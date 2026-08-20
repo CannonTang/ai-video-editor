@@ -1,25 +1,32 @@
 import { DEFAULT_STICKER_SEGMENT_SECONDS, MAX_TIMELINE_DURATION_SECONDS, MIN_VISUAL_SEGMENT_SECONDS } from "../config/editor.js";
-import { collectTimelineSnapPoints, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
+import { collectTimelineSnapPoints, createTimelineSnapGuide, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
 import {
   createTimelineEdgeAutoScroller,
+  createTimelineVerticalEdgeAutoScroller,
   getTimelineActiveDragHorizon,
   getTimelineDragTimeDelta,
   settleTimelineDrag,
 } from "./timelineEdgeAutoScroll.js";
 import { isTimedSegmentLaneLocked } from "./timeline.js";
+import { moveLinkedSourceAudioSegment } from "./sourceAudioSync.js";
 
 export function createTimelineMoveControls(d) {
   const startSingleTrackMove = (event, track, segmentId = "") => {
     if (event.button !== 0) return;
     const isSource = track === "source";
+    const resolvedSegmentId = segmentId || event.currentTarget?.dataset?.timelineSegmentId || "";
+    const linkedSourceSegment = isSource && d.sourceAudioLinked && resolvedSegmentId !== "source-audio"
+      ? d.linkedSourceAudioSegments?.find((segment) => segment.id === resolvedSegmentId) ?? null
+      : null;
     const musicSegments = !isSource && Array.isArray(d.musicSegments) ? d.musicSegments : [];
     const musicSegment = musicSegments.find((segment) => segment.id === segmentId) ?? musicSegments[0];
-    const clipDuration = isSource ? d.sourceAudioDuration : musicSegment?.duration ?? d.musicDuration;
-    const start = isSource ? d.sourceAudioStart : musicSegment?.start ?? d.musicStart;
+    const clipDuration = isSource ? linkedSourceSegment?.duration ?? d.sourceAudioDuration : musicSegment?.duration ?? d.musicDuration;
+    const start = isSource ? linkedSourceSegment?.start ?? d.sourceAudioStart : musicSegment?.start ?? d.musicStart;
     if (!(clipDuration > 0) || d.trackLocks[track]) return void d.notify(`${isSource ? "视频原声" : "音乐"}轨已锁定，无法移动`);
     const rect = d.trackScrollRef.current?.getBoundingClientRect(); const duration = d.timelineDurationRef.current || 10;
     if (!rect) return;
     event.preventDefault(); event.stopPropagation(); d.setSelectedTrack(track);
+    if (linkedSourceSegment) d.setSelectedSourceAudioSegmentId?.(linkedSourceSegment.id);
     if (!isSource && musicSegment?.id) d.setSelectedMusicSegmentId?.(musicSegment.id);
     const startX = event.clientX; let moved = false; let latest = start;
     const autoScroller = createTimelineEdgeAutoScroller({
@@ -28,7 +35,7 @@ export function createTimelineMoveControls(d) {
       timelineDuration: duration,
       onScrollFrame: (clientX, scrollOffset) => move({ clientX, preventDefault() {} }, scrollOffset),
     });
-    const snapPoints = collectTimelineSnapPoints(d, { track, id: musicSegment?.id || track });
+    const snapPoints = collectTimelineSnapPoints(d, { track, id: linkedSourceSegment?.id || musicSegment?.id || track });
     const move = (e, scrollOffset = autoScroller.getScrollOffset()) => {
       if (!moved && Math.abs(e.clientX - startX) < 4) return;
       if (!moved) d.pauseForTimelineEdit?.();
@@ -45,7 +52,9 @@ export function createTimelineMoveControls(d) {
       const snapped = snapTimelineRange(unsnapped, clipDuration, snapPoints, (10 / Math.max(rect.width, 1)) * duration);
       latest = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - clipDuration, snapped.start));
       d.setSnapGuide?.(snapped.guide);
-      if (isSource) { d.setSourceAudioLinked(false); d.setSourceAudioStart(latest); }
+      if (linkedSourceSegment) {
+        d.setVisualSegments((segments) => moveLinkedSourceAudioSegment(segments, linkedSourceSegment.id, latest));
+      } else if (isSource) { d.setSourceAudioLinked(false); d.setSourceAudioStart(latest); }
       else {
         if (musicSegment) {
           d.setMusicSegments?.((segments) => {
@@ -63,8 +72,11 @@ export function createTimelineMoveControls(d) {
     };
     const cancel = () => cleanup(() => {
       if (isSource) {
-        d.setSourceAudioStart(start);
-        d.setSourceAudioLinked?.(d.sourceAudioLinked);
+        if (linkedSourceSegment) d.setVisualSegments(d.visualSegments);
+        else {
+          d.setSourceAudioStart(start);
+          d.setSourceAudioLinked?.(d.sourceAudioLinked);
+        }
       } else if (musicSegment) {
         d.setMusicSegments?.(musicSegments);
         d.setMusicStart(Math.min(...musicSegments.map((segment) => segment.start)));
@@ -76,6 +88,137 @@ export function createTimelineMoveControls(d) {
       d.notify(`${isSource ? "视频原声" : "音乐"}片段位置已调整`);
     } };
     addEventListener("pointermove", move, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", cancel);
+  };
+  const startSourceAudioMove = (event, segmentId = "") => {
+    if (event.button !== 0) return;
+    const resolvedSegmentId = segmentId || event.currentTarget?.dataset?.timelineSegmentId || "source-audio";
+    const linkedSourceSegment = d.sourceAudioLinked && resolvedSegmentId !== "source-audio"
+      ? d.linkedSourceAudioSegments?.find((segment) => segment.id === resolvedSegmentId) ?? null
+      : null;
+    const clipDuration = linkedSourceSegment?.duration ?? d.sourceAudioDuration;
+    const start = linkedSourceSegment?.start ?? d.sourceAudioStart;
+    if (!(clipDuration > 0) || d.trackLocks.source) return void d.notify("视频原声轨已锁定，无法移动");
+    const rect = d.trackScrollRef.current?.getBoundingClientRect();
+    const sourceTrack = event.currentTarget?.closest?.(".source-track");
+    const sourceTrackRect = sourceTrack?.getBoundingClientRect?.();
+    const duration = d.timelineDurationRef.current || 10;
+    if (!rect || !sourceTrackRect) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    d.setSelectedTrack("source");
+    d.setSelectedSourceAudioSegmentId?.(resolvedSegmentId);
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const rowHeight = sourceTrackRect.height || 48;
+    let moved = false;
+    let latest = start;
+    let latestClientX = startX;
+    let latestClientY = startY;
+    let targetLane = null;
+    const autoScroller = createTimelineEdgeAutoScroller({
+      trackElement: d.trackScrollRef.current,
+      pointerType: event.pointerType,
+      timelineDuration: duration,
+      onScrollFrame: (clientX, scrollOffset) => move({ clientX, clientY: latestClientY, preventDefault() {} }, scrollOffset),
+    });
+    const verticalAutoScroller = createTimelineVerticalEdgeAutoScroller({
+      scrollElement: sourceTrack.closest?.(".timeline-board"),
+      pointerType: event.pointerType,
+      onScrollFrame: (clientY) => move({ clientX: latestClientX, clientY, preventDefault() {} }),
+    });
+    const snapPoints = collectTimelineSnapPoints(d, { track: "source", id: linkedSourceSegment?.id || "source" });
+    const applySourcePosition = (nextStart) => {
+      if (linkedSourceSegment) {
+        d.setVisualSegments((segments) => moveLinkedSourceAudioSegment(segments, linkedSourceSegment.id, nextStart));
+      } else {
+        d.setSourceAudioLinked(false);
+        d.setSourceAudioStart(nextStart);
+      }
+    };
+    const resolveAudioLane = (clientX, clientY) => {
+      if (!(clientY > startY + rowHeight * 0.45) || d.trackLocks.audio || d.trackVisibility?.audio === false) return null;
+      const pointedLaneElement = globalThis.document?.elementFromPoint?.(clientX, clientY)?.closest?.("[data-audio-lane-index]");
+      const pointedLane = Number(pointedLaneElement?.dataset?.audioLaneIndex);
+      let lane = Number.isInteger(pointedLane) && pointedLane >= 0 ? pointedLane : null;
+      const laneElements = Array.from(d.trackScrollRef.current?.querySelectorAll?.("[data-audio-lane-index]") || []);
+      if (lane == null && laneElements.length) {
+        const lastLaneRect = laneElements.at(-1)?.getBoundingClientRect?.();
+        if (lastLaneRect && clientY >= lastLaneRect.bottom && clientY <= lastLaneRect.bottom + rowHeight * 1.2) {
+          lane = laneElements.length;
+        }
+      } else if (lane == null && clientY >= sourceTrackRect.bottom && clientY <= sourceTrackRect.bottom + rowHeight * 1.35) {
+        lane = 0;
+      }
+      if (!Number.isInteger(lane) || lane < 0) return null;
+      if (d.trackLocks[`audio-${lane}`] || d.trackVisibility?.[`audio-${lane}`] === false) return null;
+      return lane;
+    };
+    const move = (moveEvent, scrollOffset = autoScroller.getScrollOffset()) => {
+      const deltaX = moveEvent.clientX - startX;
+      const deltaY = moveEvent.clientY - startY;
+      latestClientX = moveEvent.clientX;
+      latestClientY = moveEvent.clientY;
+      if (!moved && Math.hypot(deltaX, deltaY) < 4) return;
+      if (!moved) d.pauseForTimelineEdit?.();
+      moved = true;
+      moveEvent.preventDefault();
+      autoScroller.update(moveEvent.clientX);
+      verticalAutoScroller.update(moveEvent.clientY);
+      const dragClientX = autoScroller.getDragClientX(moveEvent.clientX);
+      const unsnapped = start + getTimelineDragTimeDelta({
+        clientX: dragClientX,
+        startX,
+        scrollOffset,
+        contentWidth: rect.width,
+        timelineDuration: duration,
+      });
+      const snapped = snapTimelineRange(unsnapped, clipDuration, snapPoints, (10 / Math.max(rect.width, 1)) * duration);
+      latest = Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS - clipDuration, snapped.start));
+      targetLane = resolveAudioLane(moveEvent.clientX, moveEvent.clientY);
+      d.setSourceAudioDragTargetLane?.(targetLane);
+      d.setSnapGuide?.(snapped.guide);
+      d.setTimelineHorizon((value) => getTimelineActiveDragHorizon(value, duration, latest + clipDuration));
+      if (targetLane == null) applySourcePosition(latest);
+    };
+    const cleanup = (settle) => {
+      verticalAutoScroller.stop();
+      settleTimelineDrag(autoScroller, { active: moved, setTimelineHorizon: d.setTimelineHorizon, settle });
+      removeEventListener("pointermove", move);
+      removeEventListener("pointerup", up);
+      removeEventListener("pointercancel", cancel);
+      d.setSourceAudioDragTargetLane?.(null);
+      d.setSnapGuide?.(null);
+    };
+    const cancel = () => cleanup(() => {
+      if (linkedSourceSegment) d.setVisualSegments(d.visualSegments);
+      else {
+        d.setSourceAudioStart(start);
+        d.setSourceAudioLinked?.(d.sourceAudioLinked);
+      }
+    });
+    const up = () => {
+      const dropLane = targetLane;
+      let movedToAudioLane = false;
+      cleanup(() => {
+        if (Number.isInteger(dropLane)) {
+          movedToAudioLane = d.moveSourceAudioToAudioLane?.({
+            segmentId: resolvedSegmentId,
+            start: latest,
+            lane: dropLane,
+          }) === true;
+        }
+      });
+      if (!moved) return;
+      d.suppressTimelineClipClickRef.current = "source";
+      setTimeout(() => {
+        if (d.suppressTimelineClipClickRef.current === "source") d.suppressTimelineClipClickRef.current = "";
+      }, 160);
+      if (!movedToAudioLane) d.notify("视频原声片段位置已调整");
+    };
+    addEventListener("pointermove", move, { passive: false });
+    addEventListener("pointerup", up);
+    addEventListener("pointercancel", cancel);
   };
   const startAudioSegmentMove = (event, id = "", initialLane = 0) => {
     if (event.button !== 0) return;
@@ -292,7 +435,7 @@ export function createTimelineMoveControls(d) {
       }
       latestStart = nextStart; latestDuration = nextEnd - nextStart;
       applyRange(latestStart, latestDuration);
-      d.setSnapGuide?.(snap ? { time: snap.time, label: `${snap.time.toFixed(2)}s` } : null);
+      d.setSnapGuide?.(createTimelineSnapGuide(snap, edge));
       d.setTimelineHorizon((value) => getTimelineActiveDragHorizon(value, timelineDuration, nextEnd));
     };
     const cleanup = (settle) => {
@@ -315,7 +458,7 @@ export function createTimelineMoveControls(d) {
   return {
     startAudioSegmentMove,
     startMusicMove: (event, id) => startSingleTrackMove(event, "music", id),
-    startSourceAudioMove: (event) => startSingleTrackMove(event, "source"),
+    startSourceAudioMove,
     startStickerSegmentMove,
     startStickerSegmentResize,
   };

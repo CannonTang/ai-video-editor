@@ -13,9 +13,16 @@ export function createAudioTrackActions(d) {
     const nextUrl = URL.createObjectURL(blob);
     const decodedDuration = Number(duration);
     const estimatedFallback = Number(estimateDuration(options.script ?? d.script));
-    const nextDuration = Number.isFinite(decodedDuration) && decodedDuration > 0
+    const fullDuration = Number.isFinite(decodedDuration) && decodedDuration > 0
       ? decodedDuration
       : Number.isFinite(estimatedFallback) && estimatedFallback > 0 ? estimatedFallback : 0;
+    const playbackRate = Math.max(0.25, Math.min(4, Number(options.playbackRate) || 1));
+    const sourceStart = Math.max(0, Math.min(fullDuration, Number(options.sourceStart) || 0));
+    const availableTimelineDuration = Math.max(0, (fullDuration - sourceStart) / playbackRate);
+    const requestedTimelineDuration = Number(options.timelineDuration);
+    const nextDuration = Number.isFinite(requestedTimelineDuration) && requestedTimelineDuration > 0
+      ? Math.min(requestedTimelineDuration, availableTimelineDuration || requestedTimelineDuration)
+      : fullDuration;
     const start = Math.max(0, options.start ?? d.currentTimeRef.current ?? 0);
     const id = crypto.randomUUID();
     const segment = {
@@ -24,8 +31,9 @@ export function createAudioTrackActions(d) {
       url: nextUrl,
       start,
       duration: nextDuration,
-      sourceDuration: nextDuration,
-      playbackRate: 1,
+      sourceStart,
+      sourceDuration: Math.min(Math.max(0, fullDuration - sourceStart), nextDuration * playbackRate),
+      playbackRate,
       peaks: Array.isArray(nextPeaks) ? nextPeaks : [],
       volume: 1,
       fadeIn: 0,

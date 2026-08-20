@@ -21,6 +21,7 @@ export const MIN_CAPTION_SEGMENT_SECONDS = 1.2;
 export const MAX_CAPTION_SEGMENT_SECONDS = 12;
 export const SUPPORTED_MEDIA_TYPES = ["image/", "video/", "audio/"];
 export const ASSET_DRAG_MIME = "application/x-ai-voiceover-asset";
+export const COMPACT_WORKSPACE_QUERY = "(max-width: 1279px)";
 
 export const DEFAULT_SCRIPT = "";
 

@@ -20,11 +20,17 @@ export function attachSourceAudioOffset(visualSegments = [], source = {}, source
   const clipId = source.id || "";
   const offset = Math.max(0, Number(sourceAudioOffset) || 0);
   if (!assetId && !clipId) return visualSegments;
+  const hasExactClipTarget = Boolean(clipId && visualSegments.some((segment) => (
+    segment.type === "video" && segment.id === clipId
+  )));
   return visualSegments.map((segment) => {
     if (segment.type !== "video") return segment;
-    const matchesAsset = Boolean(assetId && segment.assetId === assetId);
-    const matchesUnboundClip = Boolean(clipId && !segment.assetId && segment.id === clipId);
-    return matchesAsset || matchesUnboundClip ? { ...segment, sourceAudioOffset: offset } : segment;
+    const matchesExactClip = hasExactClipTarget && segment.id === clipId;
+    const matchesAssetFallback = !hasExactClipTarget && Boolean(assetId && segment.assetId === assetId);
+    const matchesUnboundClip = !hasExactClipTarget && Boolean(clipId && !segment.assetId && segment.id === clipId);
+    return matchesExactClip || matchesAssetFallback || matchesUnboundClip
+      ? { ...segment, sourceAudioOffset: offset }
+      : segment;
   });
 }
 
@@ -46,10 +52,13 @@ export function getLinkedSourceAudioSegments(visualSegments = [], sourceAudioAss
       ? Math.max(0, Math.min(requestedSourceDuration, maximumSourceTime - sourceStart))
       : requestedSourceDuration;
     if (!range || sourceDuration <= 0) return [];
+    const timelineOffset = Number.isFinite(Number(segment.sourceAudioTimelineOffset))
+      ? Number(segment.sourceAudioTimelineOffset)
+      : 0;
     return [{
       id: segment.id,
       assetId: segment.assetId || linkedAssetId,
-      start: range.start,
+      start: Math.max(0, range.start + timelineOffset),
       duration: Math.min(range.duration, sourceDuration / playbackRate),
       sourceStart,
       sourceDuration,
@@ -57,6 +66,17 @@ export function getLinkedSourceAudioSegments(visualSegments = [], sourceAudioAss
       speedCurve: segment.speedCurve,
     }];
   });
+}
+
+export function moveLinkedSourceAudioSegment(visualSegments = [], segmentId = "", timelineStart = 0) {
+  const index = visualSegments.findIndex((segment) => segment.type === "video" && segment.id === segmentId);
+  if (index < 0) return visualSegments;
+  const range = getVisualSegmentTimeline(visualSegments)[index];
+  if (!range) return visualSegments;
+  const offset = Math.max(0, Number(timelineStart) || 0) - range.start;
+  return visualSegments.map((segment, position) => (
+    position === index ? { ...segment, sourceAudioTimelineOffset: offset } : segment
+  ));
 }
 
 export function getLinkedSourceAudioState(linkedSegments = [], timelineTime = 0) {

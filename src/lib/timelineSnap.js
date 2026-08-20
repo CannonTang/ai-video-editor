@@ -24,13 +24,38 @@ export function collectTimelineSnapPoints(d, exclude = {}) {
     const segment = d.visualSegments[index];
     addRange(points, "image", segment?.id, range.start, range.end - range.start);
   });
+  (d.visualOverlaySegments ?? []).forEach((segment) => {
+    addRange(points, "overlay", segment.id, segment.start, segment.duration);
+  });
   materializeCaptionTimings(d.captionSegments ?? [], d.captionTargetDuration ?? d.timelineDuration ?? 0)
     .forEach((segment) => addRange(points, "caption", segment.id, segment.start, segment.end - segment.start));
   (d.stickerSegments ?? []).forEach((segment) => addRange(points, "sticker", segment.id, segment.start, segment.duration));
   (d.audioSegments ?? []).forEach((segment) => addRange(points, "audio", segment.id, segment.start, segment.duration));
-  if (d.sourceAudioDuration > 0) addRange(points, "source", "source", d.sourceAudioStart, d.sourceAudioDuration);
-  if (d.musicDuration > 0) addRange(points, "music", "music", d.musicStart, d.musicDuration);
+  if (d.sourceAudioLinked && Array.isArray(d.linkedSourceAudioSegments) && d.linkedSourceAudioSegments.length) {
+    d.linkedSourceAudioSegments.forEach((segment) => addRange(points, "source", segment.id, segment.start, segment.duration));
+  } else if (d.sourceAudioDuration > 0) addRange(points, "source", "source", d.sourceAudioStart, d.sourceAudioDuration);
+  if (Array.isArray(d.musicSegments) && d.musicSegments.length) {
+    d.musicSegments.forEach((segment) => addRange(points, "music", segment.id, segment.start, segment.duration));
+  } else if (d.musicDuration > 0) addRange(points, "music", "music", d.musicStart, d.musicDuration);
   return points.filter((point) => point.track !== exclude.track || point.id !== exclude.id);
+}
+
+export function formatTimelineSnapTime(value) {
+  const time = Math.max(0, Number(value) || 0);
+  const minutes = Math.floor(time / 60);
+  const seconds = (time % 60).toFixed(2).padStart(5, "0");
+  return `${String(minutes).padStart(2, "0")}:${seconds}`;
+}
+
+export function createTimelineSnapGuide(point, movingEdge = "") {
+  if (!point) return null;
+  return {
+    time: point.time,
+    label: formatTimelineSnapTime(point.time),
+    targetTrack: point.track,
+    targetEdge: point.edge,
+    movingEdge,
+  };
 }
 
 export function findClosestTimelineSnap(value, points, thresholdSeconds) {
@@ -47,6 +72,7 @@ export function snapTimelineRange(start, duration, points, thresholdSeconds) {
   const endSnap = findClosestTimelineSnap(start + duration, points, thresholdSeconds);
   const snap = !startSnap ? endSnap : !endSnap ? startSnap : startSnap.distance <= endSnap.distance ? startSnap : endSnap;
   if (!snap) return { start, guide: null };
-  const snappedStart = snap === endSnap ? snap.time - duration : snap.time;
-  return { start: snappedStart, guide: { time: snap.time, label: `${snap.time.toFixed(2)}s` } };
+  const movingEdge = snap === endSnap ? "end" : "start";
+  const snappedStart = movingEdge === "end" ? snap.time - duration : snap.time;
+  return { start: snappedStart, guide: createTimelineSnapGuide(snap, movingEdge) };
 }

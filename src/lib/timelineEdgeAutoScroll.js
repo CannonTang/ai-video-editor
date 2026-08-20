@@ -92,6 +92,57 @@ export function getTimelineEdgeAutoScrollStep(clientX, rect, {
   return 0;
 }
 
+export function createTimelineVerticalEdgeAutoScroller({
+  scrollElement,
+  pointerType,
+  onScrollFrame,
+  edgeScrollOptions = {
+    threshold: 72,
+    forwardMaxStep: 14,
+    backwardMaxStep: 8,
+    minStep: 0.5,
+    curvePower: 2,
+  },
+  win = globalThis.window,
+} = {}) {
+  const isMobile = Boolean(win?.matchMedia?.(MOBILE_TIMELINE_QUERY).matches);
+  const enabled = Boolean(scrollElement) && ["mouse", "pen"].includes(pointerType) && !isMobile;
+  let latestClientY = 0;
+  let frameId = 0;
+
+  const tick = () => {
+    frameId = 0;
+    if (!enabled) return;
+    const rect = scrollElement.getBoundingClientRect();
+    const step = getTimelineEdgeAutoScrollStep(latestClientY, {
+      left: rect.top,
+      right: rect.bottom,
+      width: rect.height,
+    }, edgeScrollOptions);
+    if (!step) return;
+    const before = scrollElement.scrollTop;
+    const maximum = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight);
+    scrollElement.scrollTop = Math.max(0, Math.min(maximum, before + step));
+    const delta = scrollElement.scrollTop - before;
+    if (delta) onScrollFrame?.(latestClientY, delta);
+    const after = scrollElement.scrollTop;
+    if (!frameId && ((step < 0 && after > 0) || (step > 0 && after < maximum))) {
+      frameId = win.requestAnimationFrame(tick);
+    }
+  };
+
+  return {
+    update(clientY) {
+      latestClientY = clientY;
+      if (enabled && !frameId) frameId = win.requestAnimationFrame(tick);
+    },
+    stop() {
+      if (frameId) win.cancelAnimationFrame(frameId);
+      frameId = 0;
+    },
+  };
+}
+
 export function createTimelineEdgeAutoScroller({
   trackElement,
   pointerType,

@@ -42,11 +42,17 @@ import {
 import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, MAX_TIMELINE_DURATION_SECONDS, TRANSITIONS } from "../config/editor.js";
 import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getTimedSegmentLaneStateKey, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
-import { createMainVisualFromOverlay } from "../lib/visualOverlayTimeline.js";
+import {
+  compactVisualOverlayLanes,
+  createMainVisualFromOverlay,
+  reorderSingleVisualOverlayLane,
+} from "../lib/visualOverlayTimeline.js";
 import { getSampledVideoTrackFrames, getVideoTrackFrameSource } from "../lib/videoTrackFrames.js";
 import { normalizeVisualSpeedCurve } from "../lib/visualSpeedCurve.js";
+import { collectTimelineSnapPoints, createTimelineSnapGuide, findClosestTimelineSnap, snapTimelineRange } from "../lib/timelineSnap.js";
 import {
   createTimelineEdgeAutoScroller,
+  createTimelineVerticalEdgeAutoScroller,
   getTimelineActiveDragHorizon,
   getTimelineDragTimeDelta,
   getTrimLockedTrackWidth,
@@ -78,8 +84,9 @@ import { IconButton, WaveformStrip } from "./ui.jsx";
 
 const TIMELINE_WHEEL_ZOOM_SENSITIVITY = 0.00056;
 const TIMELINE_WHEEL_ZOOM_COMMIT_DELAY = 180;
+const TIMELINE_WHEEL_GESTURE_RESET_DELAY = 180;
 const TIMELINE_BUTTON_ZOOM_RATIO = 1.25;
-const TIMELINE_TRACK_ROW_HEIGHT = "48px";
+const TIMELINE_TRACK_ROW_HEIGHT = "var(--timeline-track-row-height, 48px)";
 const VIDEO_FRAME_MIN_COUNT = 1;
 const IMAGE_THUMBNAIL_TARGET_WIDTH = 84;
 const IMAGE_THUMBNAIL_MAX_COUNT = 240;
@@ -164,6 +171,7 @@ export function Timeline({
   currentTime,
   playheadPercent,
   snapGuide,
+  setSnapGuide,
   assetDropTargetTrack,
   assetDropPosition,
   assetDropPulseTrack,
@@ -220,6 +228,7 @@ export function Timeline({
   sourceAudioClipPercent,
   sourceAudioStartPercent,
   sourceAudioDuration,
+  sourceAudioDragTargetLane,
   setSourceAudioStart,
   selectedSourceAudioSegmentId,
   setSelectedSourceAudioSegmentId,
@@ -246,6 +255,7 @@ export function Timeline({
 }) {
   const [transitionEditor, setTransitionEditor] = useState(null);
   const [overlayPromotionTarget, setOverlayPromotionTarget] = useState(null);
+  const [overlayDragLaneCount, setOverlayDragLaneCount] = useState(0);
   const [sourceAudioExtractionPendingId, setSourceAudioExtractionPendingId] = useState("");
   const [mobileClipActionsVisible, setMobileClipActionsVisible] = useState(false);
   const [mobileClipActionTrack, setMobileClipActionTrack] = useState("");
@@ -253,8 +263,10 @@ export function Timeline({
   const [timelineSelectionMenuOpen, setTimelineSelectionMenuOpen] = useState(false);
   const [timelineRangeSelection, setTimelineRangeSelection] = useState(() => new Set());
   const [timelineRangeDrag, setTimelineRangeDrag] = useState(null);
+  const [timelineMarquee, setTimelineMarquee] = useState(null);
   const timelineSelectionTriggerRef = useRef(null);
   const timelineRangeDragClickGuardRef = useRef("");
+  const timelineMarqueeClickGuardRef = useRef(false);
 
   const timelineSelectableClips = useMemo(() => {
     const clips = [];
@@ -337,6 +349,11 @@ export function Timeline({
     clearClipSelections();
     setSelectedTrack(track);
     setTimelineRangeSelection(next);
+    // Left/right range selection is a one-shot gesture. Return to the normal
+    // select tool immediately so the next pointer-down on any highlighted
+    // clip is routed through the group-drag path instead of reselecting a
+    // range and letting the clip's single-drag handler take over.
+    setTimelineSelectionMode("select");
     notify(t(
       timelineSelectionMode === "left" ? "timelineSelectedLeft" : "timelineSelectedRight",
       timelineSelectionMode === "left"
@@ -532,6 +549,94 @@ export function Timeline({
     return true;
   };
 
+  const startTimelineMarqueeSelection = (event) => {
+    if (event.button !== 0 || timelineSelectionMode !== "select") return false;
+    if (!(event.target instanceof Element) || event.target.closest("[data-timeline-segment-track]")) return false;
+    const trackCanvas = event.target.closest(".track-scroll");
+    if (!trackCanvas) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const canvasRect = trackCanvas.getBoundingClientRect();
+    const initialSelection = event.shiftKey ? new Set(timelineRangeSelection) : new Set();
+    let dragging = false;
+
+    const getSelectionRect = (clientX, clientY) => {
+      const boundedX = Math.max(canvasRect.left, Math.min(canvasRect.right, clientX));
+      const boundedY = Math.max(canvasRect.top, Math.min(canvasRect.bottom, clientY));
+      const left = Math.min(startX, boundedX);
+      const top = Math.min(startY, boundedY);
+      return {
+        left,
+        top,
+        right: Math.max(startX, boundedX),
+        bottom: Math.max(startY, boundedY),
+        x: left,
+        y: top,
+        width: Math.abs(boundedX - startX),
+        height: Math.abs(boundedY - startY),
+      };
+    };
+
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== undefined && pointerId !== undefined && moveEvent.pointerId !== pointerId) return;
+      if (!dragging && Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY) < 5) return;
+      moveEvent.preventDefault();
+      if (!dragging) {
+        dragging = true;
+        clearClipSelections();
+        setContextMenu(null);
+      }
+      const selectionRect = getSelectionRect(moveEvent.clientX, moveEvent.clientY);
+      const next = new Set(initialSelection);
+      trackCanvas.querySelectorAll("[data-timeline-segment-track]").forEach((element) => {
+        const elementRect = element.getBoundingClientRect();
+        const intersects = elementRect.width > 0 && elementRect.height > 0
+          && elementRect.right >= selectionRect.left
+          && elementRect.left <= selectionRect.right
+          && elementRect.bottom >= selectionRect.top
+          && elementRect.top <= selectionRect.bottom;
+        if (!intersects || element.closest(".is-track-disabled")) return;
+        const track = element.dataset.timelineSegmentTrack;
+        const id = element.dataset.timelineSegmentId;
+        if (!track || !id || isTimelineClipLocked(track, id)) return;
+        next.add(timelineSelectionKey(track, id));
+      });
+      setTimelineRangeSelection(next);
+      setTimelineMarquee(selectionRect);
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", cancel, true);
+      setTimelineMarquee(null);
+    };
+    const cancel = () => cleanup();
+    const finish = (upEvent) => {
+      if (upEvent?.pointerId !== undefined && pointerId !== undefined && upEvent.pointerId !== pointerId) return;
+      if (!dragging) {
+        if (!event.shiftKey) clearTimelineClipFocus();
+        const position = Math.max(0, Math.min(1, (upEvent.clientX - canvasRect.left) / Math.max(1, canvasRect.width)));
+        seekTo(position * timelineDuration);
+      } else {
+        upEvent.preventDefault();
+        timelineMarqueeClickGuardRef.current = true;
+        window.setTimeout(() => {
+          timelineMarqueeClickGuardRef.current = false;
+        }, 240);
+      }
+      cleanup();
+    };
+    window.addEventListener("pointermove", move, { capture: true, passive: false });
+    window.addEventListener("pointerup", finish, { capture: true, once: true });
+    window.addEventListener("pointercancel", cancel, { capture: true, once: true });
+    return true;
+  };
+
   const clearClipSelections = (except = "") => {
     if (except !== "overlay") setSelectedVisualOverlayId?.("");
     if (except !== "visual") setSelectedVisualSegmentId("");
@@ -549,6 +654,7 @@ export function Timeline({
     setMobileClipActionTrack("");
   };
   const selectTimelineTrackBackground = (event, track, tool = "") => {
+    if (timelineMarqueeClickGuardRef.current) return;
     if (event.target instanceof Element && event.target.closest("[data-timeline-segment-track]")) return;
     clearTimelineClipFocus();
     setSelectedTrack(track);
@@ -603,8 +709,9 @@ export function Timeline({
   ));
   const allBatchCaptionsLinked = batchLinkableCaptions.length > 0
     && batchLinkableCaptions.every((caption) => availableAudioIds.has(caption.audioSegmentId));
-  const canExtractSelectedMobileSourceAudio = selectedMobileVisualSegment?.type === "video"
-    && !Number.isFinite(selectedMobileVisualSegment.sourceAudioOffset);
+  const selectedMobileExtractableVideo = selectedMobileVisualSegment || selectedMobileOverlaySegment;
+  const canExtractSelectedMobileSourceAudio = selectedMobileExtractableVideo?.type === "video"
+    && (selectedMobileClipTrack === "overlay" || !Number.isFinite(selectedMobileExtractableVideo.sourceAudioOffset));
   const mobileClipActionIds = getMobileClipActionIds(selectedMobileClipTrack, {
     canExtractSourceAudio: canExtractSelectedMobileSourceAudio,
     hasLinkedCaption: selectedMobileHasLinkedCaption,
@@ -671,6 +778,35 @@ export function Timeline({
       }
     });
   };
+  const revealTimelineClip = (track, segmentId) => {
+    if (!segmentId) return;
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const trackElement = trackScrollRef.current;
+      const horizontalScroller = trackElement?.parentElement;
+      const board = trackElement?.closest?.(".timeline-board");
+      if (!trackElement || !horizontalScroller || !board) return;
+      const clipElement = Array.from(trackElement.querySelectorAll("[data-timeline-segment-track][data-timeline-segment-id]"))
+        .find((element) => element.dataset.timelineSegmentTrack === track
+          && element.dataset.timelineSegmentId === String(segmentId));
+      if (!clipElement) return;
+      const horizontalRect = horizontalScroller.getBoundingClientRect();
+      const clipRect = clipElement.getBoundingClientRect();
+      const horizontalPadding = 18;
+      if (clipRect.right > horizontalRect.right - horizontalPadding) {
+        horizontalScroller.scrollTo({ left: horizontalScroller.scrollLeft + clipRect.right - horizontalRect.right + horizontalPadding, behavior: "smooth" });
+      } else if (clipRect.left < horizontalRect.left + horizontalPadding) {
+        horizontalScroller.scrollTo({ left: Math.max(0, horizontalScroller.scrollLeft - (horizontalRect.left + horizontalPadding - clipRect.left)), behavior: "smooth" });
+      }
+      const boardRect = board.getBoundingClientRect();
+      const stickyRulerHeight = 28;
+      const verticalPadding = 10;
+      if (clipRect.bottom > boardRect.bottom - verticalPadding) {
+        board.scrollTo({ top: board.scrollTop + clipRect.bottom - boardRect.bottom + verticalPadding, behavior: "smooth" });
+      } else if (clipRect.top < boardRect.top + stickyRulerHeight + verticalPadding) {
+        board.scrollTo({ top: Math.max(0, board.scrollTop - (boardRect.top + stickyRulerHeight + verticalPadding - clipRect.top)), behavior: "smooth" });
+      }
+    }));
+  };
   const generateSelectedMobileAudioCaptions = () => {
     if (!selectedMobileAudioSegment || !generateCaptionsFromAudioClip) return;
     const blob = selectedMobileClipTrack === "music" ? musicBlob : selectedMobileClipTrack === "source" ? sourceAudioBlob : selectedMobileAudioSegment.blob;
@@ -726,20 +862,38 @@ export function Timeline({
     track,
     getTimelineClipLockKey(track, id),
   );
-  const showVoiceTrack = audioSegments.length > 0 || draggedAssetType === "audio";
-  const audioLanes = showVoiceTrack ? (audioSegments.length ? packedAudioLanes : [[]]) : [];
+  const sourceAudioLaneDropActive = Number.isInteger(sourceAudioDragTargetLane) && sourceAudioDragTargetLane >= 0;
+  const showVoiceTrack = audioSegments.length > 0 || draggedAssetType === "audio" || sourceAudioLaneDropActive;
+  const audioLanes = useMemo(() => {
+    if (!showVoiceTrack) return [];
+    const lanes = audioSegments.length ? packedAudioLanes.map((lane) => [...lane]) : [[]];
+    while (sourceAudioLaneDropActive && lanes.length <= sourceAudioDragTargetLane) lanes.push([]);
+    return lanes;
+  }, [audioSegments.length, packedAudioLanes, showVoiceTrack, sourceAudioDragTargetLane, sourceAudioLaneDropActive]);
   const stickerLanes = useMemo(
     () => packTimedSegmentsIntoLanes(stickerSegments, { preferredLaneKey: "lane" }),
     [stickerSegments],
   );
-  const showEmptyOverlayDropLane = !visualOverlaySegments.length && (
+  const mainVisualOverlayDropActive = activeTimelineClipDrag?.track === "image" && activeTimelineClipDrag.mode === "overlay";
+  const showEmptyOverlayDropLane = (
     draggedAssetType === "image" ||
     draggedAssetType === "video" ||
-    (activeTimelineClipDrag?.track === "image" && activeTimelineClipDrag.mode === "overlay")
+    mainVisualOverlayDropActive
   );
   const overlayLanes = useMemo(
-    () => visualOverlaySegments.length ? packTimedSegmentsIntoLanes(visualOverlaySegments) : showEmptyOverlayDropLane ? [[]] : [],
-    [showEmptyOverlayDropLane, visualOverlaySegments],
+    () => {
+      const lanes = visualOverlaySegments.length
+        ? packTimedSegmentsIntoLanes(visualOverlaySegments, { preferredLaneKey: "lane" })
+        : showEmptyOverlayDropLane ? [[]] : [];
+      // Keep one real hit target below the current overlay stack while a visual
+      // asset is being dragged. Previously the area below the final overlay row
+      // was only empty timeline chrome, so elementFromPoint could never resolve
+      // it as a new picture-in-picture lane.
+      if (showEmptyOverlayDropLane && visualOverlaySegments.length) lanes.push([]);
+      while (lanes.length < overlayDragLaneCount) lanes.push([]);
+      return lanes;
+    },
+    [overlayDragLaneCount, showEmptyOverlayDropLane, visualOverlaySegments],
   );
   const isOverlayLaneVisible = (lane = []) => !lane.length || lane.some((segment) => segment.hidden !== true);
   const toggleOverlayLaneVisibility = (laneIndex) => {
@@ -853,6 +1007,7 @@ export function Timeline({
   };
   const handleTimelineSurfacePointerDown = (event) => {
     if (window.matchMedia?.("(max-width: 760px)").matches) return;
+    if (startTimelineMarqueeSelection(event)) return;
     clearTimelineClipFocus();
     startTimelineSeek(event);
   };
@@ -935,14 +1090,24 @@ export function Timeline({
       setImageCaptionPendingId("");
     }
   };
-  const runSourceAudioExtraction = async (segment) => {
+  const runSourceAudioExtraction = async (segment, track = "image") => {
     if (!segment || sourceAudioExtractionPendingId) return;
-    const index = displayedVisualSegments.findIndex((item) => item.id === segment.id);
-    const start = getVisualSegmentStartTime(displayedVisualSegments, index);
+    const index = track === "image" ? displayedVisualSegments.findIndex((item) => item.id === segment.id) : -1;
+    const start = track === "overlay"
+      ? Math.max(0, Number(segment.start) || 0)
+      : getVisualSegmentStartTime(displayedVisualSegments, index);
     setSourceAudioExtractionPendingId(segment.id);
     setContextMenu(null);
     try {
-      await extractVideoSourceAudio?.(segment, start, { append: Boolean(sourceAudioBlob) });
+      const result = await extractVideoSourceAudio?.(segment, start, track === "overlay"
+        ? { destination: "audio" }
+        : { append: Boolean(sourceAudioBlob) });
+      if (result?.track && result?.segmentId) {
+        setSelectedTrack(result.track);
+        if (result.track === "audio") setSelectedAudioSegmentId(result.segmentId);
+        if (result.track === "source") setSelectedSourceAudioSegmentId(result.segmentId);
+        revealTimelineClip(result.track, result.segmentId);
+      }
     } finally {
       setSourceAudioExtractionPendingId("");
     }
@@ -982,6 +1147,7 @@ export function Timeline({
   const pendingWheelDeltaRef = useRef(0);
   const pendingWheelAnchorRef = useRef(null);
   const timelineWheelHandlerRef = useRef(null);
+  const timelineWheelGestureRef = useRef({ mode: "", lastEventTime: 0 });
   const mobilePinchPointersRef = useRef(new Map());
   const mobilePinchGestureRef = useRef(null);
   const mobilePinchActiveRef = useRef(false);
@@ -1241,7 +1407,7 @@ export function Timeline({
         handlePlayToggle();
         return;
       }
-      if (hasPrimaryModifier && !event.shiftKey && event.key.toLowerCase() === "b" && hasSelectedShortcutTarget) {
+      if (hasPrimaryModifier && !event.shiftKey && event.key.toLowerCase() === "b") {
         event.preventDefault();
         handleCutTrack();
         return;
@@ -1408,27 +1574,44 @@ export function Timeline({
     const hasZoomModifier = event.ctrlKey || event.metaKey;
     const trackElement = trackScrollRef.current;
     const scrollElement = trackElement?.parentElement;
+    const eventTime = Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now();
+    const previousWheelGesture = timelineWheelGestureRef.current;
+    const continuesWheelGesture = previousWheelGesture.mode
+      && eventTime - previousWheelGesture.lastEventTime <= TIMELINE_WHEEL_GESTURE_RESET_DELAY;
+    const wheelMode = continuesWheelGesture
+      ? previousWheelGesture.mode
+      : hasZoomModifier
+        ? "zoom"
+        : Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey
+          ? "horizontal"
+          : isOverTimelineContent
+            ? "zoom"
+            : "vertical";
+    timelineWheelGestureRef.current = { mode: wheelMode, lastEventTime: eventTime };
 
-    // Keep desktop trackpad momentum on the main thread so the independently
-    // rendered ruler and the scrolling clips advance in the same frame. Native
-    // compositor scrolling can otherwise move the track layer one or more
-    // frames ahead of the sticky ruler during a fast two-finger swipe.
-    if (!hasZoomModifier && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+    if (wheelMode !== "zoom") {
       if (!scrollElement) return;
       const deltaModeMultiplier =
         event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? scrollElement.clientWidth : 1;
-      event.preventDefault();
-      scrollElement.scrollLeft += event.deltaX * deltaModeMultiplier;
-      rulerViewportSyncRef.current?.();
-      return;
-    }
+      const horizontalDelta = wheelMode === "horizontal" && Math.abs(event.deltaX) > Math.abs(event.deltaY)
+        ? event.deltaX
+        : wheelMode === "horizontal"
+          ? event.deltaY
+          : 0;
 
-    if (!hasZoomModifier && !isOverTimelineContent) {
-      if (!event.shiftKey && Math.abs(event.deltaY) >= Math.abs(event.deltaX)) {
+      // Keep desktop trackpad momentum on the main thread so the independently
+      // rendered ruler and the scrolling clips advance in the same frame. Native
+      // compositor scrolling can otherwise move the track layer one or more
+      // frames ahead of the sticky ruler during a fast two-finger swipe.
+      if (horizontalDelta) {
+        event.preventDefault();
+        scrollElement.scrollLeft += horizontalDelta * deltaModeMultiplier;
+        rulerViewportSyncRef.current?.();
+      } else if (wheelMode === "vertical") {
         const board = event.currentTarget?.closest?.(".timeline")?.querySelector?.(".timeline-board");
         if (board && board.scrollHeight > board.clientHeight) {
           event.preventDefault();
-          board.scrollTop += event.deltaY;
+          board.scrollTop += event.deltaY * deltaModeMultiplier;
         }
       }
       return;
@@ -1891,29 +2074,68 @@ export function Timeline({
           if (!isMobileTouch) event.preventDefault();
           event.stopPropagation();
           clearClipSelections("overlay"); setSelectedVisualOverlayId?.(segment.id); setSelectedTrack("overlay");
+          // Keep horizontal timeline edits on the row where the gesture began.
+          // Without a persisted preference, repacking moves a clip to the first
+          // available row as soon as its overlap with another clip changes.
+          if (!Number.isInteger(segment.lane) || segment.lane !== laneIndex) {
+            setVisualOverlaySegments((items) => items.map((item) => item.id === segment.id
+              ? { ...item, lane: laneIndex }
+              : item));
+          }
           const track = event.currentTarget.closest(".visual-overlay-track");
           if (!track) return;
-          const startX = event.clientX; const startY = event.clientY; const initialStart = segment.start; const initialDuration = segment.duration;
+          const startX = event.clientX; const startY = event.clientY; const initialStart = segment.start; const initialDuration = segment.duration; const initialLane = segment.lane; const initialLayer = segment.layer;
+          const initialOverlayLaneState = new Map(visualOverlaySegments.map((item) => [item.id, { lane: item.lane, layer: item.layer }]));
+          const sourceLaneHasOnlyDraggedClip = overlayLanes[laneIndex]?.length === 1;
+          let latestClientX = startX; let latestClientY = startY;
           const autoScroller = createTimelineEdgeAutoScroller({
             trackElement: trackScrollRef.current,
             pointerType: event.pointerType,
             timelineDuration,
-            onScrollFrame: (clientX, scrollOffset) => move({ clientX, clientY: startY, preventDefault() {} }, scrollOffset),
+            onScrollFrame: (clientX, scrollOffset) => move({ clientX, clientY: latestClientY, preventDefault() {} }, scrollOffset),
+          });
+          const verticalAutoScroller = createTimelineVerticalEdgeAutoScroller({
+            scrollElement: track.closest(".timeline-board"),
+            pointerType: event.pointerType,
+            onScrollFrame: (clientY) => move({ clientX: latestClientX, clientY, preventDefault() {} }),
           });
           const contentWidth = Math.max(1, track.getBoundingClientRect().width);
-          let dragging = false; let promoteToMain = false; let mainInsertIndex = displayedVisualSegments.length;
+          const snapPoints = collectTimelineSnapPoints({
+            timelineDuration,
+            currentTime,
+            visualSegments: displayedVisualSegments,
+            visualOverlaySegments,
+            captionSegments: displayedCaptionSegments,
+            captionTargetDuration,
+            stickerSegments,
+            audioSegments,
+            sourceAudioDuration,
+            sourceAudioStart: sourceAudioStartPercent / 100 * timelineDuration,
+            musicDuration,
+            musicStart: musicStartPercent / 100 * timelineDuration,
+            musicSegments,
+          }, { track: "overlay", id: segment.id });
+          let dragging = false; let promoteToMain = false; let mainInsertIndex = displayedVisualSegments.length; let dragLane = laneIndex;
           const move = (moveEvent, scrollOffset = autoScroller?.getScrollOffset() || 0) => {
             const deltaX = moveEvent.clientX - startX;
             const deltaY = moveEvent.clientY - startY;
+            latestClientX = moveEvent.clientX;
+            latestClientY = moveEvent.clientY;
             if (!dragging && isMobileTouch && Math.abs(deltaY) > Math.abs(deltaX)) return;
-            if (!dragging && Math.abs(deltaX) < 4) return;
+            if (!dragging && (mode === "move" ? Math.max(Math.abs(deltaX), Math.abs(deltaY)) : Math.abs(deltaX)) < 4) return;
             if (!dragging) {
               dragging = true;
+              // A click must remain selection-only. Materialize the next empty
+              // overlay row only after the pointer crosses the drag threshold.
+              // Moving the sole clip in a lane reorders the existing lanes, so
+              // its vacated lane already provides all required capacity.
+              setOverlayDragLaneCount(overlayLanes.length + (sourceLaneHasOnlyDraggedClip ? 0 : 1));
               setTimelineHorizon?.((value) => Math.max(value, timelineDuration));
               if (isPlaying) handlePlayToggle();
             }
             moveEvent.preventDefault();
             autoScroller?.update(moveEvent.clientX);
+            verticalAutoScroller?.update(moveEvent.clientY);
             const mainTrack = mode === "move" && !trackLocks.image
               ? document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest?.('[data-asset-drop-track="image"]')
               : null;
@@ -1929,45 +2151,108 @@ export function Timeline({
             } else {
               setOverlayPromotionTarget(null);
             }
-            if (promoteToMain) return;
+            if (promoteToMain) {
+              setSnapGuide?.(null);
+              return;
+            }
             const dragClientX = autoScroller?.getDragClientX(moveEvent.clientX) ?? moveEvent.clientX;
             const delta = getTimelineDragTimeDelta({ clientX: dragClientX, startX, scrollOffset, contentWidth, timelineDuration });
+            let nextStart = Math.max(0, Math.min(timelineDuration - initialDuration, initialStart + delta));
+            let activeSnapGuide = null;
+            if (mode === "move") {
+              const snapped = snapTimelineRange(nextStart, initialDuration, snapPoints, (10 / contentWidth) * timelineDuration);
+              nextStart = Math.max(0, Math.min(timelineDuration - initialDuration, snapped.start));
+              activeSnapGuide = snapped.guide;
+            } else {
+              const movingValue = mode === "resize-start" ? nextStart : initialStart + initialDuration + delta;
+              const snap = findClosestTimelineSnap(movingValue, snapPoints, (10 / contentWidth) * timelineDuration);
+              activeSnapGuide = createTimelineSnapGuide(snap, mode === "resize-start" ? "start" : "end");
+            }
+            setSnapGuide?.(activeSnapGuide);
+            if (mode === "move") {
+              const targetTrack = document.elementFromPoint(moveEvent.clientX, moveEvent.clientY)?.closest?.(".visual-overlay-track");
+              const targetLane = Number(targetTrack?.dataset.dropLayer) - 1;
+              // This pointer handler closes over the lane list from the render
+              // where the drag began. The trailing drop lane is mounted by the
+              // state update above, so it is intentionally one index beyond
+              // that snapshot and must be treated as an empty valid lane.
+              const targetLaneSegments = targetLane === overlayLanes.length
+                ? []
+                : overlayLanes[targetLane];
+              const nextEnd = nextStart + initialDuration;
+              const targetHasRoom = Array.isArray(targetLaneSegments) && targetLaneSegments.every((item) => (
+                item.id === segment.id
+                || item.start + item.duration <= nextStart + 0.001
+                || nextEnd <= item.start + 0.001
+              ));
+              if (sourceLaneHasOnlyDraggedClip && Number.isInteger(targetLane) && targetLane >= 0 && targetLane < overlayLanes.length) {
+                const previousLane = dragLane;
+                dragLane = targetLane;
+                setVisualOverlaySegments((items) => reorderSingleVisualOverlayLane(items, segment.id, previousLane, targetLane)
+                  .map((item) => item.id === segment.id ? { ...item, start: nextStart } : item));
+                return;
+              }
+              if (targetHasRoom) dragLane = targetLane;
+            }
             setVisualOverlaySegments((items) => items.map((item) => {
               if (item.id !== segment.id) return item;
-              if (mode === "move") return { ...item, start: Math.max(0, Math.min(timelineDuration - initialDuration, initialStart + delta)) };
+              if (mode === "move") return { ...item, start: nextStart, lane: dragLane, layer: dragLane + 1 };
               if (mode === "resize-start") {
-                const start = Math.max(0, Math.min(initialStart + initialDuration - 0.1, initialStart + delta));
+                const start = Math.max(0, Math.min(
+                  initialStart + initialDuration - 0.1,
+                  activeSnapGuide?.time ?? initialStart + delta,
+                ));
                 return { ...item, start, duration: initialDuration + initialStart - start };
               }
-              return { ...item, duration: Math.max(0.1, Math.min(timelineDuration - initialStart, initialDuration + delta)) };
+              const end = activeSnapGuide?.time ?? initialStart + initialDuration + delta;
+              return { ...item, duration: Math.max(0.1, Math.min(timelineDuration - initialStart, end - initialStart)) };
             }));
           };
           const cleanup = (settle) => {
-            settleTimelineDrag(autoScroller, {
-              active: dragging,
-              setTimelineHorizon,
-              settle: () => {
-                setOverlayPromotionTarget(null);
-                settle?.();
-              },
-            });
+            verticalAutoScroller?.stop();
+            setSnapGuide?.(null);
+            if (!dragging) {
+              autoScroller?.stop();
+              setOverlayPromotionTarget(null);
+              setOverlayDragLaneCount(0);
+              settle?.();
+            } else {
+              settleTimelineDrag(autoScroller, {
+                active: dragging,
+                setTimelineHorizon,
+                settle: () => {
+                  setOverlayPromotionTarget(null);
+                  setOverlayDragLaneCount(0);
+                  settle?.();
+                },
+              });
+            }
             window.removeEventListener("pointermove", move);
             window.removeEventListener("pointerup", end);
             window.removeEventListener("pointercancel", cancel);
           };
           const cancel = () => {
             cleanup(() => {
-              setVisualOverlaySegments((items) => items.map((item) => item.id === segment.id
-                ? { ...item, start: initialStart, duration: initialDuration }
-                : item));
+              setVisualOverlaySegments((items) => items.map((item) => {
+                const initialLaneState = initialOverlayLaneState.get(item.id);
+                if (item.id === segment.id) {
+                  return { ...item, start: initialStart, duration: initialDuration, lane: initialLane, layer: initialLayer };
+                }
+                return initialLaneState ? { ...item, ...initialLaneState } : item;
+              }));
             });
           };
           const end = () => {
+            const didDrag = dragging;
             cleanup(() => {
-              if (!promoteToMain) return;
+              if (!didDrag) return;
+              if (!promoteToMain) {
+                setVisualOverlaySegments((items) => compactVisualOverlayLanes(items));
+                return;
+              }
               const promoted = createMainVisualFromOverlay(segment);
               if (!promoted) return;
-              setVisualOverlaySegments((items) => items.filter((item) => item.id !== segment.id));
+              setVisualOverlaySegments((items) => compactVisualOverlayLanes(items.filter((item) => item.id !== segment.id)));
               setVisualSegments((items) => {
                 const next = [...items];
                 next.splice(Math.max(0, Math.min(next.length, mainInsertIndex)), 0, promoted);
@@ -2011,7 +2296,7 @@ export function Timeline({
           <i className="visual-overlay-resize is-end" onPointerDown={(event) => startOverlayEdit(event, "resize-end")} />
         </div>;
       })}
-      {laneIndex === 0 && activeTimelineClipDrag?.track === "image" && activeTimelineClipDrag.mode === "overlay" && draggingVisualSegment ? (
+      {laneIndex === activeTimelineClipDrag?.overlayLane && activeTimelineClipDrag.overlayDropAllowed && draggingVisualSegment ? (
         <div
           className="visual-overlay-drop-preview"
           style={{
@@ -2246,6 +2531,17 @@ export function Timeline({
               style={{ left: `${playheadPercent}%` }}
               onPointerDown={handlePlayheadPointerDown}
             />
+            {snapGuide && timelineDuration > 0 ? (
+              <div
+                className={`snap-guide-ruler ${snapGuide.time / timelineDuration > 0.82 ? "is-near-end" : ""}`}
+                aria-hidden="true"
+                style={{
+                  left: `${Math.max(0, Math.min(100, (snapGuide.time / timelineDuration) * 100))}%`,
+                }}
+              >
+                <span>{snapGuide.label}</span>
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="track-labels" style={{ gridTemplateRows: timelineLabelRows }}>
@@ -2319,12 +2615,13 @@ export function Timeline({
             {snapGuide && timelineDuration > 0 ? (
               <div
                 className="snap-guide"
+                data-target-track={snapGuide.targetTrack || undefined}
+                data-target-edge={snapGuide.targetEdge || undefined}
+                data-moving-edge={snapGuide.movingEdge || undefined}
                 style={{
                   left: `${Math.max(0, Math.min(100, (snapGuide.time / timelineDuration) * 100))}%`,
                 }}
-              >
-                <span>{snapGuide.label}</span>
-              </div>
+              />
             ) : null}
             <div
               className={`image-track ${selectedTrack === "image" ? "is-selected" : ""} ${
@@ -2697,7 +2994,7 @@ export function Timeline({
                     left: `${timelineDuration > 0 ? Math.max(0, Math.min(100, (segment.start / timelineDuration) * 100)) : 0}%`,
                   }}
                   onContextMenu={(event) => showTrackContextMenu(event, "source", segment.id)}
-                  onPointerDown={startSourceAudioMove}
+                  onPointerDown={(event) => startSourceAudioMove(event, segment.id)}
                   onClick={(event) => {
                     event.stopPropagation();
                     if (suppressTimelineClipClickRef.current === "source") return void (suppressTimelineClipClickRef.current = "");
@@ -2723,7 +3020,7 @@ export function Timeline({
                     marginLeft: `${sourceAudioStartPercent}%`,
                   }}
                   onContextMenu={(event) => showTrackContextMenu(event, "source", "source-audio")}
-                  onPointerDown={startSourceAudioMove}
+                  onPointerDown={(event) => startSourceAudioMove(event, "source-audio")}
                   onClick={(event) => {
                     event.stopPropagation();
                     if (suppressTimelineClipClickRef.current === "source") return void (suppressTimelineClipClickRef.current = "");
@@ -2750,6 +3047,7 @@ export function Timeline({
                   !rowVisible ? "is-track-disabled" : ""
                 } ${rowLocked ? "is-track-locked" : ""} ${
                   laneIndex === 0 && assetDropTargetTrack === "audio" ? "is-drop-target" : ""
+                } ${sourceAudioDragTargetLane === laneIndex ? "is-source-audio-drop-target" : ""
                 } ${laneIndex === 0 && assetDropPulseTrack === "audio" ? "is-drop-landing" : ""}`}
                 type="button"
                 disabled={!rowVisible}
@@ -2765,13 +3063,18 @@ export function Timeline({
                 {laneIndex === 0 && assetDropTargetTrack === "audio" ? (
                     <div className="track-drop-hint">{t("dropVoiceHere")}</div>
                   ) : null}
+                {sourceAudioDragTargetLane === laneIndex ? (
+                  <div className="source-audio-lane-drop-hint">
+                    {t(laneIndex >= (audioSegments.length ? packedAudioLanes.length : 0) ? "sourceAudioCreateTrackDrop" : "sourceAudioTrackDrop")}
+                  </div>
+                ) : null}
                 {laneIndex === 0 ? renderAssetDropSlot("audio") : null}
                 {lane.map((segment) => {
                     const left = timelineDuration > 0 ? (segment.start / timelineDuration) * 100 : 0;
                     const width = timelineDuration > 0 ? (segment.duration / timelineDuration) * 100 : 0;
                     return (
                       <div
-                        className={`audio-clip ${selectedAudioSegmentId === segment.id ? "is-selected" : ""}`}
+                        className={`audio-clip ${segment.sourceKind === "video-source" ? "is-video-source" : ""} ${selectedAudioSegmentId === segment.id ? "is-selected" : ""}`}
                         key={segment.id}
                         data-timeline-segment-track="audio"
                         data-timeline-segment-id={segment.id}
@@ -2861,6 +3164,18 @@ export function Timeline({
           <em>{timelineRangeDrag.delta >= 0 ? "+" : ""}{timelineRangeDrag.delta.toFixed(2)}s</em>
         </div>
       ), document.body) : null}
+      {timelineMarquee && typeof document !== "undefined" ? createPortal((
+        <div
+          className="timeline-marquee-selection"
+          aria-hidden="true"
+          style={{
+            left: timelineMarquee.x,
+            top: timelineMarquee.y,
+            width: timelineMarquee.width,
+            height: timelineMarquee.height,
+          }}
+        />
+      ), document.body) : null}
       {mobileClipActionsVisible && selectedMobileClipTrack && typeof document !== "undefined" ? createPortal((
         <nav className={`timeline-mobile-clip-actions ${mobileClipActionIds.length > 5 ? "is-scroll-actions" : ""}`} aria-label={t("clipActions")}>
           <button className="is-back" type="button" onClick={() => { closeMobileClipActions(); clearClipSelections(); }}><ArrowLeft size={21} /><span>{t("mobileClipDismiss")}</span></button>
@@ -2889,7 +3204,7 @@ export function Timeline({
             if (actionId === "caption-link") return <button type="button" key={actionId} onClick={toggleSelectedMobileCaptionAudioLink}>{selectedMobileHasLinkedCaption ? <LinkBreak size={20} /> : <LinkSimple size={20} />}<span>{t(selectedMobileHasLinkedCaption ? "captionUnlinkAudio" : "captionLinkAudio")}</span></button>;
             if (actionId === "caption-align") return <button type="button" key={actionId} onClick={alignSelectedMobileCaptionAudio}><ArrowsInLineHorizontal size={20} /><span>{t("captionAlignToAudio")}</span></button>;
             if (actionId === "separate") return <button type="button" key={actionId} disabled={audioProcessingBusy || !selectedMobileAudioSegment} onClick={separateSelectedMobileAudio}><Waveform size={20} /><span>{t("mobileClipSeparate")}</span></button>;
-            if (actionId === "extract-source-audio") return <button type="button" key={actionId} disabled={Boolean(sourceAudioExtractionPendingId) || !selectedMobileVisualSegment} onClick={() => void runSourceAudioExtraction(selectedMobileVisualSegment)}>{sourceAudioExtractionPendingId === selectedMobileVisualSegment?.id ? <CircleNotch className="spin" size={20} /> : <Waveform size={20} />}<span>{t(sourceAudioExtractionPendingId === selectedMobileVisualSegment?.id ? "separatingSourceAudio" : "separateSourceAudio", sourceAudioExtractionPendingId === selectedMobileVisualSegment?.id ? "正在分离音频…" : "分离音频")}</span></button>;
+            if (actionId === "extract-source-audio") return <button type="button" key={actionId} disabled={Boolean(sourceAudioExtractionPendingId) || !selectedMobileExtractableVideo} onClick={() => void runSourceAudioExtraction(selectedMobileExtractableVideo, selectedMobileClipTrack)}>{sourceAudioExtractionPendingId === selectedMobileExtractableVideo?.id ? <CircleNotch className="spin" size={20} /> : <Waveform size={20} />}<span>{t(sourceAudioExtractionPendingId === selectedMobileExtractableVideo?.id ? "separatingSourceAudio" : "separateSourceAudio", sourceAudioExtractionPendingId === selectedMobileExtractableVideo?.id ? "正在分离音频…" : "分离音频")}</span></button>;
             return <button className="is-danger" type="button" key={actionId} onClick={() => runMobileClipAction(handleDeleteTrack)}><Trash size={20} /><span>{t("mobileClipDelete")}</span></button>;
           })}
           </div>
@@ -2925,7 +3240,13 @@ export function Timeline({
                 </button>
               </> : null}
               {contextMenu.track === "overlay" && contextOverlaySegment?.type === "video" ? (
-                <button type="button" role="menuitem" disabled={Boolean(trackLocks.overlay)} onClick={() => runContextAction(() => setVisualOverlaySegments((items) => items.map((item) => item.id === contextOverlaySegment.id ? { ...item, muted: !item.muted } : item)))}>{contextOverlaySegment.muted ? <SpeakerHigh size={16} /> : <SpeakerSlash size={16} />}{t(contextOverlaySegment.muted ? "unmuteClip" : "muteClip", contextOverlaySegment.muted ? "取消静音" : "静音")}</button>
+                <>
+                  <button type="button" role="menuitem" disabled={Boolean(trackLocks.overlay)} onClick={() => runContextAction(() => setVisualOverlaySegments((items) => items.map((item) => item.id === contextOverlaySegment.id ? { ...item, muted: !item.muted } : item)))}>{contextOverlaySegment.muted ? <SpeakerHigh size={16} /> : <SpeakerSlash size={16} />}{t(contextOverlaySegment.muted ? "unmuteClip" : "muteClip", contextOverlaySegment.muted ? "取消静音" : "静音")}</button>
+                  <button type="button" role="menuitem" disabled={Boolean(sourceAudioExtractionPendingId)} onClick={() => void runSourceAudioExtraction(contextOverlaySegment, "overlay")}>
+                    {sourceAudioExtractionPendingId === contextOverlaySegment.id ? <CircleNotch size={16} /> : <Waveform size={16} />}
+                    {t(sourceAudioExtractionPendingId === contextOverlaySegment.id ? "separatingSourceAudio" : "separateSourceAudio", sourceAudioExtractionPendingId === contextOverlaySegment.id ? "正在分离音频…" : "分离音频")}
+                  </button>
+                </>
               ) : null}
               {contextMenu.track === "audio" && contextAudioSegment ? <>
                 <button type="button" role="menuitem" onClick={() => runContextAction(() => contextAudioHasLinkedCaption ? unlinkAudioCaptions?.(contextAudioSegment.id) : linkAudioToCaption?.(contextAudioSegment.id))}>{contextAudioHasLinkedCaption ? <LinkBreak size={16} /> : <LinkSimple size={16} />}{t(contextAudioHasLinkedCaption ? "captionUnlinkAudio" : "captionLinkAudio")}</button>

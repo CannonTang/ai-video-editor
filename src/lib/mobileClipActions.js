@@ -22,7 +22,7 @@ export function getMobileClipActionIds(track, options = {}) {
       ...(track === "overlay" ? ["overlay-timing"] : []),
       "split",
       "copy",
-      ...(track === "image" && options.canExtractSourceAudio ? ["extract-source-audio"] : []),
+      ...(["image", "overlay"].includes(track) && options.canExtractSourceAudio ? ["extract-source-audio"] : []),
       "delete",
     ];
     return actions;

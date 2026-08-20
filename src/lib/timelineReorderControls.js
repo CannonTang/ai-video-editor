@@ -1,9 +1,10 @@
 import { MAX_TIMELINE_DURATION_SECONDS } from "../config/editor.js";
-import { materializeCaptionTimings, moveTimedCaptionSegment, reorderTimelineItems } from "./timeline.js";
-import { collectTimelineSnapPoints, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
-import { createVisualOverlaySegment } from "./visualOverlayTimeline.js";
+import { materializeCaptionTimings, moveTimedCaptionSegment, packTimedSegmentsIntoLanes, reorderTimelineItems } from "./timeline.js";
+import { collectTimelineSnapPoints, createTimelineSnapGuide, findClosestTimelineSnap, snapTimelineRange } from "./timelineSnap.js";
+import { compactVisualOverlayLanes, createVisualOverlaySegment } from "./visualOverlayTimeline.js";
 import {
   createTimelineEdgeAutoScroller,
+  createTimelineVerticalEdgeAutoScroller,
   getTimelineActiveDragHorizon,
   getTimelineDragTimeDelta,
   settleTimelineDrag,
@@ -125,6 +126,9 @@ export function createTimelineReorderControls(d) {
     const imageTrackElement = track === "image" ? document.querySelector('[data-timeline-reorder-track="image"]') : null;
     const imageTrackRect = imageTrackElement?.getBoundingClientRect();
     const draggedVisual = track === "image" ? d.renderedVisualSegments[index] : null;
+    const visualSnapPoints = draggedVisual
+      ? collectTimelineSnapPoints(d, { track: "image", id: segmentId })
+      : [];
     const stableSlotCenters = Array.from(
       document.querySelectorAll(`[data-timeline-segment-track="${track}"]`),
       (element) => {
@@ -158,12 +162,21 @@ export function createTimelineReorderControls(d) {
         clientY: d.timelineClipDragRef.current?.y ?? event.clientY,
       }, scrollOffset),
     });
+    const verticalAutoScroller = createTimelineVerticalEdgeAutoScroller({
+      scrollElement: imageTrackElement?.closest?.(".timeline-board"),
+      pointerType: event.pointerType,
+      onScrollFrame: (clientY) => move({
+        clientX: d.timelineClipDragRef.current?.x ?? event.clientX,
+        clientY,
+      }),
+    });
     const move = (e, scrollOffset = autoScroller.getScrollOffset()) => {
       const state = d.timelineClipDragRef.current; if (!state || state.segmentId !== segmentId) return;
       if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       if (!state.dragging && Math.hypot(e.clientX - state.startX, e.clientY - state.startY) < 6) return;
       if (!state.dragging) d.pauseForTimelineEdit?.();
       autoScroller.update(e.clientX);
+      verticalAutoScroller.update(e.clientY);
       const pointerContentX = e.clientX + scrollOffset;
       const wantsOverlay = track === "image"
         && !d.trackLocks.overlay
@@ -175,17 +188,59 @@ export function createTimelineReorderControls(d) {
             count - 1,
             getStableTimelineReorderIndex(state.stableSlotCenters, pointerContentX, state.overIndex),
           ));
-      const overlayStart = wantsOverlay
+      const unsnappedOverlayStart = wantsOverlay
         ? Math.max(0, Math.min(
             Math.max(0, d.timelineDuration - (draggedVisual?.duration || 0)),
             ((pointerContentX - imageTrackRect.left) / Math.max(1, imageTrackRect.width)) * d.timelineDuration,
           ))
         : state.overlayStart;
-      const next = { ...state, mode: wantsOverlay ? "overlay" : "reorder", overIndex, overlayStart, x: e.clientX, y: e.clientY, dragging: true };
+      const overlaySnap = wantsOverlay
+        ? snapTimelineRange(
+            unsnappedOverlayStart,
+            draggedVisual?.duration || 0,
+            visualSnapPoints,
+            (10 / Math.max(1, imageTrackRect.width)) * d.timelineDuration,
+          )
+        : null;
+      const overlayStart = wantsOverlay
+        ? Math.max(0, Math.min(
+            Math.max(0, d.timelineDuration - (draggedVisual?.duration || 0)),
+            overlaySnap.start,
+          ))
+        : state.overlayStart;
+      d.setSnapGuide?.(wantsOverlay ? overlaySnap.guide : null);
+      const packedOverlayLanes = packTimedSegmentsIntoLanes(d.visualOverlaySegments, { preferredLaneKey: "lane" });
+      const pointedOverlayTrack = wantsOverlay
+        ? document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".visual-overlay-track")
+        : null;
+      const pointedLane = Number(pointedOverlayTrack?.dataset.dropLayer) - 1;
+      const fallbackLane = Number.isInteger(state.overlayLane)
+        ? state.overlayLane
+        : d.visualOverlaySegments.length ? packedOverlayLanes.length : 0;
+      const overlayLane = Number.isInteger(pointedLane) && pointedLane >= 0 ? pointedLane : fallbackLane;
+      const targetLaneSegments = overlayLane === packedOverlayLanes.length ? [] : packedOverlayLanes[overlayLane];
+      const overlayEnd = overlayStart + (draggedVisual?.duration || 0);
+      const overlayDropAllowed = wantsOverlay && Array.isArray(targetLaneSegments) && targetLaneSegments.every((item) => (
+        item.start + item.duration <= overlayStart + 0.001
+        || overlayEnd <= item.start + 0.001
+      ));
+      const next = {
+        ...state,
+        mode: wantsOverlay ? "overlay" : "reorder",
+        overIndex,
+        overlayStart,
+        overlayLane,
+        overlayDropAllowed,
+        x: e.clientX,
+        y: e.clientY,
+        dragging: true,
+      };
       d.timelineClipDragRef.current = next; d.setTimelineClipDrag(next);
     };
     const cleanup = () => {
       autoScroller.stop();
+      verticalAutoScroller.stop();
+      d.setSnapGuide?.(null);
       removeEventListener("pointermove", move, true);
       removeEventListener("pointerup", up, true);
       removeEventListener("pointercancel", cancel, true);
@@ -206,15 +261,17 @@ export function createTimelineReorderControls(d) {
       d.suppressTimelineClipClickRef.current = segmentId;
       setTimeout(() => { if (d.suppressTimelineClipClickRef.current === segmentId) d.suppressTimelineClipClickRef.current = ""; }, 120);
       if (track === "image" && state.mode === "overlay" && draggedVisual) {
+        if (!state.overlayDropAllowed) return void d.notify("目标画中画轨的这个时间段已有片段");
         const remaining = d.visualSegments.filter((segment) => segment.id !== segmentId);
         if (!remaining.length) return void d.notify("至少保留一个主画面后才能转为画中画");
+        const targetLane = Math.max(0, Number(state.overlayLane) || 0);
         const overlay = createVisualOverlaySegment(
           { ...draggedVisual, id: draggedVisual.assetId || draggedVisual.id },
           state.overlayStart,
-          { duration: draggedVisual.duration, layer: d.visualOverlaySegments.length + 1 },
+          { duration: draggedVisual.duration, layer: targetLane + 1, lane: targetLane },
         );
         d.commitVisualSegments(remaining, "画面片段已移至画中画轨道");
-        d.setVisualOverlaySegments((items) => [...items, overlay]);
+        d.setVisualOverlaySegments((items) => compactVisualOverlayLanes([...items, overlay]));
         d.setSelectedVisualSegmentId("");
         d.setSelectedVisualOverlayId(overlay.id);
         d.setSelectedTrack("overlay");
@@ -275,7 +332,7 @@ export function createTimelineReorderControls(d) {
       const next = { ...state, previewStart, previewEnd, previewSegments, dragging: true };
       d.setTimelineHorizon?.((value) => getTimelineActiveDragHorizon(value, d.timelineDuration, previewEnd));
       d.timelineClipDragRef.current = next; d.setTimelineClipDrag(next);
-      d.setSnapGuide?.(snap ? { time: snap.time, label: `${snap.time.toFixed(2)}s` } : null);
+      d.setSnapGuide?.(createTimelineSnapGuide(snap, edge));
     };
     const cleanup = () => {
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel);

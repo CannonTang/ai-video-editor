@@ -75,7 +75,7 @@ import { useNanoVsrRestoration } from "./hooks/useNanoVsrRestoration.js";
 import { getImageThumbnailCount, getVisualSegmentsTotal, normalizeTimedSegmentIds } from "./lib/timeline.js";
 import { getVisualSourceTime, normalizeVisualTransform, removeVisualPropertyKeyframe, updateVisualSegmentPlaybackRate, upsertVisualKeyframe, upsertVisualPropertyKeyframe } from "./lib/visualEffects.js";
 import { getVisualSpeedCurveTimelineProgress, updateVisualSegmentSpeedCurve } from "./lib/visualSpeedCurve.js";
-import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio } from "./lib/sourceAudioSync.js";
+import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbeddedVideoAudio, sliceSourceAudioPeaks } from "./lib/sourceAudioSync.js";
 import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
 import { getVisionKey } from "./lib/vision.js";
 import { DEFAULT_SUBJECT_EFFECT, normalizeSubjectEffect } from "./lib/subjectEffects.js";
@@ -91,6 +91,7 @@ import {
 import { createVisualOverlaySegment, getVisualOverlayPreset, updateVisualOverlayTransform } from "./lib/visualOverlayTimeline.js";
 import { getMobileClipPanelOrigin } from "./lib/mobileClipActions.js";
 import { getVisualPropertyTabIds } from "./lib/visualPropertyTabs.js";
+import { COMPACT_WORKSPACE_QUERY } from "./config/editor.js";
 
 export function App() {
   const [uiLanguage, setUiLanguage] = useState(() => getStoredLanguage());
@@ -100,13 +101,13 @@ export function App() {
   const [mobilePanelOrigin, setMobilePanelOrigin] = useState("");
   const [mobileInspectorSection, setMobileInspectorSection] = useState("");
   const [effectsPanelMode, setEffectsPanelMode] = useState("outline");
-  const [isMobileViewport, setIsMobileViewport] = useState(() => (
-    typeof window !== "undefined" && window.matchMedia?.("(max-width: 760px)").matches
+  const [isCompactViewport, setIsCompactViewport] = useState(() => (
+    typeof window !== "undefined" && window.matchMedia?.(COMPACT_WORKSPACE_QUERY).matches
   ));
   useEffect(() => {
-    const query = window.matchMedia?.("(max-width: 760px)");
+    const query = window.matchMedia?.(COMPACT_WORKSPACE_QUERY);
     if (!query) return undefined;
-    const update = () => setIsMobileViewport(query.matches);
+    const update = () => setIsCompactViewport(query.matches);
     update();
     query.addEventListener?.("change", update);
     return () => query.removeEventListener?.("change", update);
@@ -187,6 +188,7 @@ export function App() {
   const [userAssets, setUserAssets] = useState([]);
   const { notify, toast } = useToast(2600, uiLanguage || "zh");
   const [previewVideoMediaTime, setPreviewVideoMediaTime] = useState(0);
+  const [sourceAudioDragTargetLane, setSourceAudioDragTargetLane] = useState(null);
   const sourceVoiceColorOriginalRef = useRef(null);
   const [visionRecords, setVisionRecords] = useState({});
   const [depthRecords, setDepthRecords] = useState({});
@@ -352,7 +354,7 @@ export function App() {
   const [visualAnimationPreview, setVisualAnimationPreview] = useState(null);
   const [visualCanvasEditMode, setVisualCanvasEditMode] = useState("transform");
   useEffect(() => {
-    if (!isMobileViewport || mobilePanel !== "inspector" || !mobileInspectorSection) return;
+    if (!isCompactViewport || mobilePanel !== "inspector" || !mobileInspectorSection) return;
     if (!["visual-clip", "overlay-clip"].includes(mobilePanelOrigin)) return;
     const segment = mobilePanelOrigin === "overlay-clip" ? selectedVisualOverlay : selectedVisualSegment;
     if (!segment) return;
@@ -368,7 +370,7 @@ export function App() {
     });
     if (mobileInspectorSection !== "effects" && !supportedSections.includes(mobileInspectorSection)) setMobileInspectorSection(supportedSections[0] || "transform");
   }, [
-    isMobileViewport,
+    isCompactViewport,
     mobileInspectorSection,
     mobilePanel,
     mobilePanelOrigin,
@@ -643,6 +645,93 @@ export function App() {
     setStatus, setStatusText, setTimelineHorizon, sourceAudioBlob, sourceAudioDuration,
     sourceAudioAssetId, sourceAudioRef, sourceAudioStart, sourceAudioUrlRef, t,
   });
+  const moveSourceAudioToAudioLane = ({ segmentId = "source-audio", start = 0, lane = 0 } = {}) => {
+    if (!(sourceAudioBlob instanceof Blob)) return false;
+    const linkedPiece = sourceAudioLinked && segmentId !== "source-audio"
+      ? linkedSourceAudioSegments.find((segment) => segment.id === segmentId) ?? null
+      : null;
+    const playbackRate = Math.max(0.25, Math.min(4, Number(linkedPiece?.playbackRate) || 1));
+    const duration = Math.max(0, Number(linkedPiece?.duration ?? sourceAudioDuration) || 0);
+    if (!(duration > 0)) return false;
+
+    const nextId = crypto.randomUUID();
+    const nextUrl = URL.createObjectURL(sourceAudioBlob);
+    const sourceStart = Math.max(0, Number(linkedPiece?.sourceStart) || 0);
+    const sourceDuration = Math.max(
+      0,
+      Number(linkedPiece?.sourceDuration) || Math.min(sourceAudioDuration - sourceStart, duration * playbackRate),
+    );
+    const nextSegment = {
+      id: nextId,
+      blob: sourceAudioBlob,
+      url: nextUrl,
+      start: Math.max(0, Number(start) || 0),
+      duration,
+      sourceStart,
+      sourceDuration,
+      playbackRate,
+      peaks: linkedPiece
+        ? sliceSourceAudioPeaks(sourceAudioPeaks, linkedPiece, sourceAudioDuration)
+        : sourceAudioPeaks,
+      volume: sourceAudioVolume,
+      fadeIn: 0,
+      fadeOut: 0,
+      reversed: false,
+      spatialEffect: sourceAudioSpatialEffect,
+      spatialAmount: sourceAudioSpatialAmount,
+      lane: Math.max(0, Number(lane) || 0),
+      name: sourceAudioName || t("sourceTrack"),
+      sourceKind: "video-source",
+      assetId: linkedPiece?.assetId || sourceAudioAssetId || "",
+      sourceVisualSegmentId: linkedPiece?.id || "",
+      sourceAudioWasLinked: Boolean(linkedPiece),
+    };
+
+    const hasExplicitSourceMappings = visualSegments.some((segment) => (
+      segment.type === "video" && Number.isFinite(segment.sourceAudioOffset)
+    ));
+    const nextVisualSegments = visualSegments.map((segment) => {
+      if (segment.type !== "video") return segment;
+      const matchesPiece = linkedPiece
+        ? segment.id === linkedPiece.id
+        : hasExplicitSourceMappings
+          ? Number.isFinite(segment.sourceAudioOffset)
+          : Boolean(sourceAudioAssetId && segment.assetId === sourceAudioAssetId);
+      return matchesPiece
+        ? { ...segment, sourceAudioDisabled: true, sourceAudioRoutedToAudioSegmentId: nextId }
+        : segment;
+    });
+    setVisualSegments(nextVisualSegments);
+    setAudioSegments((segments) => [...segments, nextSegment]);
+
+    const remainingLinkedPieces = sourceAudioLinked
+      ? getLinkedSourceAudioSegments(nextVisualSegments, sourceAudioAssetId, sourceAudioDuration)
+      : [];
+    if (!sourceAudioLinked || !remainingLinkedPieces.length) {
+      sourceAudioRef.current?.pause?.();
+      if (sourceAudioUrlRef.current) URL.revokeObjectURL(sourceAudioUrlRef.current);
+      sourceAudioUrlRef.current = "";
+      setSourceAudioBlob(null);
+      setSourceAudioUrl("");
+      setSourceAudioName("");
+      setSourceAudioDuration(0);
+      setSourceAudioPeaks([]);
+      setSourceAudioStart(0);
+      setSourceAudioAssetId("");
+      setSourceAudioLinked(true);
+      setSourceAudioSpatialEffect("original");
+      setSourceAudioSpatialAmount(1);
+      sourceVoiceColorOriginalRef.current = null;
+    }
+
+    setSelectedSourceAudioSegmentId("");
+    setSelectedAudioSegmentId(nextId);
+    setSelectedTrack("audio");
+    setActiveTool("audio");
+    setTimelineHorizon((value) => Math.max(value, nextSegment.start + nextSegment.duration));
+    notify(t("sourceAudioMovedToAudioTrack"));
+    return true;
+  };
   const { separateAudioClipVocals, separateSourceVocals, vocalSeparationJob } = useVocalSeparation({
     sourceAudioBlob, sourceAudioName, replaceAudio, replaceSourceAudio, replaceMusic, notify, t,
   });
@@ -942,15 +1031,15 @@ export function App() {
     audioSegments, captionSegments, captionTargetDuration, estimatedDuration, notify, seekTo, setActiveTool,
     setAudioSegments, setCaptionSegments, setSelectedAudioSegmentId, setSelectedStickerId,
     setSelectedStickerSegmentId, setSelectedTrack, setStickerSegments, setTimelineHorizon,
-    setMusicStart, setSelectedMusicSegmentId, setSourceAudioLinked, setSourceAudioStart, musicDuration, musicSegments, musicStart, setMusicSegments,
-    sourceAudioDuration, sourceAudioLinked, sourceAudioStart, stickerSegments, suppressTimelineClipClickRef, t, timelineDurationRef,
-    trackLocks, trackScrollRef, pauseForTimelineEdit, visualSegments, setSnapGuide, commitStickerSegments,
-    setStickerTimelineDrag,
+    setMusicStart, setSelectedMusicSegmentId, setSelectedSourceAudioSegmentId, setSourceAudioLinked, setSourceAudioStart, musicDuration, musicSegments, musicStart, setMusicSegments,
+    linkedSourceAudioSegments, sourceAudioDuration, sourceAudioLinked, sourceAudioStart, stickerSegments, suppressTimelineClipClickRef, t, timelineDurationRef,
+    trackLocks, trackVisibility, trackScrollRef, pauseForTimelineEdit, visualSegments, setVisualSegments, visualOverlaySegments, currentTime, setSnapGuide, commitStickerSegments,
+    setStickerTimelineDrag, moveSourceAudioToAudioLane, setSourceAudioDragTargetLane,
   });
 
   const startImageResize = createImageResizeControl({
     audioBlob, audioDuration, captionDuration, getCurrentVisualAssetSnapshot,
-    imageDuration, imageSrc, musicBlob, musicDuration, notify, script,
+    imageDuration, imageSrc, musicBlob, musicDuration, musicStart, notify, script,
     setCurrentTime, setImageClipCount, setImageDuration, setSelectedTrack,
     setSelectedVisualSegmentId, setSnapGuide, setVisualSegments, sourceAudioBlob,
     sourceAudioDuration, sourceAudioStart, timelineDuration, timelineDurationRef,
@@ -959,7 +1048,7 @@ export function App() {
 
   const extractVideoSourceAudio = useSourceAudioExtraction({
     clearSourceAudioTrack, notify, replaceSourceAudio, setProgress, setStatus, setStatusText,
-    setVisualSegments, sourceAudioBlob, sourceAudioDuration, t,
+    replaceAudio, setVisualOverlaySegments, setVisualSegments, sourceAudioBlob, sourceAudioDuration, t,
   });
 
   const generateCaptionsFromSourceAudio = useAutoCaptions({
@@ -999,7 +1088,13 @@ export function App() {
       : Number.isFinite(options.percent)
         ? options.percent / 100 * timelineDuration
         : currentTime;
-    const overlay = createVisualOverlaySegment(asset, startTime, { layer: options.layer ?? visualOverlaySegments.length + 1 });
+    const targetLayer = Number.isFinite(Number(options.layer))
+      ? Math.max(1, Number(options.layer))
+      : visualOverlaySegments.length + 1;
+    const overlay = createVisualOverlaySegment(asset, startTime, {
+      layer: targetLayer,
+      ...(Number.isFinite(Number(options.layer)) ? { lane: targetLayer - 1 } : {}),
+    });
     setVisualOverlaySegments((items) => [...items, overlay]);
     setSelectedVisualOverlayId(overlay.id);
     setSelectedVisualSegmentId("");
@@ -1156,12 +1251,12 @@ export function App() {
     setSelectedVisualSegmentId, setTimelineClipDrag, suppressTimelineClipClickRef,
     timelineClipDragRef, timelineDuration, trackLocks, visualSegments, pauseForTimelineEdit,
     setTimelineHorizon,
-    stickerSegments, sourceAudioDuration, sourceAudioStart, musicDuration, musicStart, setSnapGuide,
+    stickerSegments, sourceAudioDuration, sourceAudioStart, musicDuration, musicStart, musicSegments, currentTime, setSnapGuide,
     visualOverlaySegments, setVisualOverlaySegments, setSelectedVisualOverlayId, trackScrollRef,
   });
 
   return (
-    <main className={`app-shell ${mobilePanel ? `mobile-panel-${mobilePanel}` : ""} ${isMobileViewport && mobileInspectorSection ? `mobile-section-${mobileInspectorSection}` : ""} ${isMobileViewport && mobileInspectorSection === "mask" && (selectedVisualOverlay || selectedVisualSegment)?.mask?.type && (selectedVisualOverlay || selectedVisualSegment).mask.type !== "none" ? "mobile-mask-active" : ""} ${mobilePanelClosing ? "is-mobile-panel-closing" : ""}`} lang={activeLanguage} onDragOver={(event) => {
+    <main className={`app-shell ${isCompactViewport ? "is-compact-workspace" : ""} ${mobilePanel ? `mobile-panel-${mobilePanel}` : ""} ${isCompactViewport && mobileInspectorSection ? `mobile-section-${mobileInspectorSection}` : ""} ${isCompactViewport && mobileInspectorSection === "mask" && (selectedVisualOverlay || selectedVisualSegment)?.mask?.type && (selectedVisualOverlay || selectedVisualSegment).mask.type !== "none" ? "mobile-mask-active" : ""} ${mobilePanelClosing ? "is-mobile-panel-closing" : ""}`} lang={activeLanguage} onDragOver={(event) => {
       if (event.dataTransfer?.types?.includes("Files")) event.preventDefault();
     }} onDrop={async (event) => {
       const files = Array.from(event.dataTransfer?.files ?? []);
@@ -1464,7 +1559,7 @@ export function App() {
           selectedAudioSegment={selectedAudioSegment}
           selectedTrackAudioSegment={selectedAudioToolTarget}
           mobileInspectorOrigin={mobilePanel === "inspector" ? mobilePanelOrigin : ""}
-          mobileInspectorSection={isMobileViewport && mobilePanel === "inspector" ? mobileInspectorSection : ""}
+          mobileInspectorSection={isCompactViewport && mobilePanel === "inspector" ? mobileInspectorSection : ""}
           onCloseMobileInspector={() => changeMobilePanel("")}
           updateSelectedTrackAudioSegment={updateSelectedTrackAudioSegment}
           deleteSelectedTrackAudioSegment={() => handleDeleteTrack()}
@@ -1560,6 +1655,7 @@ export function App() {
         currentTime={currentTime}
         playheadPercent={playheadPercent}
         snapGuide={snapGuide}
+        setSnapGuide={setSnapGuide}
         assetDropTargetTrack={assetDropTargetTrack}
         assetDropPosition={assetDropPosition}
         assetDropPulseTrack={assetDropPulseTrack}
@@ -1617,6 +1713,7 @@ export function App() {
         sourceAudioClipPercent={sourceAudioClipPercent}
         sourceAudioStartPercent={sourceAudioStartPercent}
         sourceAudioDuration={sourceAudioDuration}
+        sourceAudioDragTargetLane={sourceAudioDragTargetLane}
         setSourceAudioStart={setSourceAudioStart}
         selectedSourceAudioSegmentId={selectedSourceAudioSegmentId}
         setSelectedSourceAudioSegmentId={setSelectedSourceAudioSegmentId}
@@ -1642,7 +1739,7 @@ export function App() {
         startMusicMove={startMusicMove}
       />
 
-      {mobilePanel && !(mobilePanel === "inspector" && isMobileViewport && mobileInspectorSection) ? (
+      {mobilePanel && !(mobilePanel === "inspector" && isCompactViewport && mobileInspectorSection) ? (
         <header className="mobile-sheet-nav">
           <strong>{({
             transform: t("visualTabTransform"),

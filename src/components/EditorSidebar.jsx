@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CaretDown } from "@phosphor-icons/react";
-import { TOOL_RAIL } from "../config/editor.js";
+import { COMPACT_WORKSPACE_QUERY, TOOL_RAIL } from "../config/editor.js";
 import { MediaPanel, ToolPanel } from "./panels.jsx";
 
 export function EditorSidebar({ model: d }) {
@@ -52,7 +52,7 @@ export function EditorSidebar({ model: d }) {
               key={id}
               onClick={() => {
                 d.selectTool(id);
-                if (window.matchMedia?.("(max-width: 760px)").matches) {
+                if (window.matchMedia?.(COMPACT_WORKSPACE_QUERY).matches) {
                   const defaultPanel = id === "caption" ? "inspector" : "tools";
                   d.setMobilePanel?.(d.mobilePanel === defaultPanel && d.activeTool === id ? "" : defaultPanel);
                 }
@@ -117,7 +117,7 @@ export function EditorSidebar({ model: d }) {
             onOpenAiMusic={() => {
               d.setSmartMode("ai-music");
               d.selectTool("smart");
-              if (window.matchMedia?.("(max-width: 760px)").matches) d.setMobilePanel?.("inspector");
+              if (window.matchMedia?.(COMPACT_WORKSPACE_QUERY).matches) d.setMobilePanel?.("inspector");
             }}
           />
         ) : (
