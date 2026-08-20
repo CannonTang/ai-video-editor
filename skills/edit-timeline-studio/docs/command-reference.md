@@ -53,7 +53,7 @@ Supported write operations:
 | `caption.update` | `clipId` | `text`, `start`, `end` | Updates caption content or its finite, non-negative range. |
 | `caption.unlink_audio` | `clipId` | — | Preserves the remembered audio ID but stops synchronization. |
 | `caption.link_audio` | `clipId` | `audioClipId`, `align` | Relinks remembered or explicit audio; `align: true` copies its range. |
-| `clip.delete` | `track`, `clipId` | — | Deletes a caption or voiceover; deleting audio leaves caption relink metadata intact. |
+| `clip.delete` | `track`, `clipId` | — | Deletes a caption (`track: "caption"`) or voiceover (`track: "audio"`); deleting audio leaves caption relink metadata intact. |
 | `clip.set_property` | `clipId`, `property`, `value` | — | Sets an allowlisted numeric transform/audio/layer property with range validation. |
 | `clip.set_speed` | `clipId`, `speed` | — | Sets 0.25–4× video/audio speed while preserving source duration and remapping keyframes. |
 | `clip.set_muted` | `clipId`, `muted` | — | Mutes or unmutes video, overlay-video, or audio clips. |

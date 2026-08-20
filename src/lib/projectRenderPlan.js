@@ -64,7 +64,8 @@ function addAudioTrack({ args, filters, inputs, segments, mediaEntry, mediaEntri
     const start = Math.max(0, Number(segment.start) || 0);
     const volume = Number.isFinite(Number(segment.volume)) ? Number(segment.volume) : defaultVolume;
     const label = `${prefix}${index}`;
-    filters.push(`[${inputIndex}:a]atrim=start=${sourceStart}:duration=${sourceDuration},asetpts=PTS-STARTPTS,${atempoChain(rate)},volume=${volume},adelay=${Math.round(start * 1000)}|${Math.round(start * 1000)},apad,atrim=duration=${duration}[${label}]`);
+    const tempo = Math.abs(rate - 1) < 1e-6 ? "" : `${atempoChain(rate)},`;
+    filters.push(`[${inputIndex}:a]atrim=start=${sourceStart}:duration=${sourceDuration},asetpts=PTS-STARTPTS,${tempo}volume=${volume},adelay=${Math.round(start * 1000)}:all=1,apad,atrim=duration=${duration}[${label}]`);
     return `[${label}]`;
   });
 }
