@@ -9128,7 +9128,9 @@ button:disabled {
 }
 
 /* Compact desktop: keep all four work areas visible without letting the
-   utility panels squeeze the preview below a useful editing width. */
+   utility panels squeeze the preview below a useful editing width. The
+   inspector needs a stable 340px floor at 1280px so localized tabs and
+   property rows do not collapse into an unnecessarily narrow column. */
 @media (min-width: 1280px) and (max-width: 1439px) {
   .app-shell {
     --timeline-panel-height: clamp(280px, 36vh, 320px);
@@ -9140,7 +9142,7 @@ button:disabled {
       74px
       clamp(250px, 22vw, 320px)
       minmax(500px, 1fr)
-      clamp(270px, 22vw, 320px);
+      clamp(340px, 25vw, 360px);
   }
 
   .editor-grid.is-compact-rail {
@@ -9148,7 +9150,7 @@ button:disabled {
       50px
       clamp(250px, 22vw, 320px)
       minmax(500px, 1fr)
-      clamp(270px, 22vw, 320px);
+      clamp(340px, 25vw, 360px);
   }
 
   .preview-stage {
