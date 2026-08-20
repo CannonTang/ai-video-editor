@@ -1,17 +1,22 @@
 import { useEffect, useRef } from "react";
 import { X } from "@phosphor-icons/react";
 import { getWaveformDisplayPeaks, isWaveformPlaceholder } from "../lib/waveform.js";
+import { formatShortcutLabel, releasePointerActivatedFocus } from "../lib/editorShortcuts.js";
 
-export function IconButton({ label, children, active = false, disabled = false, onClick, tooltip = false }) {
+export function IconButton({ label, children, active = false, disabled = false, onClick, tooltip = false, shortcut = "", releaseFocusOnPointer = false }) {
+  const tooltipLabel = formatShortcutLabel(label, shortcut);
   return (
     <button
       className={`icon-button ${active ? "is-active" : ""}`}
       type="button"
       aria-label={label}
-      title={tooltip ? undefined : label}
-      data-tooltip={tooltip ? label : undefined}
+      title={tooltip || shortcut ? undefined : label}
+      data-tooltip={tooltip || shortcut ? tooltipLabel : undefined}
       disabled={disabled}
-      onClick={onClick}
+      onClick={(event) => {
+        onClick?.(event);
+        if (releaseFocusOnPointer) releasePointerActivatedFocus(event);
+      }}
     >
       {children}
     </button>

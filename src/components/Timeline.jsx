@@ -56,6 +56,13 @@ import {
 } from "../lib/timelineEdgeAutoScroll.js";
 import { getMobileClipActionIds, getMobileClipPanel, resolveMobileClipActionTrack, shouldActivateToolRailForClip } from "../lib/mobileClipActions.js";
 import {
+  getPrimaryShortcutModifier,
+  isEditorInteractiveTarget,
+  isEditorShortcutBlockedByModal,
+  isEditorTextEntryTarget,
+  releasePointerActivatedFocus,
+} from "../lib/editorShortcuts.js";
+import {
   clampTimelineZoom,
   getTimelineRulerTicks,
   getTimelineAutoFitZoom,
@@ -1174,6 +1181,7 @@ export function Timeline({
   );
   const zoomReadout = getTimelineZoomLabel(localTimelineZoom);
   const fitTimelineZoom = getTimelineAutoFitZoom(timelineDuration, 0.9);
+  const shortcutModifier = getPrimaryShortcutModifier();
   const localTrackWidthPercent = getTimelineTrackWidthPercent(timelineDuration, localTimelineZoom);
   const localTrackWidth = trimScaleLock?.pixelsPerSecond > 0
     ? `${getTrimLockedTrackWidth(timelineDuration, trimScaleLock.pixelsPerSecond)}px`
@@ -1208,6 +1216,59 @@ export function Timeline({
     setLocalTimelineZoom(nextZoom);
     commitTimelineZoom(nextZoom, commitDelay);
   };
+  const hasSelectedShortcutTarget = timelineRangeSelection.size > 0 || Boolean(
+    (selectedTrack === "image" && selectedVisualSegmentId) ||
+    (selectedTrack === "overlay" && selectedVisualOverlayId) ||
+    (selectedTrack === "sticker" && selectedStickerSegmentId) ||
+    (selectedTrack === "caption" && selectedSegmentId) ||
+    (selectedTrack === "audio" && selectedAudioSegmentId) ||
+    (selectedTrack === "source" && (selectedSourceAudioSegmentId || sourceAudioBlob)) ||
+    (selectedTrack === "music" && (selectedMusicSegmentId || musicBlob))
+  );
+  useEffect(() => {
+    const handleTimelineShortcut = (event) => {
+      if (event.isComposing || event.repeat || event.altKey) return;
+      const target = event.target;
+      if (
+        isEditorTextEntryTarget(target) ||
+        isEditorInteractiveTarget(target) ||
+        isEditorShortcutBlockedByModal(target)
+      ) return;
+
+      const hasPrimaryModifier = event.metaKey || event.ctrlKey;
+      if (!hasPrimaryModifier && !event.shiftKey && event.code === "Space") {
+        event.preventDefault();
+        handlePlayToggle();
+        return;
+      }
+      if (hasPrimaryModifier && !event.shiftKey && event.key.toLowerCase() === "b" && hasSelectedShortcutTarget) {
+        event.preventDefault();
+        handleCutTrack();
+        return;
+      }
+      if (hasPrimaryModifier && !event.shiftKey && event.key.toLowerCase() === "d" && hasSelectedShortcutTarget) {
+        event.preventDefault();
+        handleDuplicateTrack();
+        return;
+      }
+      if (hasPrimaryModifier) return;
+      if (event.shiftKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        adjustTimelineZoom(fitTimelineZoom);
+        return;
+      }
+      if (event.shiftKey && event.key !== "+") return;
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        adjustTimelineZoom((zoom) => zoom * TIMELINE_BUTTON_ZOOM_RATIO);
+      } else if (event.key === "-") {
+        event.preventDefault();
+        adjustTimelineZoom((zoom) => zoom / TIMELINE_BUTTON_ZOOM_RATIO);
+      }
+    };
+    window.addEventListener("keydown", handleTimelineShortcut);
+    return () => window.removeEventListener("keydown", handleTimelineShortcut);
+  });
   const flushWheelZoom = () => {
     wheelZoomFrameRef.current = 0;
 
@@ -2035,19 +2096,19 @@ export function Timeline({
     }}>
       <div className="timeline-tools">
         <div className="timeline-icon-group">
-          <IconButton label={t("undo")} tooltip onClick={undo}>
+          <IconButton label={t("undo")} shortcut={`${shortcutModifier}+Z`} tooltip releaseFocusOnPointer onClick={undo}>
             <ArrowCounterClockwise size={17} />
           </IconButton>
-          <IconButton label={t("redo")} tooltip onClick={redo}>
+          <IconButton label={t("redo")} shortcut={`${shortcutModifier}+Shift+Z`} tooltip releaseFocusOnPointer onClick={redo}>
             <ArrowClockwise size={17} />
           </IconButton>
-          <IconButton label={t("deleteTrack")} tooltip onClick={handleDeleteTrack}>
+          <IconButton label={t("deleteTrack")} shortcut="Delete / Backspace" tooltip releaseFocusOnPointer onClick={handleDeleteTrack}>
             <Trash size={17} />
           </IconButton>
-          <IconButton label={t("duplicateTrack")} tooltip onClick={handleDuplicateTrack}>
+          <IconButton label={t("duplicateTrack")} shortcut={`${shortcutModifier}+D`} tooltip releaseFocusOnPointer onClick={handleDuplicateTrack}>
             <CopySimple size={17} />
           </IconButton>
-          <IconButton label={t("cutSegment")} tooltip onClick={handleCutTrack}>
+          <IconButton label={t("cutSegment")} shortcut={`${shortcutModifier}+B`} tooltip releaseFocusOnPointer onClick={handleCutTrack}>
             <Scissors size={17} />
           </IconButton>
           <div className={`timeline-selection-tool ${timelineSelectionMenuOpen ? "is-open" : ""}`}>
@@ -2056,10 +2117,13 @@ export function Timeline({
               type="button"
               className={`timeline-selection-trigger ${timelineSelectionMode !== "select" ? "is-active" : ""}`}
               aria-label={t("timelineSelectionTools", "选择工具")}
-              data-tooltip={t("timelineSelectionTools", "选择工具")}
+              data-tooltip={`${t("timelineSelectionTools", "选择工具")} · [ / ]`}
               aria-haspopup="menu"
               aria-expanded={timelineSelectionMenuOpen}
-              onClick={() => setTimelineSelectionMenuOpen((open) => !open)}
+              onClick={(event) => {
+                setTimelineSelectionMenuOpen((open) => !open);
+                releasePointerActivatedFocus(event);
+              }}
             >
               {timelineSelectionMode === "left"
                 ? <ArrowLineLeft size={17} weight="bold" />
@@ -2103,6 +2167,7 @@ export function Timeline({
           <IconButton
             label={t(allBatchCaptionsLinked ? "captionUnlinkAudio" : "captionLinkAudio")}
             tooltip
+            releaseFocusOnPointer
             active={allBatchCaptionsLinked}
             disabled={!batchLinkableCaptions.length}
             onClick={allBatchCaptionsLinked ? unlinkAllCaptionAudio : linkAllCaptionAudio}
@@ -2111,9 +2176,10 @@ export function Timeline({
           </IconButton>
         </div>
         <div className="timeline-segment-tools">
-          <button className="timeline-play-button" type="button" disabled={!canPreview} onClick={handlePlayToggle}>
+          <button className="timeline-play-button" type="button" disabled={!canPreview} onClick={(event) => { handlePlayToggle(); releasePointerActivatedFocus(event); }}>
             {isPlaying ? <Pause size={17} weight="fill" /> : <Play size={17} weight="fill" />}
             {isPlaying ? t("pause") : t("play")}
+            <kbd>Space</kbd>
           </button>
           <button type="button" onClick={handleAddSegment}>
             <PlusCircle size={17} />
@@ -2123,26 +2189,29 @@ export function Timeline({
             <MinusCircle size={17} />
             {t("removeSegment")}
           </button>
-          <IconButton label={t("shortenSegment")} onClick={() => adjustSelectedSegmentWeight(-0.5)}>
+          <IconButton label={t("shortenSegment")} tooltip releaseFocusOnPointer onClick={() => adjustSelectedSegmentWeight(-0.5)}>
             <ArrowsInLineHorizontal size={18} />
           </IconButton>
-          <IconButton label={t("lengthenSegment")} onClick={() => adjustSelectedSegmentWeight(0.5)}>
+          <IconButton label={t("lengthenSegment")} tooltip releaseFocusOnPointer onClick={() => adjustSelectedSegmentWeight(0.5)}>
             <ArrowsOutLineHorizontal size={18} />
           </IconButton>
         </div>
         <div className="timeline-icon-group">
-          <IconButton label={t("zoomOut")} onClick={() => adjustTimelineZoom((zoom) => zoom / TIMELINE_BUTTON_ZOOM_RATIO)}>
+          <IconButton label={t("zoomOut")} shortcut="−" tooltip releaseFocusOnPointer onClick={() => adjustTimelineZoom((zoom) => zoom / TIMELINE_BUTTON_ZOOM_RATIO)}>
             <MagnifyingGlassMinus size={17} />
           </IconButton>
           <span ref={zoomReadoutRef} className="zoom-readout" data-testid="timeline-zoom-readout">{zoomReadout}</span>
           <IconButton
             label={t("fitTimeline")}
+            shortcut="Shift+Z"
+            tooltip
+            releaseFocusOnPointer
             active={Math.abs(localTimelineZoom - fitTimelineZoom) < 0.001}
             onClick={() => adjustTimelineZoom(fitTimelineZoom)}
           >
             <MonitorPlay size={17} />
           </IconButton>
-          <IconButton label={t("zoomIn")} onClick={() => adjustTimelineZoom((zoom) => zoom * TIMELINE_BUTTON_ZOOM_RATIO)}>
+          <IconButton label={t("zoomIn")} shortcut="+" tooltip releaseFocusOnPointer onClick={() => adjustTimelineZoom((zoom) => zoom * TIMELINE_BUTTON_ZOOM_RATIO)}>
             <MagnifyingGlassPlus size={17} />
           </IconButton>
         </div>
