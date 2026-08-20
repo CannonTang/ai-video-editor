@@ -1530,9 +1530,11 @@ export function VoicePanel({
       {mobileInspectorSection ? <header className="focused-mobile-sheet-header"><strong>{title}</strong><button type="button" aria-label={t("close", "关闭")} onClick={onCloseMobileInspector}><X size={20} /></button></header> : null}
       <div className="panel-title-row">
         <h1>{title}</h1>
-        <span className={`status-pill ${isCaptionContext ? "done" : status}`}>
-          {panelStatusText}
-        </span>
+        {isVisualContext && !selectedVisualSegment ? null : (
+          <span className={`status-pill ${isCaptionContext ? "done" : status}`}>
+            {panelStatusText}
+          </span>
+        )}
       </div>
 
       {!isSmartContext && !isEffectsContext && !isCaptionContext && !isAvatarContext && !isAudioClipContext && !isVisualContext && !isStickerContext && !isOverlayContext ? (
@@ -1578,7 +1580,7 @@ export function VoicePanel({
         </div>
       ) : null}
 
-      <div className="voice-tab-body">
+      <div className={`voice-tab-body ${isVisualContext && !selectedVisualSegment ? "is-empty-visual-context" : ""}`}>
         {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext && !isCinematicDepthContext && !isPhotoParallaxContext ? <SubjectEffectsInspector
           t={t}
           segment={effectSegment}
@@ -1670,7 +1672,6 @@ export function VoicePanel({
           <div className="visual-context-empty">
             <ImageSquare size={30} weight="duotone" />
             <strong>{t("visualSelectClip")}</strong>
-            <span>{t("previewEmptyTitle")}</span>
           </div>
         ) : null}
         {isCaptionContext && captionPanelTab === "caption" && mobileInspectorSection === "font" ? (

@@ -1,10 +1,41 @@
 import { normalizeVisualKeyframes, resolveVisualTransform, upsertVisualKeyframe } from "./visualEffects.js";
-import { createVisualSegment } from "./timeline.js";
+import { createVisualSegment, packTimedSegmentsIntoLanes } from "./timeline.js";
 import { normalizeVectorDesign } from "./vectorDesign.js";
 import { normalizeVisualClipAnimation } from "./visualClipAnimations.js";
 import { normalizeSubjectEffect } from "./subjectEffects.js";
 
 export const DEFAULT_OVERLAY_SECONDS = 5;
+
+export function compactVisualOverlayLanes(segments = []) {
+  const occupiedLanes = packTimedSegmentsIntoLanes(segments, { preferredLaneKey: "lane" })
+    .filter((lane) => lane.length);
+  const laneById = new Map();
+  occupiedLanes.forEach((lane, laneIndex) => {
+    lane.forEach((segment) => laneById.set(segment.id, laneIndex));
+  });
+  return segments.map((segment) => {
+    const lane = laneById.get(segment.id);
+    if (!Number.isInteger(lane) || (segment.lane === lane && segment.layer === lane + 1)) return segment;
+    return { ...segment, lane, layer: lane + 1 };
+  });
+}
+
+export function reorderSingleVisualOverlayLane(segments = [], segmentId, fromLane, toLane) {
+  const sourceLane = Math.max(0, Number(fromLane) || 0);
+  const targetLane = Math.max(0, Number(toLane) || 0);
+  if (sourceLane === targetLane) return segments;
+  return segments.map((segment) => {
+    const lane = Math.max(0, Number(segment.lane) || 0);
+    if (segment.id === segmentId) return { ...segment, lane: targetLane, layer: targetLane + 1 };
+    if (sourceLane < targetLane && lane > sourceLane && lane <= targetLane) {
+      return { ...segment, lane: lane - 1, layer: lane };
+    }
+    if (targetLane < sourceLane && lane >= targetLane && lane < sourceLane) {
+      return { ...segment, lane: lane + 1, layer: lane + 2 };
+    }
+    return segment;
+  });
+}
 
 function toAspectRatio(value, fallback = 1) {
   if (typeof value === "string") {
@@ -74,6 +105,7 @@ export function createVisualOverlaySegment(asset, start = 0, options = {}) {
     muted: options.muted === true,
     volume: Math.max(0, Math.min(1, Number(options.volume) || 1)),
     layer: Math.max(1, Number(options.layer) || 1),
+    ...(Number.isInteger(options.lane) && options.lane >= 0 ? { lane: options.lane } : {}),
     baseTransform,
     keyframes: normalizeVisualKeyframes(options.keyframes || []),
     mask: {

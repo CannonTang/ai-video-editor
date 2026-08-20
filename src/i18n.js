@@ -885,6 +885,20 @@ Object.entries(TIMELINE_AUDIO_MENU_COPY).forEach(([language, copy]) => {
   Object.assign(CONTEXT_PANEL_COPY[language], copy);
 });
 
+const SOURCE_AUDIO_LANE_COPY = {
+  zh: { sourceAudioTrackDrop: "释放到此音频轨", sourceAudioCreateTrackDrop: "释放以新增音频轨", sourceAudioMovedToAudioTrack: "视频原声已移到音频轨" },
+  en: { sourceAudioTrackDrop: "Drop onto this audio track", sourceAudioCreateTrackDrop: "Drop to create an audio track", sourceAudioMovedToAudioTrack: "Source audio moved to an audio track" },
+  ja: { sourceAudioTrackDrop: "この音声トラックにドロップ", sourceAudioCreateTrackDrop: "ドロップして音声トラックを追加", sourceAudioMovedToAudioTrack: "元音声を音声トラックへ移動しました" },
+  ko: { sourceAudioTrackDrop: "이 오디오 트랙에 놓기", sourceAudioCreateTrackDrop: "놓아서 오디오 트랙 만들기", sourceAudioMovedToAudioTrack: "원본 오디오를 오디오 트랙으로 이동했습니다" },
+  es: { sourceAudioTrackDrop: "Soltar en esta pista de audio", sourceAudioCreateTrackDrop: "Soltar para crear una pista de audio", sourceAudioMovedToAudioTrack: "El audio original se movió a una pista de audio" },
+  fr: { sourceAudioTrackDrop: "Déposer sur cette piste audio", sourceAudioCreateTrackDrop: "Déposer pour créer une piste audio", sourceAudioMovedToAudioTrack: "L’audio source a été déplacé vers une piste audio" },
+  de: { sourceAudioTrackDrop: "Auf dieser Audiospur ablegen", sourceAudioCreateTrackDrop: "Ablegen, um eine Audiospur zu erstellen", sourceAudioMovedToAudioTrack: "Originalton wurde auf eine Audiospur verschoben" },
+  pt: { sourceAudioTrackDrop: "Soltar nesta faixa de áudio", sourceAudioCreateTrackDrop: "Soltar para criar uma faixa de áudio", sourceAudioMovedToAudioTrack: "O áudio original foi movido para uma faixa de áudio" },
+  th: { sourceAudioTrackDrop: "วางลงในแทร็กเสียงนี้", sourceAudioCreateTrackDrop: "วางเพื่อสร้างแทร็กเสียง", sourceAudioMovedToAudioTrack: "ย้ายเสียงต้นฉบับไปยังแทร็กเสียงแล้ว" },
+  vi: { sourceAudioTrackDrop: "Thả vào rãnh âm thanh này", sourceAudioCreateTrackDrop: "Thả để tạo rãnh âm thanh", sourceAudioMovedToAudioTrack: "Đã chuyển âm thanh gốc sang rãnh âm thanh" },
+  ru: { sourceAudioTrackDrop: "Перетащите на эту аудиодорожку", sourceAudioCreateTrackDrop: "Перетащите, чтобы создать аудиодорожку", sourceAudioMovedToAudioTrack: "Исходный звук перемещён на аудиодорожку" },
+};
+
 const TTS_BACKEND_COPY = {
   zh: { ttsStatusLoadingWebGpu: "正在加载 WebGPU 配音模型", ttsStatusGeneratingWebGpu: "正在使用 WebGPU 生成配音", ttsStatusFallingBackWasm: "WebGPU 不可用，正在切换到 WASM", ttsStatusGeneratingWasm: "正在使用 WASM 生成配音", ttsStatusInitializingModel: "正在初始化语音模型", ttsFirstRunHint: "首次生成需下载本地模型，完成后会缓存并明显加快" },
   en: { ttsStatusLoadingWebGpu: "Loading WebGPU voice model", ttsStatusGeneratingWebGpu: "Generating voice with WebGPU", ttsStatusFallingBackWasm: "WebGPU unavailable; switching to WASM", ttsStatusGeneratingWasm: "Generating voice with WASM", ttsStatusInitializingModel: "Initializing voice model", ttsFirstRunHint: "The first run downloads the local model; later runs will be much faster" },
@@ -3192,7 +3206,7 @@ export function createTranslator(languageId) {
     VISUAL_KEYFRAME_ACTION_COPY, VISUAL_TAB_COPY, VISUAL_SPEED_CURVE_COPY, SOURCE_AUDIO_SYNC_COPY,
     CAPTION_WORKSPACE_COPY, RESOURCE_LINK_COPY, VISUAL_AI_TAB_COPY, REPAIR_COPY, REMASTER_COPY,
     REMASTER_CLIP_COPY, REMASTER_GPU_COPY, REMASTER_PHASE_COPY, CONTEXT_PANEL_COPY,
-    TIMELINE_AUDIO_MENU_COPY, TTS_BACKEND_COPY, CAPTION_AUDIO_LINK_COPY,
+    TIMELINE_AUDIO_MENU_COPY, SOURCE_AUDIO_LANE_COPY, TTS_BACKEND_COPY, CAPTION_AUDIO_LINK_COPY,
     VISUAL_ANIMATION_COPY, STICKER_EDITOR_COPY, MOBILE_STICKER_COPY,
     CAPTION_DEFAULT_COPY, SMART_WORKSPACE_COPY, AUTO_EDIT_COPY, AUTO_EDIT_BUTTON_COPY,
     AUTO_EDIT_REVIEW_COPY, AUTO_EDIT_FLOW_COPY, AUTO_EDIT_SEGMENT_COPY,

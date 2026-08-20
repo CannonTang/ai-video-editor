@@ -2,6 +2,7 @@ import {
   IMAGE_SNAP_THRESHOLD_PIXELS, MAX_TIMELINE_DURATION_SECONDS, MIN_VISUAL_SEGMENT_SECONDS,
 } from "../config/editor.js";
 import { createVisualSegment, estimateDuration, getImageThumbnailCount, getVisualSegmentsTotal } from "./timeline.js";
+import { createTimelineSnapGuide } from "./timelineSnap.js";
 import {
   createTimelineEdgeAutoScroller,
   getTimelineActiveDragHorizon,
@@ -37,7 +38,7 @@ export function createImageResizeControl(d) {
     const snapPoints = [
       d.audioBlob && d.audioDuration > 0 ? { time: Math.min(MAX_TIMELINE_DURATION_SECONDS, d.audioDuration), label: "配音结尾" } : null,
       d.sourceAudioBlob && d.sourceAudioDuration > 0 ? { time: Math.min(MAX_TIMELINE_DURATION_SECONDS, d.sourceAudioStart + d.sourceAudioDuration), label: "原声结尾" } : null,
-      d.musicBlob && d.musicDuration > 0 ? { time: Math.min(MAX_TIMELINE_DURATION_SECONDS, d.musicDuration), label: "音乐结尾" } : null,
+      d.musicBlob && d.musicDuration > 0 ? { time: Math.min(MAX_TIMELINE_DURATION_SECONDS, (d.musicStart || 0) + d.musicDuration), label: "音乐结尾" } : null,
     ].filter(Boolean);
     let activeLabel = "";
     let editingStarted = false;
@@ -67,7 +68,7 @@ export function createImageResizeControl(d) {
       const projectDuration = Math.max(d.audioBlob ? d.audioDuration : 0, d.captionDuration,
         d.sourceAudioBlob ? d.sourceAudioStart + d.sourceAudioDuration : 0,
         d.musicBlob ? d.musicDuration : 0, estimateDuration(d.script), visualDuration);
-      activeLabel = snap?.label ?? ""; d.setSnapGuide(snap); d.setVisualSegments(next);
+      activeLabel = snap?.label ?? ""; d.setSnapGuide(createTimelineSnapGuide(snap, "end")); d.setVisualSegments(next);
       if (moved) {
         d.setTimelineHorizon((value) => getTimelineActiveDragHorizon(value, timelineDuration, projectDuration));
       }

@@ -48,6 +48,7 @@ export function createTimelineClipboardActions(d) {
           if (position !== index) return segment;
           const detached = { ...segment, sourceAudioDisabled: false };
           delete detached.sourceAudioOffset;
+          delete detached.sourceAudioTimelineOffset;
           return detached;
         });
         const hasRemainingLinkedAudio = (d.linkedSourceAudioSegments ?? [])
