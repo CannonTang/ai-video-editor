@@ -48,6 +48,7 @@ import {
 } from "../lib/geminiNanoVector.js";
 import { getRemoteAssetBlob } from "../lib/remoteAssetCache.js";
 import { downloadBlob as downloadMediaBlob } from "../lib/media.js";
+import { releasePointerActivatedFocus } from "../lib/editorShortcuts.js";
 import { formatClock, formatTime, getSegmentStartTime } from "../lib/timeline.js";
 import { VECTOR_CATEGORIES } from "../lib/vectorAssets.js";
 import { hasVisualPropertyKeyframe, normalizeVisualKeyframes, resolveVisualTransform } from "../lib/visualEffects.js";
@@ -232,7 +233,10 @@ export function MediaPanel({
           <button
             className={`drop-zone ${isDragging ? "is-dragging" : ""}`}
             type="button"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={(event) => {
+              fileInputRef.current?.click();
+              releasePointerActivatedFocus(event);
+            }}
             onDragEnter={(event) => {
               event.preventDefault();
               setIsDragging(true);

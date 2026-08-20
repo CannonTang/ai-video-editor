@@ -1,8 +1,10 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
   CaretDown,
+  CircleNotch,
+  Database,
   DiscordLogo,
   FileArrowDown,
   FileArrowUp,
@@ -17,6 +19,8 @@ import {
 
 import { RATIO_OPTIONS } from "../config/editor.js";
 import { APP_LANGUAGES, saveLanguagePreference } from "../i18n.js";
+import { getPrimaryShortcutModifier, releasePointerActivatedFocus } from "../lib/editorShortcuts.js";
+import { formatStorageBytes, inspectModelCache } from "../lib/modelCacheInspection.js";
 import { ExportSettingsPanel } from "./ExportSettingsPanel.jsx";
 import { IconButton, Popover } from "./ui.jsx";
 
@@ -65,6 +69,49 @@ export function Topbar({
 }) {
   const exportAnchorRef = useRef(null);
   const settingsAnchorRef = useRef(null);
+  const modelCacheControlRef = useRef(null);
+  const [modelCacheInspection, setModelCacheInspection] = useState({ state: "idle", result: null });
+  const shortcutModifier = getPrimaryShortcutModifier();
+  const shortcutRows = [
+    ["shortcutPlayPause", "Space"],
+    ["shortcutSplit", `${shortcutModifier}+B`],
+    ["shortcutDuplicate", `${shortcutModifier}+D`],
+    ["shortcutDelete", "Delete / Backspace"],
+    ["shortcutUndo", `${shortcutModifier}+Z`],
+    ["shortcutRedo", `${shortcutModifier}+Shift+Z`],
+    ["shortcutZoomOut", "−"],
+    ["shortcutZoomIn", "+"],
+    ["shortcutFitTimeline", "Shift+Z"],
+    ["shortcutSelectLeft", "["],
+    ["shortcutSelectRight", "]"],
+  ];
+  const checkModelCache = async () => {
+    setModelCacheInspection({ state: "checking", result: null });
+    try {
+      const result = await inspectModelCache();
+      setModelCacheInspection({ state: "ready", result });
+    } catch {
+      setModelCacheInspection({ state: "unavailable", result: null });
+    }
+  };
+  const modelCacheResult = modelCacheInspection.result;
+  const modelCacheSummary = modelCacheResult?.entryCount > 0
+    ? t("modelCacheFound")
+      .replace("{groups}", String(modelCacheResult.cacheCount))
+      .replace("{files}", String(modelCacheResult.entryCount))
+    : t("modelCacheEmpty");
+  const modelCacheStorage = modelCacheResult?.usage != null
+    ? t("modelCacheStorage")
+      .replace("{usage}", formatStorageBytes(modelCacheResult.usage))
+      .replace("{quota}", modelCacheResult.quota ? formatStorageBytes(modelCacheResult.quota) : "—")
+    : "";
+  useEffect(() => {
+    if (!showSettings || modelCacheInspection.state === "idle") return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      modelCacheControlRef.current?.scrollIntoView({ block: "nearest" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [modelCacheInspection.state, showSettings]);
 
   return (
     <header className="topbar">
@@ -122,11 +169,11 @@ export function Topbar({
       </div>
 
       <div className="topbar-center">
-        <button className="ghost-action" type="button" onClick={undo}>
+        <button className="ghost-action" type="button" title={`${t("undo")} · ${shortcutModifier}+Z`} onClick={(event) => { undo(); releasePointerActivatedFocus(event); }}>
           <ArrowCounterClockwise size={16} />
           {t("undo")}
         </button>
-        <button className="ghost-action" type="button" onClick={redo}>
+        <button className="ghost-action" type="button" title={`${t("redo")} · ${shortcutModifier}+Shift+Z`} onClick={(event) => { redo(); releasePointerActivatedFocus(event); }}>
           <ArrowClockwise size={16} />
           {t("redo")}
         </button>
@@ -186,7 +233,7 @@ export function Topbar({
             <GithubLogo size={19} weight="fill" aria-hidden="true" />
           </a>
         </nav>
-        <button className="preview-button" type="button" onClick={handlePlayToggle}>
+        <button className="preview-button" type="button" title={`${t("shortcutPlayPause")} · Space`} onClick={(event) => { handlePlayToggle(); releasePointerActivatedFocus(event); }}>
           {isPlaying ? <Pause size={16} weight="fill" /> : <Play size={16} weight="fill" />}
           {t("preview")}
         </button>
@@ -274,9 +321,37 @@ export function Topbar({
                   />
                   {t("enableMusicTrack")}
                 </label>
-                <button type="button" onClick={() => notify("模型会由浏览器自动缓存到本地存储")}>
-                  {t("checkModelCache")}
-                </button>
+                <section className="shortcut-guide" aria-labelledby="shortcut-guide-title">
+                  <div className="shortcut-guide-heading">
+                    <strong id="shortcut-guide-title">{t("keyboardShortcuts")}</strong>
+                    <span>Timeline Studio</span>
+                  </div>
+                  <p>{t("keyboardShortcutsHint")}</p>
+                  <dl>
+                    {shortcutRows.map(([labelKey, shortcut]) => (
+                      <div key={labelKey}>
+                        <dt>{t(labelKey)}</dt>
+                        <dd><kbd>{shortcut}</kbd></dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+                <div ref={modelCacheControlRef} className="model-cache-control">
+                  {modelCacheInspection.state !== "idle" ? (
+                    <div className={`model-cache-result is-${modelCacheInspection.state}`} role="status" aria-live="polite">
+                      <strong>{modelCacheInspection.state === "checking"
+                        ? t("modelCacheChecking")
+                        : modelCacheInspection.state === "unavailable"
+                          ? t("modelCacheUnavailable")
+                          : modelCacheSummary}</strong>
+                      {modelCacheInspection.state === "ready" && modelCacheStorage ? <span>{modelCacheStorage}</span> : null}
+                    </div>
+                  ) : null}
+                  <button type="button" disabled={modelCacheInspection.state === "checking"} onClick={checkModelCache}>
+                    <span>{modelCacheInspection.state === "checking" ? t("modelCacheChecking") : t("checkModelCache")}</span>
+                    {modelCacheInspection.state === "checking" ? <CircleNotch className="is-spinning" size={15} /> : <Database size={15} />}
+                  </button>
+                </div>
               </div>
             </Popover>
           ) : null}

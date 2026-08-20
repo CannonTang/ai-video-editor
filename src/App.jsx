@@ -1189,6 +1189,7 @@ export function App() {
         onChange={(event) => {
           handleFiles(event.target.files);
           event.target.value = "";
+          event.target.blur();
         }}
       />
       <Topbar
