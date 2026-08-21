@@ -19,6 +19,7 @@
 - Import and export through visible file controls
 - Pure timeline helper functions in `src/lib/`
 - Versioned `project.inspect`, `track.inspect`, `clip.inspect`, `transcript.inspect`, field-level `project.diff`, and `project.run` commands, with legacy `inspect`/`run` aliases
+- A local STDIO MCP server inside this Skill that exposes the same inspect, diff, apply, and render command layer to Codex without duplicating reducers
 - Transactional, revision-checked, idempotent edits for probed and hashed visual/audio import to Visuals, Music, or multiple portable Voiceover clips; timed edits, captions, Visuals/Overlays, transitions, validated properties, track state, and ratio
 - Portable `.timeline` output that preserves archived media entries while replacing only versioned project metadata
 - Transactional local `project.render` for the portable Visuals + Voiceover + Music subset, with ffprobe verification and explicit rejection of unsupported composition features
@@ -58,5 +59,5 @@ Observed browser-path constraints:
 1. Add vision/ASR analysis-record inspection beyond serialized caption transcript data.
 2. Add persisted undo checkpoints around the existing command transaction.
 3. Expand `project.render` with captions, stickers, overlays, transitions, effects, source audio, progress events, and cancellation diagnostics.
-4. Add MCP as a thin transport adapter over the same registry.
-5. Prefer the CLI from this Skill when an operation is supported, retaining browser control as the compatibility path.
+4. Add structured progress and cancellation to the MCP and CLI paths for long-running analysis and rendering.
+5. Prefer MCP, then the CLI, when an operation is supported, retaining browser control as the compatibility path.

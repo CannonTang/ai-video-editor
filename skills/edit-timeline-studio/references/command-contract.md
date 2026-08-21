@@ -1,6 +1,6 @@
 # Agent command contract
 
-Use JSON as a transport-neutral plan. The CLI and a future MCP server should call the same application service.
+Use JSON as a transport-neutral plan. The CLI and bundled MCP server call the same application service.
 
 ## Plan envelope
 
@@ -78,4 +78,4 @@ On failure, return `ok: false`, a stable error `code`, a human-readable `message
 
 ## Architectural rule
 
-Do not implement CLI and MCP editing separately. Both must call a single command registry backed by pure project-state reducers and shared validation. The React UI should eventually dispatch those same commands so manual and Agent edits cannot diverge.
+Do not implement CLI and MCP editing separately. The bundled MCP server must remain a thin transport over the CLI's single command registry, pure project-state reducers, and shared validation. The React UI should eventually dispatch those same commands so manual and Agent edits cannot diverge.
