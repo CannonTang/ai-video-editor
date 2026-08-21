@@ -17,6 +17,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "agent": "node scripts/timeline-command.mjs",
+    "mcp": "node skills/edit-timeline-studio/mcp/server.mjs",
     "skill:doctor": "node skills/edit-timeline-studio/scripts/setup-host.mjs --check",
     "skill:setup": "node skills/edit-timeline-studio/scripts/setup-host.mjs --install",
     "preview": "vite preview --host 0.0.0.0",
@@ -35,6 +36,7 @@
     "@libav.js/variant-webcodecs": "^6.9.8",
     "@mediabunny/aac-encoder": "^1.50.8",
     "@mediapipe/tasks-vision": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@phosphor-icons/react": "^2.1.10",
     "fflate": "^0.8.3",
     "hangul-romanization": "^1.0.1",
@@ -44,7 +46,8 @@
     "onnxruntime-web-migan": "npm:onnxruntime-web@^1.16.3",
     "pinyin-pro": "^3.27.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
