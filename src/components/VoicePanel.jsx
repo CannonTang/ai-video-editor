@@ -83,7 +83,7 @@ import {
 import { MAX_SRT_FILE_BYTES, parseSrt } from "../lib/subtitles.js";
 import { AI_MUSIC_COPY, AiMusicGenerator, FavoriteVoicesPanel, HistoryPanel, MyVoicesPanel, VisualEffectsPanel, VoiceSynthesisPanel } from "./panels.jsx";
 import { SmartFramePanel } from "./SmartFramePanel.jsx";
-import { SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
+import { ClickRippleInspector, SubjectEffectsInspector } from "./SubjectEffectsPanel.jsx";
 import { OpticalFlowTrackingPanel } from "./OpticalFlowTrackingPanel.jsx";
 import { CinematicDepthPanel } from "./CinematicDepthPanel.jsx";
 import { PhotoParallaxPanel } from "./PhotoParallaxPanel.jsx";
@@ -1395,6 +1395,7 @@ export function VoicePanel({
   effectPhase,
   effectsPanelMode = "outline",
   updateSelectedSubjectEffect,
+  updateSelectedClickRipple,
   removeSelectedSubjectEffect,
   faceSwap,
   cinematicDepth,
@@ -1421,6 +1422,7 @@ export function VoicePanel({
   const isOpticalFlowContext = isEffectsContext && effectsPanelMode === "vector-tracking";
   const isCinematicDepthContext = isEffectsContext && effectsPanelMode === "cinematic-depth";
   const isPhotoParallaxContext = isEffectsContext && effectsPanelMode === "photo-parallax";
+  const isClickRippleContext = isEffectsContext && effectsPanelMode === "click-ripple";
   const audioPropertySegment = selectedTrack === "audio" ? selectedAudioSegment : selectedTrackAudioSegment;
   const isAudioClipContext = panelContext === "audio" && (
     Boolean(selectedTrack === "audio" && selectedAudioSegment)
@@ -1581,7 +1583,7 @@ export function VoicePanel({
       ) : null}
 
       <div className={`voice-tab-body ${isVisualContext && !selectedVisualSegment ? "is-empty-visual-context" : ""}`}>
-        {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext && !isCinematicDepthContext && !isPhotoParallaxContext ? <SubjectEffectsInspector
+        {isEffectsContext && !isFaceSwapContext && !isOpticalFlowContext && !isCinematicDepthContext && !isPhotoParallaxContext && !isClickRippleContext ? <SubjectEffectsInspector
           t={t}
           segment={effectSegment}
           analysis={effectAnalysis}
@@ -1593,6 +1595,7 @@ export function VoicePanel({
           onRemove={removeSelectedSubjectEffect}
           singleSection={mobileInspectorSection}
         /> : null}
+        {isClickRippleContext ? <ClickRippleInspector t={t} segment={effectSegment} onChange={updateSelectedClickRipple} /> : null}
         {isFaceSwapContext ? <FaceSwapContextPanel t={t} hasVisual={hasVisual} visualType={visualType} faceSwap={faceSwap} /> : null}
         {isOpticalFlowContext ? <OpticalFlowTrackingPanel
           t={t}
