@@ -4004,6 +4004,70 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 .subject-outline-entry.is-active .subject-outline-entry-state { color: #67f0e4; }
+.click-ripple-card-preview > img { filter: grayscale(1) contrast(.92) brightness(.78); }
+.click-ripple-card-gray {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: rgba(8,12,16,.1);
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+.click-ripple-card-hit {
+  position: absolute;
+  z-index: 2;
+  top: 49%;
+  left: 42%;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid rgba(255,255,255,.96);
+  border-radius: 50%;
+  background: rgba(5,12,16,.78);
+  box-shadow: 0 0 16px rgba(84,243,225,.7);
+  transform: translate(-50%,-50%);
+}
+.click-ripple-card-hit > i { position: absolute; inset: 50%; border: 1.5px solid #54f3e1; border-radius: 50%; opacity: 0; transform: translate(-50%,-50%); }
+.click-ripple-card-hit > b { position: absolute; top: -13px; left: -4px; width: 18px; height: 18px; border-radius: 50%; background: rgba(84,243,225,.13); filter: blur(5px); }
+.click-ripple-effect-entry.is-previewing .click-ripple-card-gray { opacity: .35; }
+.click-ripple-effect-entry.is-previewing .click-ripple-card-hit { animation: click-ripple-card-move 2.3s cubic-bezier(.45,0,.2,1) infinite; }
+.click-ripple-effect-entry.is-previewing .click-ripple-card-hit > i:first-child { animation: click-ripple-card-wave 1.15s ease-out infinite; }
+@keyframes click-ripple-card-wave { 0% { width: 12px; height: 12px; opacity: .9; } 100% { width: 90px; height: 90px; opacity: 0; } }
+@keyframes click-ripple-card-move { 0%,18% { top: 30%; left: 24%; } 35%,53% { top: 24%; left: 69%; } 70%,85% { top: 70%; left: 61%; } 100% { top: 54%; left: 30%; } }
+.click-ripple-controls { display: grid; gap: 10px; border: 1px solid rgba(84,243,225,.16); border-radius: 11px; padding: 11px; background: linear-gradient(145deg,rgba(18,34,38,.82),rgba(8,15,20,.72)); }
+.click-ripple-controls > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 2px; }
+.click-ripple-controls > header > div { display: flex; align-items: center; gap: 8px; min-width: 0; color: #59eddf; }
+.click-ripple-controls > header span { display: grid; gap: 2px; min-width: 0; }
+.click-ripple-controls > header strong { color: #e5f5f3; font-size: 11px; }
+.click-ripple-controls > header small { overflow: hidden; color: #71828a; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.click-ripple-color-row, .click-ripple-meter-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #8c9aa3; font-size: 9px; }
+.click-ripple-color-row input { width: 38px; height: 26px; overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; padding: 2px; background: #10181e; cursor: pointer; }
+.click-ripple-meter-row select { min-width: 88px; height: 30px; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: 0 28px 0 10px; color: #dbe8ed; background: #10181e; font-size: 10px; cursor: pointer; }
+.click-ripple-preview { position: absolute; z-index: 6; inset: 0; overflow: hidden; pointer-events: none; }
+.click-ripple-desaturate { position: absolute; inset: 0; background: rgba(255,255,255,.001); }
+.click-ripple-water-wave {
+  position: absolute;
+  inset: 0;
+  opacity: var(--click-wave-opacity);
+  background: radial-gradient(circle farthest-corner at var(--click-x) var(--click-y), transparent 0 calc(var(--click-wave-radius) - 1.15%), color-mix(in srgb,var(--click-color) 20%,transparent) calc(var(--click-wave-radius) - .75%), color-mix(in srgb,var(--click-color) 92%,white 8%) var(--click-wave-radius), rgba(3,16,22,.5) calc(var(--click-wave-radius) + .55%), transparent calc(var(--click-wave-radius) + 1.25%));
+  backdrop-filter: brightness(1.045) contrast(1.045);
+  -webkit-backdrop-filter: brightness(1.045) contrast(1.045);
+  mask-image: radial-gradient(circle farthest-corner at var(--click-x) var(--click-y), transparent 0 calc(var(--click-wave-radius) - 1.6%), #000 calc(var(--click-wave-radius) - 1.3%) calc(var(--click-wave-radius) + 1.45%), transparent calc(var(--click-wave-radius) + 1.75%));
+  -webkit-mask-image: radial-gradient(circle farthest-corner at var(--click-x) var(--click-y), transparent 0 calc(var(--click-wave-radius) - 1.6%), #000 calc(var(--click-wave-radius) - 1.3%) calc(var(--click-wave-radius) + 1.45%), transparent calc(var(--click-wave-radius) + 1.75%));
+}
+.click-ripple-hit-circle {
+  position: absolute;
+  top: var(--click-cursor-y);
+  left: var(--click-cursor-x);
+  width: calc(var(--click-hit-radius) * 2);
+  aspect-ratio: 1;
+  border: max(2px,.3vw) solid rgba(255,255,255,.96);
+  border-radius: 50%;
+  background: color-mix(in srgb,var(--click-color) 8%,transparent);
+  opacity: var(--click-hit-opacity);
+  box-shadow: 0 0 calc(22px * var(--click-glow)) var(--click-color), inset 0 0 calc(12px * var(--click-glow)) color-mix(in srgb,var(--click-color) 54%,transparent);
+  transform: translate(-50%,-50%) scale(var(--click-press));
+}
+.visual-overlay-layer > .click-ripple-preview { z-index: 6; border-radius: inherit; }
 .subject-optical-flow-entry .subject-outline-entry-preview > img { filter: saturate(.9) brightness(.82); }
 .subject-optical-flow-entry.is-previewing .subject-outline-entry-preview > img { filter: saturate(1.15) brightness(1); }
 .subject-optical-flow-badge {
@@ -4029,6 +4093,8 @@ button:disabled {
   .subject-outline-entry,
   .subject-outline-entry-preview > img { transition: none; }
   .subject-outline-entry.is-previewing .subject-outline-entry-preview-state > i { animation: none; }
+  .click-ripple-effect-entry.is-previewing .click-ripple-card-hit,
+  .click-ripple-effect-entry.is-previewing .click-ripple-card-hit > i { animation: none; }
 }
 .subject-analysis-status { display: grid; gap: 9px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 11px; background: linear-gradient(145deg,rgba(19,31,37,.9),rgba(8,14,19,.82)); }
 .subject-analysis-status.is-running { border-color: rgba(53,234,217,.28); }

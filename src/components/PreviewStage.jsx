@@ -29,10 +29,41 @@ import { getOverlayToolbarPosition } from "../lib/overlayToolbarPlacement.js";
 import { FILTER_OPTIONS, RATIO_OPTIONS } from "../config/editor.js";
 import { getVectorDesignAppearance, getVectorRenderSource } from "../lib/vectorDesign.js";
 import { hasSubjectEffect, normalizeSubjectEffect } from "../lib/subjectEffects.js";
+import { normalizeClickRippleEffect, resolveClickRippleState } from "../lib/clickRippleEffect.js";
 import { SubjectMaterialFilterDefs } from "./SubjectMaterialFilter.jsx";
 import { drawCinematicDepthFrame, normalizeCinematicDepth } from "../lib/depthOfField.js";
 import { drawPhotoParallaxFrame, normalizePhotoParallax } from "../lib/photoParallax.js";
 import { composeColorGradeFilter, resolveColorGrade } from "../lib/colorGrade.js";
+
+function ClickRippleOverlay({ effect: value, time }) {
+  const effect = normalizeClickRippleEffect(value);
+  if (!effect.enabled) return null;
+  const state = resolveClickRippleState(effect, time);
+  const revealRadius = effect.radius + (100 - effect.radius) * state.revealProgress;
+  const ringRadius = effect.radius + (100 - effect.radius) * state.rippleProgress;
+  const grayscale = effect.colorAmount;
+  const mask = `radial-gradient(circle farthest-corner at ${state.revealX}% ${state.revealY}%, transparent 0 ${revealRadius}%, #000 ${Math.min(103, revealRadius + 2.5)}%)`;
+  const style = {
+    "--click-x": `${state.hitX}%`,
+    "--click-y": `${state.hitY}%`,
+    "--click-cursor-x": `${state.x}%`,
+    "--click-cursor-y": `${state.y}%`,
+    "--click-radius": `${ringRadius}%`,
+    "--click-hit-radius": `${effect.radius}%`,
+    "--click-ring-opacity": state.ringOpacity,
+    "--click-press": state.press * state.hitScale,
+    "--click-hit-opacity": state.hitOpacity,
+    "--click-glow": state.effect.glow,
+    "--click-color": state.effect.color,
+  };
+  return (
+    <div className="click-ripple-preview" style={style} aria-hidden="true">
+      {grayscale > 0.002 ? <span className="click-ripple-desaturate" style={{ backdropFilter: `grayscale(${grayscale})`, WebkitBackdropFilter: `grayscale(${grayscale})`, maskImage: mask, WebkitMaskImage: mask }} /> : null}
+      <span className="click-ripple-water-wave" style={{ "--click-wave-radius": `${ringRadius}%`, "--click-wave-opacity": state.ringOpacity }} />
+      <span className="click-ripple-hit-circle" />
+    </div>
+  );
+}
 
 function VisualOverlayMedia({ overlay, src, style, isPlaying, localTime }) {
   const videoRef = useRef(null);
@@ -738,6 +769,7 @@ export function PreviewStage({
                 /> : null}
               </div>
             ) : null}
+            {renderedVisualSrc && trackVisibility.image ? <ClickRippleOverlay effect={visualEffects?.clickRipple} time={visualLocalTime} /> : null}
             {renderedVisualSrc && trackVisibility.image && visualTransformEditable && !visualMaskEditable ? (
               <div className="visual-transform-box" style={visualTransformBoxStyle} onPointerDown={(event) => startVisualTransform(event, "move")}>
                 <button className="visual-transform-rotate" type="button" aria-label={t("visualRotation", "旋转")} onPointerDown={(event) => startVisualTransform(event, "rotate")} />
@@ -860,6 +892,7 @@ export function PreviewStage({
                     alt=""
                     style={{ filter: cutoutFilter }}
                   /> : null}
+                  <ClickRippleOverlay effect={overlay.clickRipple} time={localTime} />
                   {selected && !isPlaying && hasOverlayMask && visualOverlayMaskEditable ? <div
                     className={`visual-mask-editor is-${overlayMask.type}`}
                     style={{

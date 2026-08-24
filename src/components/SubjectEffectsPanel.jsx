@@ -4,6 +4,7 @@ import {
   Check,
   CircleNotch,
   Cube,
+  CursorClick,
   ImageSquare,
   MagicWand,
   Pause,
@@ -23,6 +24,7 @@ import {
   updateSubjectEffect,
 } from "../lib/subjectEffects.js";
 import { formatTime } from "../lib/timeline.js";
+import { normalizeClickRippleEffect, updateClickRippleEffect } from "../lib/clickRippleEffect.js";
 import {
   getSubjectMaterial,
   SUBJECT_MATERIALS,
@@ -120,6 +122,56 @@ const CINEMATIC_DEPTH_PREVIEW_STILL = "/assets/effects/previews/cinematic-depth-
 const CINEMATIC_DEPTH_PREVIEW_HOVER = "/assets/effects/previews/cinematic-depth-hover.png";
 const PHOTO_PARALLAX_PREVIEW_STILL = "/assets/effects/previews/photo-parallax-still.png";
 const PHOTO_PARALLAX_PREVIEW_HOVER = "/assets/effects/previews/photo-parallax-hover.png";
+
+function ClickRippleEffectCard({ t, active, onClick }) {
+  const [previewing, setPreviewing] = useState(false);
+  return (
+    <button
+      className={`subject-outline-entry click-ripple-effect-entry ${active ? "is-active" : ""} ${previewing ? "is-previewing" : ""}`}
+      type="button"
+      onClick={onClick}
+      onPointerEnter={(event) => { if (event.pointerType !== "touch") setPreviewing(true); }}
+      onPointerLeave={() => setPreviewing(false)}
+      onFocus={() => setPreviewing(true)}
+      onBlur={() => setPreviewing(false)}
+    >
+      <span className="subject-outline-entry-preview click-ripple-card-preview">
+        <img src="/assets/sample-portrait.png" alt="" />
+        <span className="click-ripple-card-gray" />
+        <span className="click-ripple-card-hit"><i /><b /></span>
+        <span className="subject-outline-entry-preview-state"><CursorClick size={13} weight="fill" />{previewing ? t("effectPreviewPlaying") : t("clickRippleKicker")}</span>
+      </span>
+      <span className="subject-outline-entry-footer">
+        <span className="subject-outline-entry-copy"><strong>{t("clickRippleTitle")}</strong><small>{t("clickRippleHint")}</small></span>
+        <span className="subject-outline-entry-state">{active ? <Check size={16} weight="bold" /> : <CaretRight size={17} />}</span>
+      </span>
+    </button>
+  );
+}
+
+function ClickRippleControls({ t, effect, onChange, showRemove = false }) {
+  const patch = (next) => onChange?.(updateClickRippleEffect(effect, next));
+  return (
+    <section className="click-ripple-controls">
+      <header>
+        <div><CursorClick size={18} weight="duotone" /><span><strong>{t("clickRippleTitle")}</strong><small>{t("clickRippleControlsHint")}</small></span></div>
+        <label className="mini-switch"><input type="checkbox" checked={effect.enabled} onChange={(event) => patch({ enabled: event.target.checked })} /><i /></label>
+      </header>
+      <label className="click-ripple-meter-row"><span>{t("clickRippleMeter")}</span><select value={effect.meter} onChange={(event) => patch({ meter: event.target.value })}>{["2/4", "3/4", "4/4", "5/4", "6/8", "7/8", "9/8", "12/8"].map((meter) => <option value={meter} key={meter}>{meter}</option>)}</select></label>
+      <EffectRange label={t("clickRippleTempo")} value={effect.bpm} min={30} max={180} step={1} suffix=" BPM" onChange={(bpm) => patch({ bpm })} />
+      <EffectRange label={t("clickRippleRadius")} value={effect.radius / 100} min={0.02} max={0.18} step={0.01} suffix="%" onChange={(radius) => patch({ radius: radius * 100 })} />
+      <EffectRange label={t("clickRippleSpreadDuration")} value={effect.rippleDuration} min={Math.min(0.3, effect.interval * 0.92)} max={Math.min(1.4, effect.interval * 0.92)} step={0.01} suffix="s" onChange={(rippleDuration) => patch({ rippleDuration })} />
+      <EffectRange label={t("clickRippleGlow")} value={effect.glow} min={0} max={1} step={0.01} suffix="%" onChange={(glow) => patch({ glow })} />
+      <label className="click-ripple-color-row"><span>{t("clickRippleColor")}</span><input type="color" value={effect.color} onChange={(event) => patch({ color: event.target.value })} /></label>
+      {showRemove ? <button className="subject-remove-effect" type="button" onClick={() => patch({ enabled: false })}><Trash size={16} />{t("effectRemove")}</button> : null}
+    </section>
+  );
+}
+
+export function ClickRippleInspector({ t, segment, onChange }) {
+  if (!segment) return <div className="visual-context-empty"><ImageSquare size={30} weight="duotone" /><strong>{t("effectSelectClip")}</strong><span>{t("effectSelectClipHint")}</span></div>;
+  return <div className="subject-effects-inspector"><ClickRippleControls t={t} effect={normalizeClickRippleEffect(segment.clickRipple)} onChange={onChange} showRemove /></div>;
+}
 
 function ObjectOutlineCard({ t, active, running, progress, analysis, onClick }) {
   const [hovered, setHovered] = useState(false);
@@ -683,6 +735,8 @@ export function SubjectEffectsWorkspace({
   onOpenOpticalFlow,
   onOpenCinematicDepth,
   onOpenPhotoParallax,
+  onOpenClickRipple,
+  onChangeClickRipple,
   faceSwapActive = false,
   opticalFlowActive = false,
   cinematicDepthActive = false,
@@ -696,6 +750,7 @@ export function SubjectEffectsWorkspace({
   onRemove,
 }) {
   const effect = normalizeSubjectEffect(segment?.subjectEffect);
+  const clickRipple = normalizeClickRippleEffect(segment?.clickRipple);
   const hasVideo = segment?.type === "video";
   const analysisTargetKind = analysis?.targetKind
     || (String(analysis?.pipeline || "").startsWith("object-") ? "object" : "person");
@@ -733,7 +788,7 @@ export function SubjectEffectsWorkspace({
     <div className="tool-panel subject-effects-workspace mobile-panel-scroll-body">
       <header className="subject-effects-heading">
         <div><MagicWand size={22} /><span><strong>{t("effects")}</strong><small>{segment.name || (hasVideo ? t("effectVideoClip") : t("effectImageClip"))}</small></span></div>
-        {effect.enabled && analysis?.complete ? <em>{t("effectApplied")}</em> : null}
+        {(effect.enabled && analysis?.complete) || clickRipple.enabled ? <em>{t("effectApplied")}</em> : null}
       </header>
 
       <div className="subject-effect-capability-grid">
@@ -770,6 +825,14 @@ export function SubjectEffectsWorkspace({
           running={photoParallaxRunning}
           progress={photoParallaxProgress}
           onClick={onOpenPhotoParallax}
+        />
+        <ClickRippleEffectCard
+          t={t}
+          active={clickRipple.enabled}
+          onClick={() => {
+            if (!clickRipple.enabled) onChangeClickRipple?.(updateClickRippleEffect(clickRipple, { enabled: true }));
+            onOpenClickRipple?.();
+          }}
         />
       </div>
     </div>

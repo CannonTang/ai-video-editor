@@ -204,6 +204,7 @@ export function EditorSidebar({ model: d }) {
             effectProgress={d.effectProgress}
             effectPhase={d.effectPhase}
             updateSelectedSubjectEffect={d.updateSelectedSubjectEffect}
+            updateSelectedClickRipple={d.updateSelectedClickRipple}
             removeSelectedSubjectEffect={d.removeSelectedSubjectEffect}
             effectsPanelMode={d.effectsPanelMode}
             openEffectsInspector={() => {
@@ -224,6 +225,10 @@ export function EditorSidebar({ model: d }) {
             }}
             openPhotoParallaxInspector={() => {
               d.setEffectsPanelMode?.("photo-parallax");
+              d.setMobilePanel?.("inspector");
+            }}
+            openClickRippleInspector={() => {
+              d.setEffectsPanelMode?.("click-ripple");
               d.setMobilePanel?.("inspector");
             }}
             cinematicDepth={d.cinematicDepth}

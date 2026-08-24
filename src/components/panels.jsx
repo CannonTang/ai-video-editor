@@ -1089,12 +1089,14 @@ export function ToolPanel(props) {
     effectProgress,
     effectPhase,
     updateSelectedSubjectEffect,
+    updateSelectedClickRipple,
     removeSelectedSubjectEffect,
     openEffectsInspector,
     openFaceSwapInspector,
     openOpticalFlowInspector,
     openCinematicDepthInspector,
     openPhotoParallaxInspector,
+    openClickRippleInspector,
     cinematicDepth,
     photoParallaxDepth,
     effectsPanelMode,
@@ -1460,12 +1462,14 @@ export function ToolPanel(props) {
         progress={effectProgress}
         phase={effectPhase}
         onChange={updateSelectedSubjectEffect}
+        onChangeClickRipple={updateSelectedClickRipple}
         onAnalyze={analyzeEffectVisual || analyzeCurrentVisual}
         onOpenInspector={openEffectsInspector}
         onOpenFaceSwap={openFaceSwapInspector}
         onOpenOpticalFlow={openOpticalFlowInspector}
         onOpenCinematicDepth={openCinematicDepthInspector}
         onOpenPhotoParallax={openPhotoParallaxInspector}
+        onOpenClickRipple={openClickRippleInspector}
         faceSwapActive={effectsPanelMode === "face-swap"}
         opticalFlowActive={effectsPanelMode === "vector-tracking"}
         cinematicDepthActive={effectsPanelMode === "cinematic-depth"}

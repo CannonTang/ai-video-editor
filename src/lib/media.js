@@ -41,6 +41,7 @@ import { drawCinematicDepthFrame, normalizeCinematicDepth, resolveDepthAnalysisA
 import { drawPhotoParallaxFrame, normalizePhotoParallax } from "./photoParallax.js";
 import { createVideoTrackFrame } from "./videoTrackFrames.js";
 import { composeColorGradeFilter, resolveColorGrade } from "./colorGrade.js";
+import { normalizeClickRippleEffect, resolveClickRippleState } from "./clickRippleEffect.js";
 
 export function getAudioRecordingFormat() {
   if (typeof MediaRecorder === "undefined") {
@@ -880,6 +881,111 @@ function drawFittedVisual(context, visual, canvas, fitMode, filter, vision = nul
   return layout;
 }
 
+function drawClickRippleEffect(context, canvas, value, time, region = null) {
+  const effect = normalizeClickRippleEffect(value);
+  if (!effect.enabled) return;
+  const state = resolveClickRippleState(effect, time);
+  const { width, height } = canvas;
+  const effectRegion = region || { x: 0, y: 0, width, height };
+  const minDimension = Math.min(effectRegion.width, effectRegion.height);
+  const x = effectRegion.x + state.hitX / 100 * effectRegion.width;
+  const y = effectRegion.y + state.hitY / 100 * effectRegion.height;
+  const cursorX = effectRegion.x + state.x / 100 * effectRegion.width;
+  const cursorY = effectRegion.y + state.y / 100 * effectRegion.height;
+  const revealX = effectRegion.x + state.revealX / 100 * effectRegion.width;
+  const revealY = effectRegion.y + state.revealY / 100 * effectRegion.height;
+  const startRadius = effect.radius / 100 * minDimension;
+  const farthestRevealRadius = Math.max(
+    Math.hypot(revealX - effectRegion.x, revealY - effectRegion.y),
+    Math.hypot(revealX - (effectRegion.x + effectRegion.width), revealY - effectRegion.y),
+    Math.hypot(revealX - effectRegion.x, revealY - (effectRegion.y + effectRegion.height)),
+    Math.hypot(revealX - (effectRegion.x + effectRegion.width), revealY - (effectRegion.y + effectRegion.height)),
+  );
+  const farthestRingRadius = Math.max(
+    Math.hypot(x - effectRegion.x, y - effectRegion.y),
+    Math.hypot(x - (effectRegion.x + effectRegion.width), y - effectRegion.y),
+    Math.hypot(x - effectRegion.x, y - (effectRegion.y + effectRegion.height)),
+    Math.hypot(x - (effectRegion.x + effectRegion.width), y - (effectRegion.y + effectRegion.height)),
+  );
+  const revealRadius = startRadius + (farthestRevealRadius - startRadius) * state.revealProgress;
+  const ringRadius = startRadius + (farthestRingRadius - startRadius) * state.rippleProgress;
+  const grayscale = effect.colorAmount;
+  const snapshot = getVisualEffectsLayers(canvas).visual;
+  const snapshotContext = snapshot.getContext("2d");
+  snapshotContext.clearRect(0, 0, width, height);
+  snapshotContext.drawImage(canvas, 0, 0);
+  if (grayscale > 0.002) {
+    context.save();
+    context.beginPath();
+    context.rect(effectRegion.x, effectRegion.y, effectRegion.width, effectRegion.height);
+    context.clip();
+    context.filter = `grayscale(${grayscale})`;
+    context.drawImage(snapshot, 0, 0);
+    context.restore();
+    context.save();
+    context.beginPath();
+    context.arc(revealX, revealY, Math.max(2, revealRadius), 0, Math.PI * 2);
+    context.clip();
+    context.drawImage(snapshot, 0, 0);
+    context.restore();
+  }
+  if (state.ringOpacity > 0.002) {
+    const color = effect.color;
+    const refractSnapshot = getVisualEffectsLayers(canvas).mask;
+    const refractContext = refractSnapshot.getContext("2d");
+    refractContext.clearRect(0, 0, width, height);
+    refractContext.drawImage(canvas, 0, 0);
+    const wavelength = Math.max(3, minDimension * 0.028);
+    context.save();
+    context.beginPath(); context.rect(effectRegion.x, effectRegion.y, effectRegion.width, effectRegion.height); context.clip();
+    {
+      const waveRadius = ringRadius;
+      const bandWidth = Math.max(2, wavelength * 0.34);
+      const opacity = state.ringOpacity;
+
+      context.save();
+      context.beginPath();
+      context.arc(x, y, waveRadius + bandWidth, 0, Math.PI * 2);
+      context.arc(x, y, Math.max(0, waveRadius - bandWidth), 0, Math.PI * 2, true);
+      context.clip("evenodd");
+      const refractionScale = 1 + 0.006 * opacity;
+      context.globalAlpha = Math.min(0.72, opacity * 0.52);
+      context.translate(x, y);
+      context.scale(refractionScale, refractionScale);
+      context.translate(-x, -y);
+      context.drawImage(refractSnapshot, 0, 0);
+      context.restore();
+
+      context.globalAlpha = opacity * 0.92;
+      context.strokeStyle = color;
+      context.lineWidth = Math.max(1, bandWidth * 0.5);
+      context.shadowColor = color;
+      context.shadowBlur = minDimension * 0.025 * effect.glow * opacity;
+      context.beginPath();
+      context.arc(x, y, waveRadius, 0, Math.PI * 2);
+      context.stroke();
+      context.globalAlpha = opacity * 0.32;
+      context.strokeStyle = "rgba(3, 16, 22, .72)";
+      context.lineWidth = Math.max(1, bandWidth * 0.3);
+      context.shadowBlur = 0;
+      context.beginPath();
+      context.arc(x, y, Math.max(1, waveRadius - bandWidth * 0.72), 0, Math.PI * 2);
+      context.stroke();
+    }
+    context.restore();
+  }
+  context.save();
+  context.globalAlpha = Math.max(0.24, state.ringOpacity) * state.hitOpacity;
+  context.strokeStyle = "rgba(255, 255, 255, .96)";
+  context.lineWidth = Math.max(1.5, minDimension * 0.003);
+  context.shadowColor = effect.color;
+  context.shadowBlur = minDimension * 0.025 * effect.glow;
+  context.beginPath();
+  context.arc(cursorX, cursorY, Math.max(5, startRadius * state.press * state.hitScale), 0, Math.PI * 2);
+  context.stroke();
+  context.restore();
+}
+
 export function drawPreviewFrame(context, visual, canvas, options) {
   const {
     subtitle,
@@ -996,6 +1102,8 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     context.restore();
   }
 
+  drawClickRippleEffect(context, canvas, visualEffects?.clickRipple, visualTime);
+
   if (transitionNext?.visual && transitionId !== "none" && transitionProgress > 0) {
     const amount = Math.max(0, Math.min(1, transitionProgress));
     context.save();
@@ -1044,6 +1152,7 @@ export function drawPreviewFrame(context, visual, canvas, options) {
     };
     const isVector = overlay.kind === "vector" || Boolean(overlay.vectorBody);
     const vectorAppearance = getVectorDesignAppearance(overlay.vectorDesign);
+    const overlayClickRipple = normalizeClickRippleEffect(overlay.clickRipple);
     const overlayFilter = isVector
       ? vectorAppearance.filter
       : FILTER_OPTIONS.find((option) => option.id === overlay.filterId)?.css || "none";
@@ -1085,6 +1194,15 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       layerContext.clearRect(0, 0, width, height);
       maskContext.clearRect(0, 0, width, height);
       paintOverlay(layerContext);
+      if (overlayClickRipple.enabled) {
+        const fitted = getVisualFitRect(getVisualDimensions(overlayVisual), canvas, "contain");
+        drawClickRippleEffect(layerContext, layers.visual, overlayClickRipple, overlayTime, {
+          x: width / 2 + animatedOverlayTransform.x / 100 * width - fitted.width * animatedOverlayTransform.scale / 2,
+          y: height / 2 + animatedOverlayTransform.y / 100 * height - fitted.height * animatedOverlayTransform.scale / 2,
+          width: fitted.width * animatedOverlayTransform.scale,
+          height: fitted.height * animatedOverlayTransform.scale,
+        });
+      }
       maskContext.save();
       if (mask.inverted) {
         maskContext.fillStyle = "#fff";
@@ -1101,6 +1219,22 @@ export function drawPreviewFrame(context, visual, canvas, options) {
       layerContext.globalCompositeOperation = "destination-in";
       layerContext.drawImage(layers.mask, 0, 0);
       layerContext.restore();
+      context.save();
+      if (isVector) context.globalCompositeOperation = vectorAppearance.compositeOperation;
+      context.drawImage(layers.visual, 0, 0);
+      context.restore();
+    } else if (overlayClickRipple.enabled) {
+      const layers = getVisualEffectsLayers(canvas);
+      const layerContext = layers.visual.getContext("2d");
+      layerContext.clearRect(0, 0, width, height);
+      paintOverlay(layerContext);
+      const fitted = getVisualFitRect(getVisualDimensions(overlayVisual), canvas, "contain");
+      drawClickRippleEffect(layerContext, layers.visual, overlayClickRipple, overlayTime, {
+        x: width / 2 + animatedOverlayTransform.x / 100 * width - fitted.width * animatedOverlayTransform.scale / 2,
+        y: height / 2 + animatedOverlayTransform.y / 100 * height - fitted.height * animatedOverlayTransform.scale / 2,
+        width: fitted.width * animatedOverlayTransform.scale,
+        height: fitted.height * animatedOverlayTransform.scale,
+      });
       context.save();
       if (isVector) context.globalCompositeOperation = vectorAppearance.compositeOperation;
       context.drawImage(layers.visual, 0, 0);

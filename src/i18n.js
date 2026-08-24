@@ -262,6 +262,64 @@ export const APP_LANGUAGES = [
   { id: "ru", name: "Russian", nativeName: "Русский", hint: "Russian" },
 ];
 
+const CLICK_RIPPLE_COPY = {
+  zh: {
+    clickRippleTitle: "节奏点击涟漪", clickRippleHint: "每次命中触发一圈折射水波并传播至整个画面。", clickRippleKicker: "节奏命中",
+    clickRippleControlsHint: "拍号控制音符单位与强弱拍，BPM 控制速度", clickRippleMeter: "拍号", clickRippleTempo: "BPM（♩）",
+    clickRippleInterval: "命中间隔", clickRippleRadius: "命中圆大小", clickRippleSpreadDuration: "同步传播时长", clickRippleColorize: "灰转彩时长", clickRippleGlow: "发光强度", clickRippleColor: "水波颜色",
+  },
+  en: {
+    clickRippleTitle: "Rhythm click ripple", clickRippleHint: "Each hit launches one refractive water ripple across the full frame.", clickRippleKicker: "RHYTHM HIT",
+    clickRippleControlsHint: "Musical meter controls subdivision and accents; BPM controls tempo", clickRippleMeter: "Time signature", clickRippleTempo: "Tempo (♩ BPM)",
+    clickRippleInterval: "Hit interval", clickRippleRadius: "Hit circle size", clickRippleSpreadDuration: "Synchronized propagation", clickRippleColorize: "Grayscale to color", clickRippleGlow: "Glow", clickRippleColor: "Ripple color",
+  },
+  ja: {
+    clickRippleTitle: "リズムクリック波紋", clickRippleHint: "ヒットごとに1つの屈折する水紋が画面全体へ広がります。", clickRippleKicker: "リズムヒット",
+    clickRippleControlsHint: "拍子が音符単位とアクセントを、BPMが速さを制御します", clickRippleMeter: "拍子", clickRippleTempo: "テンポ（♩ BPM）",
+    clickRippleInterval: "ヒット間隔", clickRippleRadius: "ヒットサークルのサイズ", clickRippleSpreadDuration: "同期伝播時間", clickRippleColorize: "グレーからカラー", clickRippleGlow: "発光強度", clickRippleColor: "波紋の色",
+  },
+  ko: {
+    clickRippleTitle: "리듬 클릭 물결", clickRippleHint: "히트할 때마다 굴절 물결 하나가 화면 전체로 퍼집니다.", clickRippleKicker: "리듬 히트",
+    clickRippleControlsHint: "박자는 음표 단위와 강세를, BPM은 속도를 조절합니다", clickRippleMeter: "박자표", clickRippleTempo: "템포(♩ BPM)",
+    clickRippleInterval: "히트 간격", clickRippleRadius: "히트 서클 크기", clickRippleSpreadDuration: "동기화 전파 시간", clickRippleColorize: "흑백에서 컬러로", clickRippleGlow: "글로우", clickRippleColor: "물결 색상",
+  },
+  es: {
+    clickRippleTitle: "Onda de clic rítmica", clickRippleHint: "Cada golpe lanza una onda de agua refractiva por todo el cuadro.", clickRippleKicker: "GOLPE RÍTMICO",
+    clickRippleControlsHint: "El compás controla subdivisiones y acentos; BPM controla la velocidad", clickRippleMeter: "Compás", clickRippleTempo: "Tempo (♩ BPM)",
+    clickRippleInterval: "Intervalo de golpe", clickRippleRadius: "Tamaño del círculo", clickRippleSpreadDuration: "Propagación sincronizada", clickRippleColorize: "De gris a color", clickRippleGlow: "Resplandor", clickRippleColor: "Color de la onda",
+  },
+  fr: {
+    clickRippleTitle: "Onde de clic rythmique", clickRippleHint: "Chaque frappe propage une onde d’eau réfractive sur toute l’image.", clickRippleKicker: "FRAPPE RYTHMIQUE",
+    clickRippleControlsHint: "La mesure règle les subdivisions et accents ; le BPM règle la vitesse", clickRippleMeter: "Mesure", clickRippleTempo: "Tempo (♩ BPM)",
+    clickRippleInterval: "Intervalle de frappe", clickRippleRadius: "Taille du cercle", clickRippleSpreadDuration: "Propagation synchronisée", clickRippleColorize: "Du gris à la couleur", clickRippleGlow: "Lueur", clickRippleColor: "Couleur de l’onde",
+  },
+  de: {
+    clickRippleTitle: "Rhythmische Klickwelle", clickRippleHint: "Jeder Treffer sendet eine gebrochene Wasserwelle über das gesamte Bild.", clickRippleKicker: "RHYTHMUS-TREFFER",
+    clickRippleControlsHint: "Die Taktart steuert Unterteilung und Akzente, BPM das Tempo", clickRippleMeter: "Taktart", clickRippleTempo: "Tempo (♩ BPM)",
+    clickRippleInterval: "Trefferintervall", clickRippleRadius: "Größe des Trefferkreises", clickRippleSpreadDuration: "Synchrone Ausbreitung", clickRippleColorize: "Grau zu Farbe", clickRippleGlow: "Leuchten", clickRippleColor: "Wellenfarbe",
+  },
+  pt: {
+    clickRippleTitle: "Onda de clique rítmica", clickRippleHint: "Cada batida lança uma onda d’água refrativa por todo o quadro.", clickRippleKicker: "BATIDA RÍTMICA",
+    clickRippleControlsHint: "O compasso controla subdivisões e acentos; o BPM controla a velocidade", clickRippleMeter: "Compasso", clickRippleTempo: "Andamento (♩ BPM)",
+    clickRippleInterval: "Intervalo da batida", clickRippleRadius: "Tamanho do círculo", clickRippleSpreadDuration: "Propagação sincronizada", clickRippleColorize: "De cinza para cor", clickRippleGlow: "Brilho", clickRippleColor: "Cor da onda",
+  },
+  th: {
+    clickRippleTitle: "ระลอกคลิกตามจังหวะ", clickRippleHint: "แต่ละจังหวะจะปล่อยระลอกน้ำหักเหหนึ่งวงให้แผ่ทั่วทั้งภาพ", clickRippleKicker: "จังหวะคลิก",
+    clickRippleControlsHint: "อัตราจังหวะกำหนดหน่วยโน้ตและจังหวะเน้น ส่วน BPM กำหนดความเร็ว", clickRippleMeter: "อัตราจังหวะ", clickRippleTempo: "ความเร็ว (♩ BPM)",
+    clickRippleInterval: "ช่วงห่างจังหวะ", clickRippleRadius: "ขนาดวงคลิก", clickRippleSpreadDuration: "ระยะเวลาการแผ่พร้อมกัน", clickRippleColorize: "จากเทาเป็นสี", clickRippleGlow: "ความเรืองแสง", clickRippleColor: "สีระลอกน้ำ",
+  },
+  vi: {
+    clickRippleTitle: "Gợn sóng nhấp theo nhịp", clickRippleHint: "Mỗi nhịp chạm tạo một vòng gợn nước khúc xạ lan khắp khung hình.", clickRippleKicker: "NHỊP CHẠM",
+    clickRippleControlsHint: "Nhịp kiểm soát đơn vị nốt và trọng âm; BPM điều khiển tốc độ", clickRippleMeter: "Nhịp", clickRippleTempo: "Tốc độ (♩ BPM)",
+    clickRippleInterval: "Khoảng cách nhịp", clickRippleRadius: "Kích thước vòng chạm", clickRippleSpreadDuration: "Thời gian lan đồng bộ", clickRippleColorize: "Từ xám sang màu", clickRippleGlow: "Độ phát sáng", clickRippleColor: "Màu gợn sóng",
+  },
+  ru: {
+    clickRippleTitle: "Ритмическая волна клика", clickRippleHint: "Каждое попадание запускает одну преломляющую водяную волну по всему кадру.", clickRippleKicker: "РИТМИЧЕСКИЙ УДАР",
+    clickRippleControlsHint: "Размер такта задаёт деление и акценты, BPM — скорость", clickRippleMeter: "Размер", clickRippleTempo: "Темп (♩ BPM)",
+    clickRippleInterval: "Интервал ударов", clickRippleRadius: "Размер круга попадания", clickRippleSpreadDuration: "Синхронное распространение", clickRippleColorize: "Из серого в цвет", clickRippleGlow: "Свечение", clickRippleColor: "Цвет волны",
+  },
+};
+
 const EXPORT_RENDER_COPY = {
   zh: { exportPreparing: "准备导出", exportRecordingStream: "录制 {format} 视频流", exportEmbeddedAudio: "准备视频内嵌音频 {current}/{total}", exportOfflinePreparing: "准备离线渲染", exportOfflineRendering: "离线渲染 {current}/{total}", exportVerifyFile: "验证导出文件", exportPrepareVisuals: "准备导出画面", exportPrepareTracks: "准备画布与轨道", exportMixAudio: "解码并混合音频轨", exportStartRecording: "开始录制视频流", exportRecording: "录制视频流", exportPackageFile: "封装导出文件", exportCompatibility: "切换兼容导出模式", exportSaveFile: "保存 {format} 文件", exportComplete: "导出完成", exportFailed: "导出失败", exportVisualRequired: "请先上传或选择图片/视频素材再导出", exportDeterministicFailed: "当前设置无法使用精确离线导出，请切换为自动或兼容模式。", exportVideoComplete: "{format} 视频已导出", exportFfmpegLoading: "加载 FFmpeg 兼容转码器", exportFfmpegTranscoding: "正在转码 MP4", exportWebmFallbackSaving: "保存 WebM 兼容文件", exportWebmFallbackComplete: "WebM 兼容文件已导出", exportWebmFallbackNotice: "MP4 转码失败，已导出 WebM 兼容文件" },
   en: { exportPreparing: "Preparing export", exportRecordingStream: "Recording {format} video stream", exportEmbeddedAudio: "Preparing embedded video audio {current}/{total}", exportOfflinePreparing: "Preparing offline render", exportOfflineRendering: "Offline rendering {current}/{total}", exportVerifyFile: "Verifying exported file", exportPrepareVisuals: "Preparing visuals", exportPrepareTracks: "Preparing canvas and tracks", exportMixAudio: "Decoding and mixing audio tracks", exportStartRecording: "Starting video stream recording", exportRecording: "Recording video stream", exportPackageFile: "Packaging export file", exportCompatibility: "Switching to compatibility export", exportSaveFile: "Saving {format} file", exportComplete: "Export complete", exportFailed: "Export failed", exportVisualRequired: "Add an image or video before exporting", exportDeterministicFailed: "These settings cannot use deterministic offline export. Switch to Auto or Compatible.", exportVideoComplete: "{format} video exported", exportFfmpegLoading: "Loading the FFmpeg compatibility transcoder", exportFfmpegTranscoding: "Transcoding MP4", exportWebmFallbackSaving: "Saving a compatible WebM file", exportWebmFallbackComplete: "Compatible WebM file exported", exportWebmFallbackNotice: "MP4 transcoding failed; a compatible WebM file was exported" },
@@ -1158,6 +1216,18 @@ const EFFECTS_COPY_EN = {
   effectCurrentStackHint: "Preview and export share these settings.",
   effectProperties: "Effect properties",
   effectEnabled: "Enable effect",
+  clickRippleTitle: "Rhythm click ripple",
+  clickRippleHint: "Each osu!-inspired hit launches one refractive water ripple across the full frame.",
+  clickRippleKicker: "RHYTHM HIT",
+  clickRippleControlsHint: "Musical meter controls subdivision and accents; BPM controls tempo",
+  clickRippleInterval: "Hit interval",
+  clickRippleTempo: "Tempo (♩ BPM)",
+  clickRippleMeter: "Time signature",
+  clickRippleRadius: "Hit circle size",
+  clickRippleSpreadDuration: "Synchronized propagation",
+  clickRippleColorize: "Grayscale to color",
+  clickRippleGlow: "Glow",
+  clickRippleColor: "Ripple color",
   effectOutline: "Person outline",
   effectOutlineCardHint: "Trace the selected person with a customizable outline.",
   effectPreviewHover: "Hover to preview",
@@ -1480,6 +1550,18 @@ const EFFECTS_WORKSPACE_COPY = {
     effectCurrentStackHint: "预览和导出使用同一套参数。",
     effectProperties: "特效配置",
     effectEnabled: "启用特效",
+    clickRippleTitle: "节奏点击涟漪",
+    clickRippleHint: "每次 osu! 风格命中触发一圈折射水波，传播至整个画面。",
+    clickRippleKicker: "节奏命中",
+    clickRippleControlsHint: "拍号控制音符单位与强弱拍，BPM 控制速度",
+    clickRippleInterval: "命中间隔",
+    clickRippleTempo: "BPM（♩）",
+    clickRippleMeter: "拍号",
+    clickRippleRadius: "命中圆大小",
+    clickRippleSpreadDuration: "同步传播时长",
+    clickRippleColorize: "灰转彩时长",
+    clickRippleGlow: "发光强度",
+    clickRippleColor: "水波颜色",
     effectOutline: "人物描边",
     effectOutlineCardHint: "识别人像并添加可调节描边",
     effectPreviewHover: "悬停预览动态效果",
@@ -3211,7 +3293,7 @@ export function createTranslator(languageId) {
     CAPTION_DEFAULT_COPY, SMART_WORKSPACE_COPY, AUTO_EDIT_COPY, AUTO_EDIT_BUTTON_COPY,
     AUTO_EDIT_REVIEW_COPY, AUTO_EDIT_FLOW_COPY, AUTO_EDIT_SEGMENT_COPY,
     AUTO_EDIT_RESULT_COPY, IMAGE_AI_CAPTION_COPY, PICTURE_IN_PICTURE_COPY, EFFECTS_WORKSPACE_COPY, VECTOR_STATE_COPY, VECTOR_DOCUMENT_COPY, VECTOR_ADVANCED_COPY,
-    SRT_IMPORT_COPY,
+    SRT_IMPORT_COPY, CLICK_RIPPLE_COPY,
   ].map((source) => source[languageId] ?? {}));
   return (key, fallbackText) => coreLabelCopy[key] ?? repairCopy[key] ?? specializedCopy[key] ?? exportOptionsCopy[key] ?? EXPORT_OPTIONS_COPY.en[key] ?? exportExtraStatusCopy[key] ?? EXPORT_EXTRA_STATUS_COPY.en[key] ?? projectChromeCopy[key] ?? PROJECT_CHROME_COPY.en[key] ?? captionAudioLinkCopy[key] ?? CAPTION_AUDIO_LINK_COPY.en[key] ?? ttsBackendCopy[key] ?? TTS_BACKEND_COPY.en[key] ?? mobileStickerCopy[key] ?? MOBILE_STICKER_COPY.en[key] ?? mobileClipActionCopy[key] ?? MOBILE_CLIP_ACTION_COPY.en[key] ?? mobileDrawerCopy[key] ?? MOBILE_DRAWER_COPY.en[key] ?? srtImportCopy[key] ?? exportCopy[key] ?? EXPORT_RENDER_COPY.en[key] ?? assetPreviewCopy[key] ?? ASSET_PREVIEW_COPY.en[key] ?? assetDropCopy[key] ?? ASSET_DROP_COPY.en[key] ?? autoCaptionStatusCopy[key] ?? AUTO_CAPTION_STATUS_COPY.en[key] ?? completionCopy[key] ?? copy[key] ?? fallback[key] ?? UI_COPY.zh[key] ?? fallbackText ?? key;
 }

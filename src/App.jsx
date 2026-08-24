@@ -79,6 +79,7 @@ import { getLinkedSourceAudioEnd, getLinkedSourceAudioSegments, shouldMuteEmbedd
 import { getTimelineInitialContentZoom } from "./lib/timelineScale.js";
 import { getVisionKey } from "./lib/vision.js";
 import { DEFAULT_SUBJECT_EFFECT, normalizeSubjectEffect } from "./lib/subjectEffects.js";
+import { normalizeClickRippleEffect } from "./lib/clickRippleEffect.js";
 import { normalizeCinematicDepth, resolveDepthAnalysisAtTime } from "./lib/depthOfField.js";
 import { normalizePhotoParallax } from "./lib/photoParallax.js";
 import {
@@ -409,6 +410,7 @@ export function App() {
       if (typeof change.filterId === "string") return { ...item, filterId: change.filterId };
       if (change.colorGrade) return { ...item, colorGrade: change.colorGrade };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
+      if (change.clickRipple) return { ...item, clickRipple: normalizeClickRippleEffect(change.clickRipple) };
       if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
       if (change.photoParallax) return { ...item, photoParallax: normalizePhotoParallax(change.photoParallax) };
       if (change.vectorPatch && (item.kind === "vector" || item.vectorBody)) return { ...item, ...change.vectorPatch };
@@ -488,6 +490,18 @@ export function App() {
   const removeSelectedSubjectEffect = () => {
     updateSelectedSubjectEffect(DEFAULT_SUBJECT_EFFECT);
     notify(t("effectRemoved"));
+  };
+  const updateSelectedClickRipple = (nextEffect) => {
+    if (!selectedEffectSegment?.id) return void notify(t("effectSelectClip"));
+    const clickRipple = normalizeClickRippleEffect(nextEffect);
+    if (selectedTrack === "overlay" && selectedVisualOverlay) {
+      if (trackLocks.overlay) return void notify(t("effectClipLocked"));
+      setVisualOverlaySegments((items) => items.map((item) => item.id === selectedVisualOverlay.id
+        ? { ...item, clickRipple }
+        : item));
+      return;
+    }
+    updateSelectedVisualEffects({ clickRipple });
   };
   const miganRepair = useMiganRepair({
     selectedSegment: selectedVisualSegment,
@@ -1126,6 +1140,7 @@ export function App() {
       if (change.mask) return { ...item, mask: change.mask };
       if (change.animation) return { ...item, animation: change.animation };
       if (change.subjectEffect) return { ...item, subjectEffect: normalizeSubjectEffect(change.subjectEffect) };
+      if (change.clickRipple) return { ...item, clickRipple: normalizeClickRippleEffect(change.clickRipple) };
       if (change.cinematicDepth) return { ...item, cinematicDepth: normalizeCinematicDepth(change.cinematicDepth) };
       if (change.photoParallax) return { ...item, photoParallax: normalizePhotoParallax(change.photoParallax) };
       if (change.timing) return { ...item, ...change.timing };
@@ -1355,7 +1370,7 @@ export function App() {
           updateScript, userAssets, visionJob, aiMusic, smartFrame,
           selectedVisualSegment, selectedEffectSegment, effectAnalysis, effectRunning, effectProgress, effectPhase,
           effectsPanelMode, setEffectsPanelMode, cinematicDepth, photoParallaxDepth,
-          visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, removeSelectedSubjectEffect, miganRepair, hdRestoration,
+          visualLocalTime, updateSelectedVisualEffects, updateSelectedSubjectEffect, updateSelectedClickRipple, removeSelectedSubjectEffect, miganRepair, hdRestoration,
           mobilePanel, setMobilePanel: changeMobilePanel, applyAssetToTrack, handleGeneratedVector,
         }} />
 
@@ -1602,6 +1617,7 @@ export function App() {
           photoParallaxDepth={photoParallaxDepth}
           updateSelectedPhotoParallax={updateSelectedPhotoParallax}
           updateSelectedSubjectEffect={updateSelectedSubjectEffect}
+          updateSelectedClickRipple={updateSelectedClickRipple}
           removeSelectedSubjectEffect={removeSelectedSubjectEffect}
           onOpticalFlowAssetReady={handleOpticalFlowAssetReady}
         />
