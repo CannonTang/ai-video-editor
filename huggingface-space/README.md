@@ -33,6 +33,14 @@ Users must ensure that they:
 
 Users are solely responsible for any legal liability arising from violations of these requirements.
 
+## Project updates
+
+- **August 24, 2026 — Rhythm click ripple:** added an editable osu!-inspired effect with music-aware timing, one full-frame refractive water ripple per hit, synchronized grayscale-to-color propagation, right-side controls, matched preview/export rendering, and localization across all 11 interface languages.
+- **August 12, 2026 — Desktop color wheels:** added keyframe-ready shadows, midtones, highlights, and offset wheels plus temperature, tint, and saturation, with matching preview and export rendering.
+- **August 7, 2026 — v0.9.2 cross-platform Agent Skill:** added reference-video reconstruction, highlight and tension shaping, promotion planning, provider-neutral footage sourcing, local model routing, host setup, voiceover preparation, and audio validation.
+- **August 5, 2026 — v0.9.1 Agent Skill:** published the professional multimodal auto-editing workflow with portable sentence-level voiceover and verified `.timeline` project plus rendered-video delivery.
+- **July 31, 2026 — Face swap:** added browser-local face detection, tracking, and preview for replacing the identity in a selected visual clip.
+
 <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
 <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
 <a href="https://www.producthunt.com/products/timeline-studio-2?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-timeline-studio-2" target="_blank" rel="noopener noreferrer"><img alt="Timeline Studio - Local-first AI video editing in your browser | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1196911&amp;theme=light&amp;t=1785378187636"></a>
