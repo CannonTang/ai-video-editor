@@ -19,11 +19,11 @@ L’utilisateur assume seul toute responsabilité juridique découlant du non-re
 
 ## Actualités du projet
 
+- **26 août 2026 — Découpes visuelles portables :** correction de `visual.split` de l’Agent afin que les deux clips contigus conservent leur média source archivé après réouverture, avec la vidéo complète et l’audio source intégré préservés lors de l’export dans le navigateur.
 - **24 août 2026 — Onde de clic rythmique :** ajout d’un effet osu! modifiable avec positions d’impact aléatoires déterministes, signatures rythmiques et BPM à la noire, une onde d’eau réfractive plein écran par impact, propagation synchronisée du gris vers la couleur, réglages latéraux, aperçu et export identiques, et localisation dans 11 langues.
 - **12 août 2026 — Roues chromatiques sur ordinateur :** ajout de roues pour les ombres, tons moyens, hautes lumières et décalage, ainsi que la température, la teinte et la saturation. Les 15 propriétés prennent en charge les images clés et un rendu cohérent entre aperçu et export.
 - **7 août 2026 — Agent Skill v0.9.2 multiplateforme :** ajout de la reconstruction de vidéos de référence, de la hiérarchie des temps forts et de la tension, de la narration promotionnelle, de la recherche de médias, du routage des modèles locaux, de la configuration des dépendances, de la préparation vocale chinois/anglais et de la validation audio.
 - **5 août 2026 — Agent Skill v0.9.1 :** publication d’un flux professionnel de montage automatique avec planification multimodale, stabilisation, suivi, voix off portable par phrase et livraison conjointe du projet `.timeline` validé et de la vidéo finale.
-- **31 juillet 2026 — Échange de visages :** remplacement de l’identité dans un clip visuel sélectionné grâce à la détection, au suivi et à l’aperçu locaux dans le navigateur.
 
 Consultez la [Roadmap](ROADMAP.md) pour les travaux prévus, les [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) pour les changements publiés et les [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) pour les tâches et anomalies.
 

@@ -19,11 +19,11 @@ Für sämtliche rechtlichen Folgen eines Verstoßes gegen diese Anforderungen is
 
 ## Projektneuigkeiten
 
+- **26. August 2026 — Portable visuelle Schnitte:** `visual.split` des Agents wurde korrigiert, sodass beide zusammenhängenden Clips nach dem erneuten Öffnen ihr archiviertes Quellmedium behalten und beim Browser-Export das vollständige Video samt eingebettetem Quellton erhalten bleibt.
 - **24. August 2026 — Rhythmische Klickwelle:** Ein bearbeitbarer, von osu! inspirierter Effekt mit deterministisch zufälligen Trefferpositionen, Taktarten und Viertelnoten-BPM, einer bildschirmfüllenden refraktiven Wasserwelle pro Treffer, synchronem Übergang von Graustufen zu Farbe, seitlichen Einstellungen, identischer Vorschau und Ausgabe sowie Lokalisierung in 11 Sprachen wurde hinzugefügt.
 - **12. August 2026 — Desktop-Farbräder:** Farbräder für Schatten, Mitteltöne, Lichter und Offset sowie Regler für Temperatur, Tönung und Sättigung wurden ergänzt. Alle 15 Eigenschaften unterstützen Keyframes und identische Ergebnisse in Vorschau und Export.
 - **7. August 2026 — Plattformübergreifender Agent Skill v0.9.2:** Referenzvideo-Rekonstruktion, Highlight- und Spannungsdramaturgie, Werbeerzählung, Mediensuche, lokales Modell-Routing, Abhängigkeits-Setup, chinesisch-englische Sprachvorbereitung und Audioprüfung wurden ergänzt.
 - **5. August 2026 — Agent Skill v0.9.1:** Ein professioneller Auto-Editing-Ablauf mit multimodaler Planung, Stabilisierung, Tracking, satzweise portabler Sprachspur und gemeinsamer Ausgabe eines geprüften `.timeline`-Projekts und des fertigen Videos wurde veröffentlicht.
-- **31. Juli 2026 — Gesichtstausch:** Die Identität in einem ausgewählten visuellen Clip kann mit lokaler Gesichtserkennung, Tracking und Vorschau im Browser ersetzt werden.
 
 Geplante Arbeiten stehen in der [Roadmap](ROADMAP.md), veröffentlichte Änderungen in den [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) und einzelne Aufgaben in den [Issues](https://github.com/MartinDelophy/ai-video-editor/issues).
 

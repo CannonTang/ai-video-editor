@@ -114,8 +114,9 @@ function splitVisual(project, operation) {
   if (!rightClipId) throw Object.assign(new Error("rightClipId is required"), { code: "INVALID_ARGUMENT" });
   if (visuals.some((item) => item.id === rightClipId)) throw Object.assign(new Error(`Visual clip already exists: ${rightClipId}`), { code: "CLIP_ALREADY_EXISTS" });
   const rate = segment.type === "video" ? visualPlaybackRate(segment) : 1;
-  const left = { ...segment, duration: at };
-  const right = { ...segment, id: rightClipId, duration: duration - at };
+  const archiveMediaId = segment.archiveMediaId || segment.id;
+  const left = { ...segment, archiveMediaId, duration: at };
+  const right = { ...segment, id: rightClipId, archiveMediaId, duration: duration - at };
   if (segment.type === "video") {
     left.sourceDuration = at * rate;
     right.sourceStart = Math.max(0, Number(segment.sourceStart) || 0) + at * rate;

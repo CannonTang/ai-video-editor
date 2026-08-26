@@ -19,11 +19,11 @@ O usuário é o único responsável por quaisquer consequências legais decorren
 
 ## Novidades do projeto
 
+- **26 de agosto de 2026 — Divisões visuais portáteis:** foi corrigido o `visual.split` do Agent para que os dois clipes contíguos mantenham a mídia de origem arquivada após reabrir o projeto, preservando o vídeo completo e o áudio de origem incorporado na exportação pelo navegador.
 - **24 de agosto de 2026 — Onda de clique rítmico:** foi adicionado um efeito editável inspirado em osu! com posições de acerto aleatórias determinísticas, compassos e BPM de semínima, uma onda d’água refrativa em tela inteira por acerto, propagação sincronizada do cinza para a cor, controles laterais, prévia e exportação equivalentes e localização em 11 idiomas.
 - **12 de agosto de 2026 — Rodas de cores no desktop:** foram adicionadas rodas para sombras, meios-tons, realces e deslocamento, além de temperatura, matiz e saturação. As 15 propriedades aceitam quadros-chave e mantêm o mesmo resultado na prévia e na exportação.
 - **7 de agosto de 2026 — Agent Skill v0.9.2 multiplataforma:** foram incluídos reconstrução de vídeo de referência, hierarquia de destaques e tensão, narrativa promocional, busca de mídia, roteamento de modelos locais, configuração de dependências, preparação de voz em chinês e inglês e validação de áudio.
 - **5 de agosto de 2026 — Agent Skill v0.9.1:** foi publicado um fluxo profissional de edição automática com planejamento multimodal, estabilização, rastreamento, locução portátil por frase e entrega conjunta do projeto `.timeline` validado e do vídeo final.
-- **31 de julho de 2026 — Troca de rostos:** permite substituir a identidade em um clipe visual selecionado com detecção, rastreamento e prévia locais no navegador.
 
 Consulte o [Roadmap](ROADMAP.md) para o trabalho planejado, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) para mudanças publicadas e [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) para tarefas e erros.
 

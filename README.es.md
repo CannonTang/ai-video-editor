@@ -19,11 +19,11 @@ El usuario será el único responsable de cualquier consecuencia legal derivada 
 
 ## Novedades del proyecto
 
+- **26 de agosto de 2026 — Divisiones visuales portátiles:** se corrigió `visual.split` del Agent para que ambos clips contiguos conserven su medio de origen archivado al reabrir el proyecto, manteniendo el vídeo completo y el audio de origen incrustado en la exportación del navegador.
 - **24 de agosto de 2026 — Onda de clic rítmico:** se añadió un efecto editable inspirado en osu! con posiciones de impacto aleatorias deterministas, compases musicales y BPM de negra, una onda de agua refractiva a pantalla completa por impacto, propagación sincronizada de escala de grises a color, controles laterales, vista previa y exportación coincidentes, y localización en 11 idiomas.
 - **12 de agosto de 2026 — Ruedas de color de escritorio:** se añadieron ruedas para sombras, medios tonos, luces y desplazamiento, además de temperatura, matiz y saturación. Las 15 propiedades admiten fotogramas clave y resultados coherentes en vista previa y exportación.
 - **7 de agosto de 2026 — Agent Skill v0.9.2 multiplataforma:** se incorporaron reconstrucción de vídeos de referencia, diseño de momentos destacados y tensión, narrativa promocional, búsqueda de material, modelos locales, configuración de dependencias, preparación de voz en chino e inglés y validación de audio.
 - **5 de agosto de 2026 — Agent Skill v0.9.1:** se publicó un flujo profesional de edición automática con planificación multimodal, estabilización, seguimiento, voz portátil por frases y entrega conjunta del proyecto `.timeline` validado y el vídeo final.
-- **31 de julio de 2026 — Intercambio de rostros:** permite sustituir la identidad en un clip visual seleccionado mediante detección, seguimiento y vista previa locales en el navegador.
 
 Consulta el [Roadmap](ROADMAP.md) para el trabajo planificado, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) para los cambios publicados e [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) para tareas y errores.
 
