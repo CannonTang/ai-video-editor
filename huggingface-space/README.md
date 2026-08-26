@@ -21,10 +21,6 @@ license: mit
 
 # Timeline Studio
 
-<p align="center">
-  <a href="https://linux.do"><img src="https://shorturl.at/ggSqS" alt="LINUX DO" /></a>
-</p>
-
 ## Responsible use of deep synthesis
 
 This tool uses deep-synthesis technology and is intended solely for technical research and learning.
@@ -46,7 +42,7 @@ Users are solely responsible for any legal liability arising from violations of 
 - **August 5, 2026 — v0.9.1 Agent Skill:** published the professional multimodal auto-editing workflow with portable sentence-level voiceover and verified `.timeline` project plus rendered-video delivery.
 
 <a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/daily?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
-<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/77422?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-77422" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/77422/weekly?language=JavaScript" alt="MartinDelophy%2Fai-video-editor | Trendshift" width="250" height="55"/></a> <a href="https://linux.do"><img src="https://shorturl.at/ggSqS" alt="LINUX DO" /></a>
 
 This Space is the lightweight showcase for Timeline Studio, an MIT-licensed,
 local-first AI video editor. The full editor runs at
