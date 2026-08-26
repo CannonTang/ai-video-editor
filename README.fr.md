@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+Ce projet reconnaît et soutient la communauté open source [LINUX DO](https://linux.do/).
+
 ## Utilisation responsable de la synthèse profonde
 
 Cet outil repose sur une technologie de synthèse profonde et est destiné exclusivement à la recherche technique et à l’apprentissage.

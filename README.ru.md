@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+Проект признаёт и поддерживает сообщество открытого исходного кода [LINUX DO](https://linux.do/).
+
 ## Ответственное использование технологии глубинного синтеза
 
 Этот инструмент использует технологию глубинного синтеза и предназначен исключительно для технических исследований и обучения.

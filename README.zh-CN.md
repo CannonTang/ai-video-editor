@@ -8,6 +8,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+本项目认可并支持 [LINUX DO](https://linux.do/) 开源社区。
+
 ## 深度合成使用声明
 
 本工具基于深度合成技术，仅用于技术研究与学习。

@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+โครงการนี้ให้การยอมรับและสนับสนุนชุมชนโอเพนซอร์ส [LINUX DO](https://linux.do/)
+
 ## การใช้เทคโนโลยีสังเคราะห์เชิงลึกอย่างรับผิดชอบ
 
 เครื่องมือนี้ใช้เทคโนโลยีสังเคราะห์เชิงลึกและมีไว้เพื่อการวิจัยทางเทคนิคและการเรียนรู้เท่านั้น

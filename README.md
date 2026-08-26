@@ -10,6 +10,9 @@
 <a href="https://toolindex.net/tools/timeline-studio?ref=badge" target="_blank" rel="noopener">
   <img src="https://toolindex.net/badge/timeline-studio/small.svg?theme=dark" alt="Timeline Studio - Listed on Tool Index" width="130" height="30" />
 </a>
+
+This project recognizes and supports the [LINUX DO](https://linux.do/) open-source community.
+
 > Timeline Studio is launching on Product Hunt Aug 25 (PDT).
 > Follow our page to share technical feedback on launch day!
 

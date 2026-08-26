@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+이 프로젝트는 오픈 소스 커뮤니티 [LINUX DO](https://linux.do/)를 인정하고 지지합니다.
+
 ## 딥 신세시스 기술의 책임 있는 사용
 
 이 도구는 딥 신세시스 기술을 기반으로 하며 기술 연구와 학습 목적으로만 제공됩니다.

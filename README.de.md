@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+Dieses Projekt erkennt die Open-Source-Community [LINUX DO](https://linux.do/) an und unterstützt sie.
+
 ## Verantwortungsvolle Nutzung von Deep-Synthesis-Technologie
 
 Dieses Tool basiert auf Deep-Synthesis-Technologie und ist ausschließlich für technische Forschung und Lernzwecke bestimmt.

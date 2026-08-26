@@ -5,6 +5,8 @@
 [![skills.sh](https://skills.sh/b/MartinDelophy/ai-video-editor)](https://skills.sh/MartinDelophy/ai-video-editor)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](CONTRIBUTING.md)
 
+本プロジェクトは、オープンソースコミュニティ [LINUX DO](https://linux.do/) を支持しています。
+
 ## ディープシンセシス技術の責任ある利用
 
 本ツールはディープシンセシス技術を使用しており、技術研究および学習のみを目的としています。
