@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowClockwise,
@@ -51,6 +51,7 @@ import {
 } from "../lib/visualOverlayTimeline.js";
 import { getSampledVideoTrackFrames, getVideoTrackFrameSource } from "../lib/videoTrackFrames.js";
 import { normalizeVisualSpeedCurve } from "../lib/visualSpeedCurve.js";
+import { rollVisualBoundary, slideVisualSegment, slipVisualSegment } from "../lib/fineEdit.js";
 import { collectTimelineSnapPoints, createTimelineSnapGuide, findClosestTimelineSnap, snapTimelineRange } from "../lib/timelineSnap.js";
 import {
   createTimelineEdgeAutoScroller,
@@ -269,9 +270,85 @@ export function Timeline({
   const [timelineRangeSelection, setTimelineRangeSelection] = useState(() => new Set());
   const [timelineRangeDrag, setTimelineRangeDrag] = useState(null);
   const [timelineMarquee, setTimelineMarquee] = useState(null);
+  const [selectedEditPointIndex, setSelectedEditPointIndex] = useState(-1);
+  const [activeFineEdit, setActiveFineEdit] = useState(null);
   const timelineSelectionTriggerRef = useRef(null);
   const timelineRangeDragClickGuardRef = useRef("");
   const timelineMarqueeClickGuardRef = useRef(false);
+
+  const getVisualStart = useCallback((index) => displayedVisualSegments
+    .slice(0, Math.max(0, index))
+    .reduce((total, segment) => total + (Number(segment.duration) || 0), 0), [displayedVisualSegments]);
+
+  const selectVisualEditPoint = (event, index) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (trackLocks.image) return void notify(t("fineEditTrackLocked", "主画面轨已锁定，无法选择编辑点"));
+    if (displayedVisualSegments.length < 2) return void notify(t("fineEditNeedsCuts", "至少需要两个主画面片段"));
+    const rect = event.target?.closest?.("[data-timeline-segment-track='image']")?.getBoundingClientRect?.()
+      || event.currentTarget?.getBoundingClientRect?.();
+    const preferRight = rect ? event.clientX >= rect.left + rect.width / 2 : false;
+    const boundaryIndex = Math.max(1, Math.min(displayedVisualSegments.length - 1, index + (preferRight ? 1 : 0)));
+    setSelectedEditPointIndex(boundaryIndex);
+    setSelectedTrack("image");
+    setSelectedVisualSegmentId(displayedVisualSegments[boundaryIndex]?.id || displayedVisualSegments[boundaryIndex - 1]?.id || "");
+    seekTo(getVisualStart(boundaryIndex));
+  };
+
+  const startVisualFineEdit = (event, index, mode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (trackLocks.image) return void notify(t("fineEditTrackLocked", "主画面轨已锁定，无法精剪"));
+    const original = displayedVisualSegments.map((segment) => ({ ...segment }));
+    const segment = original[index];
+    if (!segment) return;
+    if (mode === "slip" && segment.type !== "video") return void notify(t("slipVideoOnly", "滑移仅支持视频片段"));
+    if (mode === "slide" && (index <= 0 || index >= original.length - 1)) return void notify(t("slideNeedsNeighbors", "滑动需要左右各有一个相邻片段"));
+    const rect = trackScrollRef.current?.getBoundingClientRect();
+    if (!rect || timelineDuration <= 0) return;
+    if (isPlaying) handlePlayToggle();
+    setSelectedTrack("image");
+    setSelectedVisualSegmentId(segment.id);
+    setSelectedEditPointIndex(-1);
+    const startX = event.clientX;
+    const pointerId = event.pointerId;
+    const previewTime = getVisualStart(index) + Math.max(0, Number(segment.duration) || 0) / 2;
+    seekTo(previewTime);
+    let latest = { delta: 0, moved: false, segments: original };
+    setActiveFineEdit({ mode, index, delta: 0 });
+    const apply = (moveEvent) => {
+      if (moveEvent.pointerId !== undefined && pointerId !== undefined && moveEvent.pointerId !== pointerId) return;
+      const requestedDelta = ((moveEvent.clientX - startX) / Math.max(1, rect.width)) * timelineDuration;
+      if (!latest.moved && Math.abs(moveEvent.clientX - startX) < 3) return;
+      moveEvent.preventDefault();
+      const result = mode === "slip"
+        ? slipVisualSegment(original, index, requestedDelta)
+        : slideVisualSegment(original, index, requestedDelta);
+      latest = { delta: result.delta, moved: true, segments: result.segments };
+      setVisualSegments(result.segments);
+      setActiveFineEdit({ mode, index, delta: result.delta });
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", apply, true);
+      window.removeEventListener("pointerup", finish, true);
+      window.removeEventListener("pointercancel", cancel, true);
+    };
+    const finish = (upEvent) => {
+      if (upEvent?.pointerId !== undefined && pointerId !== undefined && upEvent.pointerId !== pointerId) return;
+      cleanup();
+      setActiveFineEdit(null);
+      if (!latest.moved || Math.abs(latest.delta) < 0.0001) return;
+      notify(t(mode === "slip" ? "visualSlipAdjusted" : "visualSlideAdjusted", mode === "slip" ? "视频源区间已滑移" : "片段已滑动，左右编辑点已同步调整"));
+    };
+    const cancel = () => {
+      cleanup();
+      setVisualSegments(original);
+      setActiveFineEdit(null);
+    };
+    window.addEventListener("pointermove", apply, { capture: true, passive: false });
+    window.addEventListener("pointerup", finish, { capture: true, once: true });
+    window.addEventListener("pointercancel", cancel, { capture: true, once: true });
+  };
 
   const timelineSelectableClips = useMemo(() => {
     const clips = [];
@@ -1042,11 +1119,26 @@ export function Timeline({
       if (event.key === "Escape" && timelineSelectionMode !== "select") {
         setTimelineSelectionMode("select");
         setTimelineRangeSelection(new Set());
+        setSelectedEditPointIndex(-1);
+      }
+      if (
+        timelineSelectionMode === "edit-point"
+        && selectedEditPointIndex > 0
+        && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+      ) {
+        event.preventDefault();
+        if (trackLocks.image) return void notify(t("fineEditTrackLocked", "主画面轨已锁定，无法调整编辑点"));
+        const direction = event.key === "ArrowRight" ? 1 : -1;
+        const step = event.shiftKey ? 0.25 : 1 / 30;
+        const result = rollVisualBoundary(displayedVisualSegments, selectedEditPointIndex, direction * step);
+        if (Math.abs(result.delta) < 0.0001) return void notify(t("fineEditSourceLimit", "已到达片段或源素材边界"));
+        setVisualSegments(result.segments);
+        seekTo(getVisualStart(selectedEditPointIndex) + result.delta);
       }
     };
     window.addEventListener("keydown", handleSelectionShortcut);
     return () => window.removeEventListener("keydown", handleSelectionShortcut);
-  }, [timelineSelectionMode]);
+  }, [displayedVisualSegments, getVisualStart, notify, seekTo, selectedEditPointIndex, setVisualSegments, t, timelineSelectionMode, trackLocks.image]);
   const selectContextTarget = (track, segmentId = "") => {
     const isMobileDirectClip = ["audio", "source", "music", "sticker"].includes(track)
       && !shouldActivateToolRailForClip(window.matchMedia?.("(max-width: 760px)").matches ?? false);
@@ -2391,9 +2483,25 @@ export function Timeline({
         timelineRangeDragClickGuardRef.current = "";
       }
       const isMobileTimeline = window.matchMedia?.("(max-width: 760px)").matches;
-      const desktopPressedSegment = !isMobileTimeline
+      const fineEditModeActive = ["edit-point", "slip", "slide"].includes(timelineSelectionMode);
+      const desktopPressedSegment = (!isMobileTimeline || fineEditModeActive)
         ? event.target.closest("[data-timeline-segment-track]")
         : null;
+      if (
+        desktopPressedSegment?.dataset.timelineSegmentTrack === "image"
+        && fineEditModeActive
+      ) {
+        const index = Number(desktopPressedSegment.dataset.timelineSegmentIndex);
+        if (timelineSelectionMode === "edit-point") selectVisualEditPoint(event, index);
+        else startVisualFineEdit(event, index, timelineSelectionMode);
+        return;
+      }
+      if (desktopPressedSegment && fineEditModeActive) {
+        event.preventDefault();
+        event.stopPropagation();
+        notify(t("fineEditMainTrackOnly", "精剪工具仅作用于主画面轨"));
+        return;
+      }
       if (
         desktopPressedSegment
         && timelineSelectionMode === "select"
@@ -2413,7 +2521,7 @@ export function Timeline({
         );
         return;
       }
-      if (desktopPressedSegment && timelineSelectionMode !== "select") {
+      if (desktopPressedSegment && ["left", "right"].includes(timelineSelectionMode)) {
         event.preventDefault();
         event.stopPropagation();
         selectTimelineRangeFromClip(
@@ -2487,7 +2595,13 @@ export function Timeline({
                 ? <ArrowLineLeft size={17} weight="bold" />
                 : timelineSelectionMode === "right"
                   ? <ArrowLineRight size={17} weight="bold" />
-                  : <CursorClick size={17} />}
+                  : timelineSelectionMode === "edit-point"
+                    ? <ArrowsInLineHorizontal size={17} weight="bold" />
+                    : timelineSelectionMode === "slip"
+                      ? <Crop size={17} weight="bold" />
+                      : timelineSelectionMode === "slide"
+                        ? <ArrowsOutLineHorizontal size={17} weight="bold" />
+                        : <CursorClick size={17} />}
               <CaretDown size={11} weight="bold" />
             </button>
             {timelineSelectionMenuOpen && typeof document !== "undefined" ? createPortal((
@@ -2501,6 +2615,9 @@ export function Timeline({
               >
                 {[
                   ["select", CursorClick, t("timelineSelect", "选择")],
+                  ["edit-point", ArrowsInLineHorizontal, t("timelineEditPoint", "编辑点选择")],
+                  ["slip", Crop, t("timelineSlip", "滑移")],
+                  ["slide", ArrowsOutLineHorizontal, t("timelineSlide", "滑动")],
                   ["left", ArrowLineLeft, t("timelineSelectLeft", "向左全选")],
                   ["right", ArrowLineRight, t("timelineSelectRight", "向右全选")],
                 ].map(([mode, Icon, label]) => (
@@ -2512,6 +2629,8 @@ export function Timeline({
                     key={mode}
                     onClick={() => {
                       setTimelineSelectionMode(mode);
+                      if (mode !== "edit-point") setSelectedEditPointIndex(-1);
+                      setTimelineRangeSelection(new Set());
                       setTimelineSelectionMenuOpen(false);
                     }}
                   >
@@ -2803,7 +2922,9 @@ export function Timeline({
                         } ${isReorderTarget ? "is-reorder-target" : ""} ${
                           isOverlayPromotionInsertTarget ? "is-overlay-promotion-insert-target" : ""
                         } ${isAssetInsertTarget ? "is-asset-insert-target" : ""
-                        } ${segment.preparing ? "is-preparing" : ""}`}
+                        } ${segment.preparing ? "is-preparing" : ""} ${
+                          activeFineEdit?.index === index ? `is-fine-editing is-fine-editing-${activeFineEdit.mode}` : ""
+                        } ${selectedEditPointIndex === index ? "has-selected-edit-point" : ""}`}
                         onPointerDown={(event) => {
                           if (!segment.preparing) startTimelineClipDrag(event, "image", segment.id, index);
                         }}
@@ -2897,12 +3018,19 @@ export function Timeline({
                           </span>
                         ) : null}
                         {!segment.preparing ? <span className="image-clip-duration">{formatClock(segment.duration)}</span> : null}
+                        {!segment.preparing && activeFineEdit?.index === index ? (
+                          <span className="fine-edit-readout">
+                            {t(activeFineEdit.mode === "slip" ? "timelineSlip" : "timelineSlide", activeFineEdit.mode === "slip" ? "滑移" : "滑动")}
+                            {activeFineEdit.delta >= 0 ? "+" : ""}{activeFineEdit.delta.toFixed(2)}s
+                          </span>
+                        ) : null}
                         {!segment.preparing && !activeTimelineClipDrag ? <>
                           {index > 0 ? (
                             <button
                               className="image-resize-handle is-start"
                               type="button"
                               aria-label={t("dragImageStart", "调整画面片段起点")}
+                              aria-pressed={selectedEditPointIndex === index}
                               onPointerDown={(event) => startImageResize(event, segment.id, index, "start")}
                             />
                           ) : null}

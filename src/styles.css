@@ -7296,6 +7296,15 @@ button:disabled {
     e-resize;
 }
 
+.timeline.is-selection-mode-edit-point [data-timeline-segment-track="image"] { cursor: col-resize; }
+.timeline.is-selection-mode-slip [data-timeline-segment-track="image"] { cursor: ew-resize; }
+.timeline.is-selection-mode-slide [data-timeline-segment-track="image"] { cursor: move; }
+
+.timeline:is(.is-selection-mode-edit-point, .is-selection-mode-slip, .is-selection-mode-slide)
+  [data-timeline-segment-track]:not([data-timeline-segment-track="image"]) {
+  cursor: not-allowed;
+}
+
 .timeline [data-timeline-segment-track][data-range-selected="true"] {
   z-index: 5;
   border-color: #6feadd;
@@ -7976,6 +7985,37 @@ button:disabled {
     0 0 8px rgba(90, 139, 255, 0.24);
 }
 
+.image-clip.is-fine-editing {
+  z-index: 7;
+  border-color: #55eadc;
+  outline: 1px solid rgba(85, 234, 220, .88);
+  outline-offset: -2px;
+  cursor: ew-resize;
+  box-shadow: inset 0 0 0 1px rgba(215, 255, 251, .2), 0 0 14px rgba(53, 234, 217, .34);
+  transition: none;
+}
+
+.image-clip.is-fine-editing-slide { cursor: move; }
+
+.fine-edit-readout {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(117, 255, 241, .34);
+  border-radius: 5px;
+  padding: 2px 6px;
+  color: #eafffd;
+  font-size: 10px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  white-space: nowrap;
+  background: rgba(6, 21, 24, .9);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
 .image-thumbnails {
   display: grid;
   grid-auto-flow: column;
@@ -8021,7 +8061,8 @@ button:disabled {
 }
 
 .image-thumbnails.is-video.is-portrait-video img {
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center center;
 }
 
 .image-clip.is-video {
@@ -8215,6 +8256,14 @@ button:disabled {
 
 .image-resize-handle:hover {
   background: rgba(53, 234, 217, 0.34);
+}
+
+.image-clip.has-selected-edit-point .image-resize-handle.is-start {
+  z-index: 8;
+  width: 17px;
+  border-color: rgba(225, 255, 252, .9);
+  background: linear-gradient(90deg, rgba(53, 234, 217, .82), rgba(53, 234, 217, .28));
+  box-shadow: -3px 0 10px rgba(53, 234, 217, .28), 3px 0 10px rgba(53, 234, 217, .28);
 }
 
 .caption-track,
