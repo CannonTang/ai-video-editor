@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import {
   ArrowClockwise,
   ArrowCounterClockwise,
+  ArrowFatLinesLeft,
   ArrowLeft,
   ArrowLineLeft,
   ArrowLineRight,
@@ -43,6 +44,7 @@ import { IMAGE_SEGMENT_SECONDS, MAX_IMAGE_THUMBNAILS, MAX_TIMELINE_DURATION_SECO
 import { formatClock, formatCompactDuration, formatTime, getSegmentStartTime, getTimedSegmentLaneStateKey, getVisualSegmentStartTime, packCaptionSegmentsIntoLanes, packTimedSegmentsIntoLanes } from "../lib/timeline.js";
 import { sliceSourceAudioPeaks } from "../lib/sourceAudioSync.js";
 import {
+  DEFAULT_OVERLAY_SECONDS,
   compactVisualOverlayLanes,
   createMainVisualFromOverlay,
   reorderSingleVisualOverlayLane,
@@ -136,6 +138,8 @@ export function Timeline({
   handleDeleteTrack,
   handleDuplicateTrack,
   handleCutTrack,
+  rippleEditing,
+  setRippleEditing,
   canPreview,
   handlePlayToggle,
   isPlaying,
@@ -177,6 +181,7 @@ export function Timeline({
   assetDropPulseTrack,
   assetDragPreview,
   draggedAssetType = "",
+  draggedAssetDuration = 0,
   handleTrackAssetDragOver,
   handleTrackAssetDragLeave,
   handleTrackAssetDrop,
@@ -1354,6 +1359,45 @@ export function Timeline({
     : isMobileTimelineViewport
       ? `${mobileTrackBaseWidth * (localTrackWidthPercent / 100)}px`
       : `${localTrackWidthPercent}%`;
+  const mainAssetInsertIndex = assetDropTargetTrack === "image"
+    ? Math.max(0, Math.min(
+        displayedVisualSegments.length,
+        Number.isInteger(assetDropPosition?.insertIndex)
+          ? assetDropPosition.insertIndex
+          : displayedVisualSegments.length,
+      ))
+    : -1;
+  const mainAssetInsertTime = mainAssetInsertIndex >= 0
+    ? Number.isFinite(Number(assetDropPosition?.insertTime))
+      ? Number(assetDropPosition.insertTime)
+      : displayedVisualSegments.slice(0, mainAssetInsertIndex).reduce((sum, segment) => sum + (Number(segment.duration) || 0), 0)
+    : 0;
+  const mainAssetInsertDuration = Math.max(
+    0.5,
+    Math.min(
+      MAX_TIMELINE_DURATION_SECONDS,
+      Number(assetDragPreview?.duration ?? draggedAssetDuration) || IMAGE_SEGMENT_SECONDS,
+    ),
+  );
+  const mainAssetInsertWidth = timelineDuration > 0
+    ? Math.max(0.01, Math.min(100, (mainAssetInsertDuration / timelineDuration) * 100))
+    : 0;
+  const overlayAssetDropDuration = Math.max(
+    0.1,
+    Math.min(
+      MAX_TIMELINE_DURATION_SECONDS,
+      Number(assetDragPreview?.duration ?? draggedAssetDuration) || DEFAULT_OVERLAY_SECONDS,
+    ),
+  );
+  const overlayAssetDropStart = Number.isFinite(Number(assetDropPosition?.startTime))
+    ? Math.max(0, Number(assetDropPosition.startTime))
+    : Math.max(0, Number(assetDropPosition?.percent) || 0) / 100 * Math.max(0, timelineDuration);
+  const overlayAssetDropLeft = timelineDuration > 0
+    ? Math.max(0, Math.min(100, overlayAssetDropStart / timelineDuration * 100))
+    : 0;
+  const overlayAssetDropWidth = timelineDuration > 0
+    ? Math.max(0.4, Math.min(100, overlayAssetDropDuration / timelineDuration * 100))
+    : 0;
   const commitTimelineZoom = (nextZoom, delay = 0) => {
     window.clearTimeout(commitZoomTimerRef.current);
     if (delay <= 0) {
@@ -1920,7 +1964,23 @@ export function Timeline({
       window.removeEventListener("pointercancel", handlePointerEnd, { capture: true });
     };
   }, [trackScrollRef]);
-  const renderAssetDropSlot = (track) => {
+  const renderAssetDropSlot = (track, laneIndex = -1) => {
+    if (track === "image") return null;
+    if (track === "overlay") {
+      const targetLane = Math.max(0, (Number(assetDropPosition?.layer) || 1) - 1);
+      if (assetDropTargetTrack !== "overlay" || laneIndex !== targetLane) return null;
+      return (
+        <div
+          className="visual-overlay-drop-preview is-asset-drop-preview"
+          style={{
+            "--overlay-left": `${overlayAssetDropLeft}%`,
+            "--overlay-width": `${overlayAssetDropWidth}%`,
+          }}
+        >
+          <span><PictureInPicture size={12} />{assetDragPreview?.name || t("dropAsOverlay", "作为画中画")}</span>
+        </div>
+      );
+    }
     const dropPercent = assetDropPosition?.track === track ? assetDropPosition.percent : 50;
     return assetDropTargetTrack === track ? <>
       {track !== "image" ? <i className="asset-drop-position-marker" style={{ "--drop-x": `${dropPercent}%` }} /> : null}
@@ -2308,7 +2368,7 @@ export function Timeline({
         </div>
       ) : null}
       {!lane.length ? <div className="track-drop-hint">{t("dropAsOverlay", "作为画中画")}</div> : null}
-      {renderAssetDropSlot("overlay")}
+      {renderAssetDropSlot("overlay", laneIndex)}
     </div>
   );
   };
@@ -2395,6 +2455,19 @@ export function Timeline({
           </IconButton>
           <IconButton label={t("cutSegment")} shortcut={`${shortcutModifier}+B`} tooltip releaseFocusOnPointer onClick={handleCutTrack}>
             <Scissors size={17} />
+          </IconButton>
+          <IconButton
+            label={t(rippleEditing ? "rippleEditingOn" : "rippleEditingOff")}
+            tooltip
+            releaseFocusOnPointer
+            active={rippleEditing}
+            onClick={() => {
+              const next = !rippleEditing;
+              setRippleEditing(next);
+              notify(t(next ? "rippleEditingEnabled" : "rippleEditingDisabled"));
+            }}
+          >
+            <ArrowFatLinesLeft size={17} weight={rippleEditing ? "fill" : "regular"} />
           </IconButton>
           <div className={`timeline-selection-tool ${timelineSelectionMenuOpen ? "is-open" : ""}`}>
             <button
@@ -2684,6 +2757,7 @@ export function Timeline({
                     const isOverlayPromotionInsertTarget = Boolean(
                       overlayPromotionTarget && overlayPromotionTarget.insertIndex === index,
                     );
+                    const isAssetInsertTarget = mainAssetInsertIndex === index;
                     const promotionOverlay = isOverlayPromotionInsertTarget
                       ? visualOverlaySegments.find((item) => item.id === overlayPromotionTarget.segmentId)
                       : null;
@@ -2720,6 +2794,7 @@ export function Timeline({
                         style={{
                           "--image-clip-width": `${segmentWidth}%`,
                           "--promotion-gap-width": `${promotionGapWidth}%`,
+                          "--asset-insert-gap-width": `${mainAssetInsertWidth}%`,
                         }}
                         className={`image-clip ${segmentType === "video" ? "is-video" : ""} ${
                           isCurrentVisualSegment ? "is-current" : ""
@@ -2727,6 +2802,7 @@ export function Timeline({
                           isDraggingVisualSegment ? "is-reorder-dragging" : ""
                         } ${isReorderTarget ? "is-reorder-target" : ""} ${
                           isOverlayPromotionInsertTarget ? "is-overlay-promotion-insert-target" : ""
+                        } ${isAssetInsertTarget ? "is-asset-insert-target" : ""
                         } ${segment.preparing ? "is-preparing" : ""}`}
                         onPointerDown={(event) => {
                           if (!segment.preparing) startTimelineClipDrag(event, "image", segment.id, index);
@@ -2821,18 +2897,37 @@ export function Timeline({
                           </span>
                         ) : null}
                         {!segment.preparing ? <span className="image-clip-duration">{formatClock(segment.duration)}</span> : null}
-                        {!segment.preparing && !activeTimelineClipDrag ? (
+                        {!segment.preparing && !activeTimelineClipDrag ? <>
+                          {index > 0 ? (
+                            <button
+                              className="image-resize-handle is-start"
+                              type="button"
+                              aria-label={t("dragImageStart", "调整画面片段起点")}
+                              onPointerDown={(event) => startImageResize(event, segment.id, index, "start")}
+                            />
+                          ) : null}
                           <button
-                            className="image-resize-handle"
+                            className="image-resize-handle is-end"
                             type="button"
                             aria-label={t("dragImageDuration")}
-                            onPointerDown={(event) => startImageResize(event, segment.id, index)}
+                            onPointerDown={(event) => startImageResize(event, segment.id, index, "end")}
                           />
-                        ) : null}
+                        </> : null}
                       </div>
                     );
                   })
                 : null}
+              {mainAssetInsertIndex >= 0 ? (
+                <div
+                  className="main-track-drop-preview is-asset-insert-preview"
+                  style={{
+                    "--main-drop-left": `${timelineDuration > 0 ? Math.max(0, Math.min(100, mainAssetInsertTime / timelineDuration * 100)) : 0}%`,
+                    "--main-drop-width": `${mainAssetInsertWidth}%`,
+                  }}
+                >
+                  <span><PlusCircle size={12} />{t("insertHere", "插入到此处")}</span>
+                </div>
+              ) : null}
               {overlayPromotionTarget ? (() => {
                 const insertIndex = Math.max(0, Math.min(displayedVisualSegments.length, overlayPromotionTarget.insertIndex));
                 const insertTime = insertIndex < renderedVisualTimeline.length
@@ -2854,6 +2949,9 @@ export function Timeline({
               {displayedVisualSegments.slice(0, -1).map((segment, index) => {
                 const range = renderedVisualTimeline[index];
                 const transition = segment.transition || { id: "none", duration: 0.5 };
+                const insertionPreviewOffset = mainAssetInsertIndex >= 0 && index >= mainAssetInsertIndex
+                  ? mainAssetInsertDuration
+                  : 0;
                 return (
                   <button
                     className={`visual-junction ${transition.id !== "none" ? "has-transition" : ""}`}
@@ -2861,7 +2959,7 @@ export function Timeline({
                     type="button"
                     aria-label={`${t("transition")}: ${trOption(TRANSITIONS.find((item) => item.id === transition.id)?.name || "无转场")}`}
                     title={t("transitionSettings")}
-                    style={{ left: `${((range?.end || 0) / Math.max(0.01, timelineDuration)) * 100}%` }}
+                    style={{ left: `${(((range?.end || 0) + insertionPreviewOffset) / Math.max(0.01, timelineDuration)) * 100}%` }}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => {
                       event.stopPropagation();

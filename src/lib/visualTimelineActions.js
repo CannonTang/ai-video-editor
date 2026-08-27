@@ -109,14 +109,22 @@ export function createVisualTimelineActions(d) {
     }
     const segmentDuration = Math.min(getVisualDurationForAsset(asset), availableDuration);
     const nextSegment = createVisualSegment(segmentDuration, asset);
+    const requestedInsertIndex = Number(options.insertIndex);
+    const insertIndex = Number.isInteger(requestedInsertIndex)
+      ? Math.max(0, Math.min(sourceSegments.length, requestedInsertIndex))
+      : sourceSegments.length;
+    const insertionTime = getVisualSegmentsTotal(sourceSegments.slice(0, insertIndex));
+    const nextSegments = [...sourceSegments];
+    nextSegments.splice(insertIndex, 0, nextSegment);
     d.setFitMode("contain");
     setCurrentVisualAsset(asset);
     commitVisualSegments(
-      [...sourceSegments, nextSegment],
-      options.message ?? `${asset.type === "video" ? "视频" : "图片"}素材已追加到图片轨`,
-      sourceSegments.length,
+      nextSegments,
+      options.message ?? `${asset.type === "video" ? "视频" : "图片"}素材已${insertIndex < sourceSegments.length ? "插入" : "追加"}到图片轨`,
+      insertIndex,
     );
-    d.seekTo(totalDuration);
+    d.rippleTimelineAfter?.(insertionTime, nextSegment.duration);
+    d.seekTo(insertionTime);
     return nextSegment;
   }
 

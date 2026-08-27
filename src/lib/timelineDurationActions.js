@@ -28,6 +28,7 @@ export function createTimelineDurationActions(d) {
         duration,
         ...(segment.type === "video" ? { sourceDuration: duration * Math.max(0.25, Math.min(4, Number(segment.playbackRate) || 1)) } : {}),
       } : segment);
+      d.rippleTimelineAfter?.(getVisualSegmentsTotal(source.slice(0, index + 1)), duration - target.duration);
       return void d.commitVisualSegments(next, delta > 0 ? "当前视觉片段已加长" : "当前视觉片段已缩短", index);
     }
     if (d.selectedTrack === "music") return void d.notify("背景音乐长度由素材决定，下一版会支持裁剪和淡入淡出");

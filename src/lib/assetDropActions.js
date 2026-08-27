@@ -1,5 +1,6 @@
 import { decodeWaveform, extractVideoTrackFrames } from "./media.js";
 import { getRemoteAssetBlob } from "./remoteAssetCache.js";
+import { getVisualInsertionHover, resolveVisualInsertion } from "./visualDropInsertion.js";
 
 export function createAssetDropActions(d) {
   const tr = (key, fallback) => d.t?.(key, fallback) ?? fallback;
@@ -32,7 +33,7 @@ export function createAssetDropActions(d) {
     let pendingSegment = null;
     let progressBucket = -1;
     if (isRemoteVisual && track === "image") {
-      pendingSegment = d.appendVisualAssetToTimeline({ ...asset, preparing: true, prepareProgress: 0 }, { message: tr("remoteAssetPreparing", "在线素材正在准备") });
+      pendingSegment = d.appendVisualAssetToTimeline({ ...asset, preparing: true, prepareProgress: 0 }, { message: tr("remoteAssetPreparing", "在线素材正在准备"), insertIndex: options.insertIndex });
       d.onFirstVisualDropped?.();
     }
     asset = await resolveRemoteAsset(asset, pendingSegment ? (progress) => {
@@ -62,7 +63,7 @@ export function createAssetDropActions(d) {
             .catch((error) => console.warn("Remote video timeline frame extraction failed", error));
         }
       } else {
-        d.appendVisualAssetToTimeline(asset);
+        d.appendVisualAssetToTimeline(asset, { insertIndex: options.insertIndex });
         d.onFirstVisualDropped?.();
       }
       return;
@@ -118,14 +119,24 @@ export function createAssetDropActions(d) {
         event.currentTarget.getBoundingClientRect()
       : event.currentTarget.getBoundingClientRect();
     const percent = d.getTimelineDropPercent(event.clientX, rect);
+    const insertion = targetTrack === "image"
+      ? resolveVisualInsertion({
+          segments: d.visualSegments,
+          percent,
+          timelineDuration: d.timelineDuration,
+          hover: getVisualInsertionHover(event.target, event.clientX),
+        })
+      : null;
     d.draggedAssetIdRef.current = "";
     d.setDraggedAssetId("");
     d.setAssetDropTargetTrack("");
     d.setAssetDropPosition({ track: "", percent: 50 });
     d.triggerAssetDropPulse(targetTrack);
-    const startTime = Number.isFinite(Number(event.currentTarget.dataset.dropStartTime)) ? Number(event.currentTarget.dataset.dropStartTime) : undefined;
+    const startTime = targetTrack === "overlay"
+      ? Math.max(0, percent / 100 * Math.max(0, Number(d.timelineDuration) || 0))
+      : Number.isFinite(Number(event.currentTarget.dataset.dropStartTime)) ? Number(event.currentTarget.dataset.dropStartTime) : undefined;
     const layer = Number.isFinite(Number(event.currentTarget.dataset.dropLayer)) ? Number(event.currentTarget.dataset.dropLayer) : undefined;
-    void applyAssetToTrack(asset, targetTrack, { percent, startTime, layer });
+    void applyAssetToTrack(asset, targetTrack, { percent, startTime, layer, insertIndex: insertion?.index });
   }
 
   function handleVisualStyleDrop(event) {

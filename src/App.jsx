@@ -92,6 +92,7 @@ import {
 import { createVisualOverlaySegment, getVisualOverlayPreset, updateVisualOverlayTransform } from "./lib/visualOverlayTimeline.js";
 import { getMobileClipPanelOrigin } from "./lib/mobileClipActions.js";
 import { getVisualPropertyTabIds } from "./lib/visualPropertyTabs.js";
+import { applyTimelineRipple } from "./lib/timelineRipple.js";
 import { COMPACT_WORKSPACE_QUERY } from "./config/editor.js";
 
 export function App() {
@@ -181,7 +182,7 @@ export function App() {
     setIsDragging, setIsPlaying, setMediaTab, setProgress, setRatioId,
     setSelectedLibraryAssetId, setSelectedTrack, setShowFileMenu, setShowRatioMenu,
     setShowSettings, setShowVoiceFilter, setSnapGuide, setStatus, setStatusText,
-    setTimelineClipDrag, setTimelineZoom, setTrackLocks, setTrackVisibility, setVoiceFilter,
+    rippleEditing, setRippleEditing, setTimelineClipDrag, setTimelineZoom, setTrackLocks, setTrackVisibility, setVoiceFilter,
     setVoiceTab, showFileMenu, showRatioMenu, showSettings, showVoiceFilter, snapGuide,
     status, statusText, timelineClipDrag, timelineZoom, trackLocks, trackVisibility,
     voiceFilter, voiceTab,
@@ -234,14 +235,14 @@ export function App() {
   const { redo, undo } = useEditorHistory({
     audioSegments, captionPlacement, captionPosition, captionSegments, captionSize,
     captionStyle, captionsEnabled, currentTime, fitMode, imageClipCount, imageDuration,
-    imageMeta, imageName, imageSrc, imageUrlRefs, musicBlob, musicDuration, musicName, musicStart,
+    imageMeta, imageName, imageSrc, imageUrlRefs, musicBlob, musicDuration, musicName, musicSegments, musicStart,
     musicPeaks, musicUrl, musicUrlRef, musicVolume, notify, selectedAudioSegmentId,
     selectedFilterId, selectedSegmentId, selectedStickerId, selectedStickerSegmentId,
     selectedTrack, selectedTransitionId, selectedVisualSegmentId, script, setAudioSegments,
     setCaptionPlacement, setCaptionPosition, setCaptionSegments, setCaptionSize,
     setCaptionStyle, setCaptionsEnabled, setCurrentTime, setFitMode, setImageClipCount,
     setImageDuration, setImageMeta, setImageName, setImageSrc, setIsPlaying, setMusicBlob,
-    setMusicDuration, setMusicName, setMusicPeaks, setMusicStart, setMusicUrl, setMusicVolume, setScript,
+    setMusicDuration, setMusicName, setMusicPeaks, setMusicSegments, setMusicStart, setMusicUrl, setMusicVolume, setScript,
     setSelectedAudioSegmentId, setSelectedFilterId, setSelectedSegmentId,
     setSelectedStickerId, setSelectedStickerSegmentId, setSelectedTrack,
     setSelectedTransitionId, setSelectedVisualSegmentId, setSourceAudioBlob,
@@ -296,6 +297,13 @@ export function App() {
   const musicTimelineEnd = musicSegments.length
     ? musicSegments.reduce((end, segment) => Math.max(end, segment.start + segment.duration), 0)
     : musicStart + musicDuration;
+
+  const rippleTimelineAfter = (boundary, delta) => applyTimelineRipple({
+    rippleEditing, audioSegments, captionSegments, musicBlob, musicSegments, musicStart,
+    sourceAudioBlob, sourceAudioLinked, sourceAudioStart, stickerSegments, trackLocks,
+    visualOverlaySegments, setAudioSegments, setCaptionSegments, setMusicSegments,
+    setMusicStart, setSourceAudioStart, setStickerSegments, setVisualOverlaySegments,
+  }, boundary, delta);
 
   const {
     activePreviewFilter, audioBlob, audioDuration, audioUrl, canPreview, captionDuration,
@@ -571,7 +579,7 @@ export function App() {
     setAssetDragPreview, setAssetDropPosition, setAssetDropPulseTrack,
     setAssetDropTargetTrack, setDraggedAssetId, setSelectedLibraryAssetId,
     setSelectedStickerId, setSelectedStickerSegmentId, suppressAssetClickRef,
-    t, trackLocks, trackScrollRef, userAssets,
+    t, timelineDuration, trackLocks, trackScrollRef, userAssets, visualSegments,
   });
 
   const analyzeCurrentVisual = useVisionAnalysis({
@@ -783,7 +791,7 @@ export function App() {
   } = createVisualTimelineActions({
     audioBlob, audioDuration, captionDuration,
     extractVideoSourceAudio: (...args) => extractVideoSourceAudio(...args),
-    imageDuration, imageMeta, imageName, imageSrc, musicBlob, musicDuration, notify,
+    imageDuration, imageMeta, imageName, imageSrc, musicBlob, musicDuration, notify, rippleTimelineAfter,
     previewVisualSegment, script, seekTo: (...args) => seekTo(...args), setCurrentTime,
     setFitMode, setImageClipCount, setImageDuration, setImageMeta, setImageName,
     setImageSrc, setSelectedTrack, setSelectedVisualSegmentId, setVisualSegments,
@@ -959,7 +967,7 @@ export function App() {
     commitVisualSegments, currentStickerSegmentIndex, currentTime, captionStyle,
     currentVisualSegmentIndex, deleteCaptionSegment, focusedSegmentIndex,
     getCurrentVisualAssetSnapshot, getStickerDragAsset, imageClipCount,
-    imageDuration, imageSrc, notify, selectedSegmentId, selectedSegmentIndex,
+    imageDuration, imageSrc, notify, rippleTimelineAfter, selectedSegmentId, selectedSegmentIndex,
     selectedSticker, selectedStickerSegmentId, selectedTrack,
     selectedVisualSegmentId, selectedVisualSegmentIndex, stickerSegments,
     t, trackLocks, visualSegments,
@@ -971,7 +979,7 @@ export function App() {
     focusedSegmentIndex, getCurrentVisualAssetSnapshot, imageDuration, imageSrc,
     notify, selectedSegmentId, selectedSegmentIndex, selectedStickerSegmentId,
     selectedTrack, selectedVisualSegmentId, selectedVisualSegmentIndex,
-    stickerSegments, trackLocks, visualSegments,
+    rippleTimelineAfter, stickerSegments, trackLocks, visualSegments,
   });
 
   const { handleDeleteTrack, handleDuplicateTrack } = createTimelineClipboardActions({
@@ -980,7 +988,7 @@ export function App() {
     currentStickerSegmentIndex, currentVisualSegmentIndex, deleteAudioSegment,
     focusedSegmentIndex, getCurrentVisualAssetSnapshot, handleRemoveSegment,
     imageClipCount, imageDuration, imageMeta, imageName, imageSrc, musicBlob, musicDuration, musicName, musicPeaks, musicSegments, musicStart,
-    notify, selectedAudioSegment, selectedAudioSegmentId, selectedMusicSegmentId, selectedSegmentId,
+    notify, rippleTimelineAfter, selectedAudioSegment, selectedAudioSegmentId, selectedMusicSegmentId, selectedSegmentId,
     selectedSegmentIndex, selectedStickerSegmentId, selectedTrack,
     selectedVisualSegmentId, selectedVisualSegmentIndex, setAudioSegments,
     setCaptionSegments, setMusicSegments, setMusicStart, setSelectedAudioSegmentId, setSelectedMusicSegmentId, sourceAudioBlob,
@@ -1053,11 +1061,11 @@ export function App() {
 
   const startImageResize = createImageResizeControl({
     audioBlob, audioDuration, captionDuration, getCurrentVisualAssetSnapshot,
-    imageDuration, imageSrc, musicBlob, musicDuration, musicStart, notify, script,
+    imageDuration, imageSrc, musicBlob, musicDuration, musicStart, notify, rippleTimelineAfter, script,
     setCurrentTime, setImageClipCount, setImageDuration, setSelectedTrack,
     setSelectedVisualSegmentId, setSnapGuide, setVisualSegments, sourceAudioBlob,
     sourceAudioDuration, sourceAudioStart, timelineDuration, timelineDurationRef,
-    setTimelineHorizon, trackLocks, trackScrollRef, visualSegments, pauseForTimelineEdit,
+    setTimelineHorizon, t, trackLocks, trackScrollRef, visualSegments, pauseForTimelineEdit,
   });
 
   const extractVideoSourceAudio = useSourceAudioExtraction({
@@ -1632,6 +1640,8 @@ export function App() {
         handleDeleteTrack={handleDeleteTrack}
         handleDuplicateTrack={handleDuplicateTrack}
         handleCutTrack={handleCutTrack}
+        rippleEditing={rippleEditing}
+        setRippleEditing={setRippleEditing}
         canPreview={canPreview}
         handlePlayToggle={handlePlayToggle}
         isPlaying={isPlaying}
@@ -1677,6 +1687,7 @@ export function App() {
         assetDropPulseTrack={assetDropPulseTrack}
         assetDragPreview={assetDragPreview}
         draggedAssetType={getActiveDraggedAsset()?.type || assetDragPreview?.type || ""}
+        draggedAssetDuration={getActiveDraggedAsset()?.duration || assetDragPreview?.duration || 0}
         handleTrackAssetDragOver={handleTrackAssetDragOver}
         handleTrackAssetDragLeave={handleTrackAssetDragLeave}
         handleTrackAssetDrop={handleTrackAssetDrop}

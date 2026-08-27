@@ -19,11 +19,11 @@ Người dùng tự chịu mọi trách nhiệm pháp lý phát sinh từ việc
 
 ## Cập nhật dự án
 
+- **26 tháng 8, 2026 — Chỉnh sửa gợn sóng nhận biết khóa:** bổ sung chế độ gợn sóng rõ ràng trên thanh công cụ dòng thời gian. Khi kéo nội dung lên rãnh chính, một khoảng chèn đúng bằng thời lượng nội dung sẽ mở trước khi thả, đồng thời dịch các clip phía sau cùng các điểm chuyển cảnh. Clip hình chính nay có tay nắm đầu để chỉnh ranh giới cuốn, còn thao tác thả hình trong hình hiển thị đúng vị trí và thời lượng trên hàng đích. Việc chèn, nhân đôi, xóa và đổi thời lượng sẽ dịch các clip định thời đủ điều kiện theo đúng độ chênh, giữ liên kết phụ đề–âm thanh đang hoạt động, suy ra âm thanh nguồn liên kết từ chuỗi hình ảnh và không di chuyển rãnh đã khóa.
 - **26 tháng 8, 2026 — Chia đoạn hình ảnh di động:** sửa `visual.split` của Agent để cả hai đoạn liền nhau vẫn giữ tham chiếu đến phương tiện nguồn trong gói lưu trữ sau khi mở lại, bảo toàn toàn bộ video và âm thanh nguồn nhúng khi xuất trong trình duyệt.
 - **24 tháng 8, 2026 — Gợn sóng nhấp theo nhịp:** bổ sung hiệu ứng lấy cảm hứng từ osu! có thể chỉnh sửa, với vị trí nhấn ngẫu nhiên xác định, nhịp nhạc và BPM nốt đen, một gợn nước khúc xạ toàn khung cho mỗi lần nhấn, chuyển đồng bộ từ thang xám sang màu, bảng điều khiển bên phải, kết quả xem trước và xuất giống nhau, cùng bản địa hóa đủ 11 ngôn ngữ.
 - **12 tháng 8, 2026 — Bánh xe màu trên máy tính:** bổ sung bánh xe cho vùng tối, trung gian, vùng sáng và độ lệch, cùng nhiệt độ, sắc độ và độ bão hòa. Cả 15 thuộc tính hỗ trợ khung hình chính và cho kết quả nhất quán khi xem trước và xuất.
 - **7 tháng 8, 2026 — Agent Skill v0.9.2 đa nền tảng:** bổ sung tái dựng video tham chiếu, thiết kế điểm nhấn và nhịp căng thẳng, câu chuyện quảng bá, tìm nguồn tư liệu, định tuyến mô hình cục bộ, thiết lập phụ thuộc, chuẩn bị giọng Trung–Anh và kiểm tra âm thanh.
-- **5 tháng 8, 2026 — Agent Skill v0.9.1:** phát hành quy trình dựng tự động chuyên nghiệp với lập kế hoạch đa phương thức, ổn định hình ảnh, theo dõi, lồng tiếng di động theo câu và bàn giao đồng thời dự án `.timeline` đã xác minh cùng video hoàn chỉnh.
 
 Xem [Roadmap](ROADMAP.md) cho công việc dự kiến, [Releases](https://github.com/MartinDelophy/ai-video-editor/releases) cho thay đổi đã phát hành và [Issues](https://github.com/MartinDelophy/ai-video-editor/issues) cho nhiệm vụ và lỗi.
 

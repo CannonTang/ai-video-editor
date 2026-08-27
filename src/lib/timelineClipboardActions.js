@@ -33,7 +33,12 @@ export function createTimelineClipboardActions(d) {
       const source = d.visualSegments.length ? d.visualSegments : [createVisualSegment(d.imageDuration || 0, d.getCurrentVisualAssetSnapshot())];
       const index = d.selectedVisualSegmentId && source.some((segment) => segment.id === d.selectedVisualSegmentId)
         ? d.selectedVisualSegmentIndex : d.currentVisualSegmentIndex >= 0 ? d.currentVisualSegmentIndex : 0;
+      const removed = source[index];
       const next = source.filter((_, position) => position !== index);
+      if (removed) {
+        const boundary = getVisualSegmentsTotal(source.slice(0, index + 1));
+        d.rippleTimelineAfter?.(boundary, -removed.duration);
+      }
       return void (next.length ? d.commitVisualSegments(next, "已删除当前视觉片段", Math.max(0, index - 1)) : d.clearImageTrack("已删除当前视觉片段"));
     }
     if (d.selectedTrack === "audio") {
@@ -124,6 +129,7 @@ export function createTimelineClipboardActions(d) {
       });
       const next = [...source];
       next.splice(index + 1, 0, copy);
+      d.rippleTimelineAfter?.(getVisualSegmentsTotal(source.slice(0, index + 1)), copy.duration);
       return void d.commitVisualSegments(next, "已复制当前视觉片段", index + 1);
     }
     if (d.selectedTrack === "audio") {

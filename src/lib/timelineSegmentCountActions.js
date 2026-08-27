@@ -50,6 +50,7 @@ export function createTimelineSegmentCountActions(d) {
       const boundaryIndex = timeline.findIndex((range) => Math.abs(range.start - playhead) < 0.001);
       if (boundaryIndex >= 0) {
         const next = [...source]; next.splice(boundaryIndex, 0, segment);
+        d.rippleTimelineAfter?.(playhead, segment.duration);
         return void d.commitVisualSegments(next, "已在播放头位置新增视觉片段", boundaryIndex);
       }
       const range = timeline[activeIndex]; const active = source[activeIndex];
@@ -65,8 +66,10 @@ export function createTimelineSegmentCountActions(d) {
           sourceDuration: active.type === "video" ? rightDuration * playbackRate : active.sourceDuration,
           sourceStart: active.type === "video" ? Math.max(0, Number(active.sourceStart) || 0) + leftDuration * playbackRate : Math.max(0, Number(active.sourceStart) || 0) };
         const next = [...source]; next.splice(activeIndex, 1, left, segment, right);
+        d.rippleTimelineAfter?.(playhead, segment.duration);
         return void d.commitVisualSegments(next, "已在播放头位置新增视觉片段", activeIndex + 1);
       }
+      d.rippleTimelineAfter?.(getVisualSegmentsTotal(source), segment.duration);
       return void d.commitVisualSegments([...source, segment], "已在播放头位置新增视觉片段", source.length);
     }
     if (["audio", "source", "music"].includes(d.selectedTrack)) return void d.notify(d.selectedTrack === "music" ? "背景音乐暂不支持切片，请删除后重新上传" : d.selectedTrack === "source" ? "视频原声暂不支持切片，可删除后重新上传视频" : "音频片段由生成结果决定，请重新生成或复制 WAV");
@@ -80,9 +83,15 @@ export function createTimelineSegmentCountActions(d) {
       const source = d.visualSegments.length ? d.visualSegments : [createVisualSegment(d.imageDuration || 0, d.getCurrentVisualAssetSnapshot())];
       if (source.length > 1) {
         const index = d.selectedVisualSegmentId && source.some((segment) => segment.id === d.selectedVisualSegmentId) ? d.selectedVisualSegmentIndex : d.currentVisualSegmentIndex >= 0 ? d.currentVisualSegmentIndex : source.length - 1;
+        const removed = source[index];
+        d.rippleTimelineAfter?.(getVisualSegmentsTotal(source.slice(0, index + 1)), -removed.duration);
         return void d.commitVisualSegments(source.filter((_, position) => position !== index), "已删除当前视觉片段", Math.max(0, index - 1));
       }
-      if (source[0].duration <= IMAGE_SEGMENT_SECONDS) return void d.clearImageTrack("已删除最后一个视觉片段");
+      if (source[0].duration <= IMAGE_SEGMENT_SECONDS) {
+        d.rippleTimelineAfter?.(source[0].duration, -source[0].duration);
+        return void d.clearImageTrack("已删除最后一个视觉片段");
+      }
+      d.rippleTimelineAfter?.(source[0].duration, -IMAGE_SEGMENT_SECONDS);
       return void d.commitVisualSegments([{ ...source[0], duration: source[0].duration - IMAGE_SEGMENT_SECONDS }], "已缩短当前视觉片段", 0);
     }
     if (["audio", "source", "music"].includes(d.selectedTrack)) return void d.notify(d.selectedTrack === "music" ? "背景音乐可整轨删除，暂不支持局部减少" : d.selectedTrack === "source" ? "视频原声可整轨删除，暂不支持局部减少" : "音频片段不能单独减少；可以删除音频轨或重新生成");

@@ -1,4 +1,5 @@
 import { ASSET_DRAG_MIME, STICKERS } from "../config/editor.js";
+import { getVisualInsertionHover, resolveVisualInsertion } from "./visualDropInsertion.js";
 
 export function resolveVisualDropIntent({ track = "image" } = {}) {
   return track === "overlay" ? "overlay" : "image";
@@ -45,14 +46,27 @@ export function createAssetDragControls(deps) {
     }
     const trackElement = element.closest("[data-asset-drop-track]");
     let track = trackElement?.dataset.assetDropTrack ?? "";
-    const startTime = trackElement instanceof HTMLElement && Number.isFinite(Number(trackElement.dataset.dropStartTime))
+    const laneEnd = trackElement instanceof HTMLElement && Number.isFinite(Number(trackElement.dataset.dropStartTime))
       ? Number(trackElement.dataset.dropStartTime)
       : undefined;
     const layer = trackElement instanceof HTMLElement && Number.isFinite(Number(trackElement.dataset.dropLayer))
       ? Number(trackElement.dataset.dropLayer)
       : undefined;
-    return !track || !(trackElement instanceof HTMLElement) ? { track, percent: 50, startTime, layer }
-      : { track, percent: getTimelineDropPercent(clientX, trackElement.getBoundingClientRect()), startTime, layer };
+    const percent = !track || !(trackElement instanceof HTMLElement)
+      ? 50
+      : getTimelineDropPercent(clientX, trackElement.getBoundingClientRect());
+    const startTime = track === "overlay"
+      ? Math.max(0, percent / 100 * Math.max(0, Number(deps.timelineDuration) || 0))
+      : laneEnd;
+    const insertion = track === "image"
+      ? resolveVisualInsertion({
+          segments: deps.visualSegments,
+          percent,
+          timelineDuration: deps.timelineDuration,
+          hover: getVisualInsertionHover(element, clientX),
+        })
+      : null;
+    return { track, percent, startTime, layer, insertIndex: insertion?.index, insertTime: insertion?.time };
   };
   const triggerAssetDropPulse = (track) => {
     if (!track) return;
@@ -72,8 +86,8 @@ export function createAssetDragControls(deps) {
       const info = getDropTrackInfoFromPoint(e.clientX, e.clientY); const dragged = findAssetById(state.assetId);
       const track = dragged?.type === "sticker" && info.track ? "sticker" : info.track;
       const accepted = canDropAssetOnTrack(dragged, track) ? track : "";
-      deps.setAssetDropTargetTrack(accepted); deps.setAssetDropPosition(accepted ? { track: accepted, percent: info.percent } : { track: "", percent: 50 });
-      deps.setAssetDragPreview({ id: asset.id, name: asset.name, type: asset.type, src: asset.src, x: e.clientX, y: e.clientY });
+      deps.setAssetDropTargetTrack(accepted); deps.setAssetDropPosition(accepted ? { track: accepted, percent: info.percent, startTime: info.startTime, layer: info.layer, insertIndex: info.insertIndex, insertTime: info.insertTime } : { track: "", percent: 50 });
+      deps.setAssetDragPreview({ id: asset.id, name: asset.name, type: asset.type, src: asset.src, duration: asset.duration, x: e.clientX, y: e.clientY });
     };
     const cleanup = () => {
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cleanup);
@@ -85,7 +99,7 @@ export function createAssetDragControls(deps) {
       if (!state?.dragging) return;
       deps.suppressAssetClickRef.current = state.assetId; setTimeout(() => { if (deps.suppressAssetClickRef.current === state.assetId) deps.suppressAssetClickRef.current = ""; }, 300);
       const dragged = findAssetById(state.assetId); const track = dragged?.type === "sticker" && info.track ? "sticker" : info.track;
-      if (canDropAssetOnTrack(dragged, track)) { triggerAssetDropPulse(track); void deps.applyAssetToTrack(dragged, track, { percent: info.percent, startTime: info.startTime, layer: info.layer }); }
+      if (canDropAssetOnTrack(dragged, track)) { triggerAssetDropPulse(track); void deps.applyAssetToTrack(dragged, track, { percent: info.percent, startTime: info.startTime, layer: info.layer, insertIndex: info.insertIndex }); }
     };
     addEventListener("pointermove", move, { passive: false }); addEventListener("pointerup", up); addEventListener("pointercancel", cleanup);
   };
@@ -113,7 +127,22 @@ export function createAssetDragControls(deps) {
     if (!canDropAssetOnTrack(asset, target)) return;
     event.preventDefault(); event.dataTransfer.dropEffect = "copy";
     const rect = target === "sticker" ? deps.trackScrollRef.current?.getBoundingClientRect() ?? event.currentTarget.getBoundingClientRect() : event.currentTarget.getBoundingClientRect();
-    deps.setAssetDropTargetTrack(target); deps.setAssetDropPosition({ track: target, percent: getTimelineDropPercent(event.clientX, rect) });
+    const percent = getTimelineDropPercent(event.clientX, rect);
+    const layer = target === "overlay" && Number.isFinite(Number(event.currentTarget.dataset.dropLayer))
+      ? Number(event.currentTarget.dataset.dropLayer)
+      : undefined;
+    const startTime = target === "overlay"
+      ? Math.max(0, percent / 100 * Math.max(0, Number(deps.timelineDuration) || 0))
+      : undefined;
+    const insertion = target === "image"
+      ? resolveVisualInsertion({
+          segments: deps.visualSegments,
+          percent,
+          timelineDuration: deps.timelineDuration,
+          hover: getVisualInsertionHover(event.target, event.clientX),
+        })
+      : null;
+    deps.setAssetDropTargetTrack(target); deps.setAssetDropPosition({ track: target, percent, startTime, layer, insertIndex: insertion?.index, insertTime: insertion?.time });
   };
   const handleTrackAssetDragLeave = (event, track) => {
     if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;

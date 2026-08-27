@@ -31,6 +31,7 @@ export function useEditorUiState() {
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [trackVisibility, setTrackVisibility] = useState(DEFAULT_TRACK_VISIBILITY);
   const [trackLocks, setTrackLocks] = useState(DEFAULT_TRACK_LOCKS);
+  const [rippleEditing, setRippleEditing] = useState(false);
   const [timelineClipDrag, setTimelineClipDrag] = useState(null);
   const [snapGuide, setSnapGuide] = useState(null);
 
@@ -46,7 +47,7 @@ export function useEditorUiState() {
     setShowSettings, setShowVoiceFilter, setSnapGuide, setStatus, setStatusText,
     setTimelineClipDrag, setTimelineZoom, setTrackLocks, setTrackVisibility, setVoiceFilter,
     setVoiceTab, showFileMenu, showRatioMenu, showSettings, showVoiceFilter, snapGuide,
-    status, statusText, timelineClipDrag, timelineZoom, trackLocks, trackVisibility,
+    rippleEditing, setRippleEditing, status, statusText, timelineClipDrag, timelineZoom, trackLocks, trackVisibility,
     voiceFilter, voiceTab,
   };
 }

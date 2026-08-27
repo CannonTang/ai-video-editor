@@ -11,7 +11,7 @@ import {
 } from "./timelineEdgeAutoScroll.js";
 
 export function createImageResizeControl(d) {
-  return function startImageResize(event, segmentId = "", segmentIndex = -1) {
+  return function startImageResize(event, segmentId = "", segmentIndex = -1, edge = "end") {
     if (event.button !== 0) return;
     event.preventDefault(); event.stopPropagation();
     if (d.trackLocks.image) return void d.notify("图片轨已锁定，无法拉长片段");
@@ -34,6 +34,12 @@ export function createImageResizeControl(d) {
     const resizeId = segments[index]?.id ?? "";
     const before = getVisualSegmentsTotal(segments.slice(0, index));
     const after = getVisualSegmentsTotal(segments.slice(index + 1));
+    const originalDuration = segments[index]?.duration || 0;
+    const isStartEdge = edge === "start" && index > 0;
+    const previous = isStartEdge ? segments[index - 1] : null;
+    const previousStart = isStartEdge ? getVisualSegmentsTotal(segments.slice(0, index - 1)) : 0;
+    const previousDuration = previous?.duration || 0;
+    let finalDuration = originalDuration;
     d.setSelectedVisualSegmentId(resizeId);
     const snapPoints = [
       d.audioBlob && d.audioDuration > 0 ? { time: Math.min(MAX_TIMELINE_DURATION_SECONDS, d.audioDuration), label: "配音结尾" } : null,
@@ -57,8 +63,51 @@ export function createImageResizeControl(d) {
       const snap = snapPoints.map((point) => ({ ...point, distance: Math.abs(pointerX - (point.time / timelineDuration) * rect.width) }))
         .filter((point) => point.distance <= IMAGE_SNAP_THRESHOLD_PIXELS).sort((a, b) => a.distance - b.distance)[0] ?? null;
       const target = snap?.time ?? clamped;
+      if (isStartEdge) {
+        let minimumBoundary = previousStart + MIN_VISUAL_SEGMENT_SECONDS;
+        let maximumBoundary = before + originalDuration - MIN_VISUAL_SEGMENT_SECONDS;
+        const currentRate = Math.max(0.25, Math.min(4, Number(segments[index]?.playbackRate) || 1));
+        const previousRate = Math.max(0.25, Math.min(4, Number(previous?.playbackRate) || 1));
+        if (segments[index]?.type === "video") {
+          minimumBoundary = Math.max(minimumBoundary, before - (Number(segments[index].sourceStart) || 0) / currentRate);
+        }
+        if (previous?.type === "video") {
+          const sourceEnd = (Number(previous.sourceStart) || 0) + (Number(previous.sourceDuration) || previousDuration * previousRate);
+          const sourceLimit = Math.max(sourceEnd, Number(previous.trackFrameDuration) || sourceEnd);
+          maximumBoundary = Math.min(maximumBoundary, before + (sourceLimit - sourceEnd) / previousRate);
+        }
+        const boundary = Math.max(minimumBoundary, Math.min(maximumBoundary, target));
+        const delta = boundary - before;
+        const next = segments.map((segment, position) => {
+          if (position === index - 1) {
+            const duration = previousDuration + delta;
+            return {
+              ...segment,
+              duration,
+              ...(segment.type === "video" ? { sourceDuration: Math.max(0, (Number(segment.sourceDuration) || previousDuration * previousRate) + delta * previousRate) } : {}),
+            };
+          }
+          if (position !== index) return segment;
+          const duration = originalDuration - delta;
+          return {
+            ...segment,
+            duration,
+            ...(segment.type === "video" ? {
+              sourceStart: Math.max(0, (Number(segment.sourceStart) || 0) + delta * currentRate),
+              sourceDuration: Math.max(0, (Number(segment.sourceDuration) || originalDuration * currentRate) - delta * currentRate),
+            } : {}),
+          };
+        });
+        activeLabel = snap?.label ?? "";
+        d.setSnapGuide(createTimelineSnapGuide(snap || { time: boundary }, "start"));
+        d.setVisualSegments(next);
+        d.setImageDuration(getVisualSegmentsTotal(next));
+        d.setImageClipCount(getImageThumbnailCount(getVisualSegmentsTotal(next)));
+        return;
+      }
       const maxDuration = Math.max(MIN_VISUAL_SEGMENT_SECONDS, MAX_TIMELINE_DURATION_SECONDS - before - after);
       const resized = Math.min(maxDuration, Math.max(MIN_VISUAL_SEGMENT_SECONDS, target - before));
+      finalDuration = resized;
       const next = segments.map((segment, position) => position === index ? {
         ...segment,
         duration: resized,
@@ -84,7 +133,10 @@ export function createImageResizeControl(d) {
       settleTimelineDrag(autoScroller, { active: moved, setTimelineHorizon: d.setTimelineHorizon });
       removeEventListener("pointermove", move); removeEventListener("pointerup", up); removeEventListener("pointercancel", cancel); d.setSnapGuide(null);
       if (!moved) return;
-      d.notify(activeLabel === "配音结尾" ? "图片已吸附到配音结尾" : activeLabel === "原声结尾" ? "图片已吸附到视频原声结尾" : activeLabel === "音乐结尾" ? "图片已吸附到音乐结尾" : "图片片段时长已调整");
+      if (!isStartEdge) d.rippleTimelineAfter?.(before + originalDuration, finalDuration - originalDuration);
+      d.notify(isStartEdge
+        ? d.t?.("visualStartAdjusted", "画面片段起点已调整") || "画面片段起点已调整"
+        : activeLabel === "配音结尾" ? "图片已吸附到配音结尾" : activeLabel === "原声结尾" ? "图片已吸附到视频原声结尾" : activeLabel === "音乐结尾" ? "图片已吸附到音乐结尾" : "图片片段时长已调整");
     };
     const cancel = () => {
       settleTimelineDrag(autoScroller, {

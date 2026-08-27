@@ -39,6 +39,7 @@ function createSnapshot(d) {
     audioSegments: cloneItems(d.audioSegments),
     timelineHorizon: d.timelineHorizon,
     musicBlob: d.musicBlob,
+    musicSegments: cloneItems(d.musicSegments),
     musicStart: d.musicStart,
     musicUrl: d.musicUrl,
     musicName: d.musicName,
@@ -105,6 +106,7 @@ export function createEditorSnapshotSignature(snapshot) {
     timelineHorizon: snapshot.timelineHorizon,
     music: {
       present: Boolean(snapshot.musicBlob),
+      segments: snapshot.musicSegments,
       name: snapshot.musicName,
       duration: snapshot.musicDuration,
       volume: snapshot.musicVolume,
@@ -176,6 +178,7 @@ function restoreSnapshot(snapshot, d) {
   const musicUrl = getBlobUrl(snapshot.musicBlob) || snapshot.musicUrl;
   d.musicUrlRef.current = musicUrl;
   d.setMusicBlob(snapshot.musicBlob);
+  d.setMusicSegments(cloneItems(snapshot.musicSegments));
   d.setMusicStart(Math.max(0, Number(snapshot.musicStart) || 0));
   d.setMusicUrl(musicUrl);
   d.setMusicName(snapshot.musicName);
