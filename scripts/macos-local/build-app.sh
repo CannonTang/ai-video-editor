@@ -8,6 +8,7 @@ ARTIFACT_ROOT="${TIMELINE_LOCAL_BUILD_DIR:-$REPOSITORY_ROOT/.artifacts/macos-loc
 APP_NAME="Timeline Studio Local.app"
 APP_PATH="$ARTIFACT_ROOT/$APP_NAME"
 ZIP_PATH="$ARTIFACT_ROOT/Timeline-Studio-Local-macOS.zip"
+MACOS_DEPLOYMENT_TARGET="13.0"
 SKIP_WEB_BUILD=0
 
 usage() {
@@ -45,6 +46,15 @@ for command_name in node npm xcrun codesign ditto iconutil sips; do
 done
 
 NODE_EXECUTABLE="$(command -v node)"
+BUILD_ARCH="$(uname -m)"
+case "$BUILD_ARCH" in
+  arm64|x86_64) ;;
+  *)
+    echo "Unsupported macOS architecture: $BUILD_ARCH" >&2
+    exit 1
+    ;;
+esac
+
 if [ "$SKIP_WEB_BUILD" -eq 0 ]; then
   if [ ! -x "$REPOSITORY_ROOT/node_modules/.bin/vite" ]; then
     (cd "$REPOSITORY_ROOT" && npm ci)
@@ -93,6 +103,7 @@ fi
 /usr/bin/iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/AppIcon.icns"
 
 /usr/bin/xcrun swiftc \
+  -target "${BUILD_ARCH}-apple-macosx${MACOS_DEPLOYMENT_TARGET}" \
   -parse-as-library \
   -O \
   -framework AppKit \

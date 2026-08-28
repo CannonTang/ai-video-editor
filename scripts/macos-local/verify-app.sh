@@ -4,6 +4,7 @@ set -euo pipefail
 
 APP_PATH="${1:-/Applications/Timeline Studio Local.app}"
 EXPECTED_BUNDLE_ID="com.cannontang.timelinestudio.local"
+EXPECTED_MINIMUM_SYSTEM_VERSION="13.0"
 TEST_PORT="${TIMELINE_LOCAL_TEST_PORT:-41873}"
 
 if [ ! -d "$APP_PATH" ]; then
@@ -28,6 +29,19 @@ for required_path in \
     exit 1
   fi
 done
+
+EXECUTABLE_PATH="$APP_PATH/Contents/MacOS/Timeline Studio Local"
+PLIST_MINIMUM_SYSTEM_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP_PATH/Contents/Info.plist")"
+if [ "$PLIST_MINIMUM_SYSTEM_VERSION" != "$EXPECTED_MINIMUM_SYSTEM_VERSION" ]; then
+  echo "Unexpected Info.plist minimum system version: $PLIST_MINIMUM_SYSTEM_VERSION" >&2
+  exit 1
+fi
+if ! /usr/bin/xcrun vtool -show-build "$EXECUTABLE_PATH" \
+  | grep -Eq "minos[[:space:]]+$EXPECTED_MINIMUM_SYSTEM_VERSION"; then
+  echo "Native launcher deployment target does not match macOS $EXPECTED_MINIMUM_SYSTEM_VERSION:" >&2
+  /usr/bin/xcrun vtool -show-build "$EXECUTABLE_PATH" >&2
+  exit 1
+fi
 
 if [ -e "${HOME}/Library/LaunchAgents/$EXPECTED_BUNDLE_ID.plist" ] \
   || [ -e "/Library/LaunchAgents/$EXPECTED_BUNDLE_ID.plist" ] \
