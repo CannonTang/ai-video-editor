@@ -15,10 +15,10 @@ APP_PATH="$(cd "$(dirname "$APP_PATH")" 2>/dev/null && pwd -P)/$(basename "$APP_
 FILE_URL="$(node -e 'const { pathToFileURL } = require("node:url"); console.log(pathToFileURL(process.argv[1] + "/").href)' "$APP_PATH")"
 
 if [ "$ACTION" = "add" ]; then
-  if defaults read com.apple.dock persistent-apps 2>/dev/null | grep -Fq "$FILE_URL"; then
-    echo "Dock item already exists: $APP_LABEL"
-    exit 0
-  fi
+  # Replacing an App bundle changes its file identity. Dock can keep the old
+  # bookmark and show a question-mark tile even when the new bundle uses the
+  # same path, so always remove stale label/path entries before adding it.
+  "$0" remove "$APP_PATH" >/dev/null
 
   defaults write com.apple.dock persistent-apps -array-add \
     "{\"tile-data\"={\"file-data\"={\"_CFURLString\"=\"$FILE_URL\";\"_CFURLStringType\"=15;};\"file-label\"=\"$APP_LABEL\";};\"tile-type\"=\"file-tile\";}"
