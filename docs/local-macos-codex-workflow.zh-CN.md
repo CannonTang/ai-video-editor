@@ -76,8 +76,9 @@ npm run local:app:install
 3. 把 `dist` 和静态服务器内嵌到 App。
 4. 生成 ad-hoc 签名。
 5. 使用 `ditto` 打包 zip，并在解压后再次验证签名。
-6. 安装到 `/Applications/Timeline Studio Local.app`。
-7. 固定到 Dock 并启动。
+6. 如果已安装的启动器正在运行，先正常退出它，再安装到 `/Applications/Timeline Studio Local.app`。
+7. 注销构建包和被替换旧包的 LaunchServices 记录；旧包以可恢复的 `.app.retired` 后缀移入废纸篓，只登记正式安装包。
+8. 刷新 Dock 文件书签、重启 Dock 并启动 App，避免更新后出现同名问号项。
 
 只构建、不安装：
 
@@ -222,6 +223,14 @@ sudo xattr -r -d com.apple.quarantine "/Applications/Timeline Studio Local.app"
 ### 4173 端口被占用
 
 先退出已有 `Timeline Studio Local`。如果端口属于其他应用，需要停止该应用，或修改 `build-app.sh` 中的端口后重新构建。使用固定 Origin 是为了让浏览器存储和 Service Worker 缓存跨启动保持稳定。
+
+### Dock 同时显示问号和正常图标
+
+问号表示 Dock 或 LaunchServices 仍引用已经被替换的旧 App。重新运行安装命令会注销构建包和旧包，将废纸篓备份保存为不会被重新发现的 `.app.retired`，只登记 `/Applications` 中的正式 App，并刷新 Dock 书签。只需修复 Dock、不重新构建时可执行：
+
+```bash
+bash scripts/macos-local/dock.sh add "/Applications/Timeline Studio Local.app"
+```
 
 ### Safari 打开后页面不可用
 

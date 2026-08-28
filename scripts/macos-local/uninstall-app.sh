@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd -P)"
 INSTALL_DIR="/Applications"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 usage() {
   echo "Usage: $0 [--install-dir PATH]"
@@ -38,8 +39,14 @@ ps -ax -o pid=,command= | while read -r PROCESS_ID PROCESS_COMMAND; do
   fi
 done
 if [ -e "$TARGET_APP" ]; then
-  TRASH_TARGET="${HOME}/.Trash/Timeline Studio Local-uninstalled-$(date +%Y%m%d-%H%M%S).app"
+  if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$TARGET_APP" >/dev/null 2>&1 || true
+  fi
+  TRASH_TARGET="${HOME}/.Trash/Timeline Studio Local-uninstalled-$(date +%Y%m%d-%H%M%S).app.retired"
   mv "$TARGET_APP" "$TRASH_TARGET"
+  if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -u "$TRASH_TARGET" >/dev/null 2>&1 || true
+  fi
   echo "App moved to Trash: $TRASH_TARGET"
 else
   echo "App was not installed: $TARGET_APP"

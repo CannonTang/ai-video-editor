@@ -76,8 +76,9 @@ The installer performs these steps:
 3. Embeds `dist` and the static server inside the App.
 4. Creates an ad-hoc signature.
 5. Creates a `ditto` zip and verifies the signature after extraction.
-6. Installs the App at `/Applications/Timeline Studio Local.app`.
-7. Adds the App to the Dock and launches it.
+6. Gracefully quits an installed launcher when it is running, then installs the App at `/Applications/Timeline Studio Local.app`.
+7. Unregisters the build and replaced copies from LaunchServices, moves the old App to Trash with a recoverable `.app.retired` suffix, and registers only the installed App.
+8. Refreshes the Dock file bookmark, restarts Dock, and launches the App so updates do not leave a duplicate question-mark tile.
 
 Build without installing:
 
@@ -222,6 +223,14 @@ Frictionless public distribution requires Developer ID signing, notarization, an
 ### Port 4173 is already in use
 
 Quit the existing `Timeline Studio Local` process. If another application owns the port, stop it or change the port in `build-app.sh` and rebuild. The launcher uses a strict fixed origin so browser storage and Service Worker caches remain stable between launches.
+
+### Dock shows both a question mark and the normal App icon
+
+The question mark means Dock or LaunchServices still references an App bundle that was replaced. Re-running the installer unregisters the build and retired copies, stores Trash backups with a non-discoverable `.app.retired` suffix, registers only the App in `/Applications`, and refreshes the Dock bookmark. To repair only Dock without rebuilding, run:
+
+```bash
+bash scripts/macos-local/dock.sh add "/Applications/Timeline Studio Local.app"
+```
 
 ### Safari opens but the page is unavailable
 

@@ -5,6 +5,7 @@ set -euo pipefail
 ACTION="${1:-}"
 APP_PATH="${2:-/Applications/Timeline Studio Local.app}"
 APP_LABEL="Timeline Studio Local"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 if [ "$ACTION" != "add" ] && [ "$ACTION" != "remove" ]; then
   echo "Usage: $0 <add|remove> [app-path]" >&2
@@ -15,10 +16,17 @@ APP_PATH="$(cd "$(dirname "$APP_PATH")" 2>/dev/null && pwd -P)/$(basename "$APP_
 FILE_URL="$(node -e 'const { pathToFileURL } = require("node:url"); console.log(pathToFileURL(process.argv[1] + "/").href)' "$APP_PATH")"
 
 if [ "$ACTION" = "add" ]; then
+  if [ ! -d "$APP_PATH" ]; then
+    echo "App is missing: $APP_PATH" >&2
+    exit 1
+  fi
   # Replacing an App bundle changes its file identity. Dock can keep the old
   # bookmark and show a question-mark tile even when the new bundle uses the
   # same path, so always remove stale label/path entries before adding it.
   "$0" remove "$APP_PATH" >/dev/null
+  if [ -x "$LSREGISTER" ]; then
+    "$LSREGISTER" -f "$APP_PATH"
+  fi
 
   defaults write com.apple.dock persistent-apps -array-add \
     "{\"tile-data\"={\"file-data\"={\"_CFURLString\"=\"$FILE_URL\";\"_CFURLStringType\"=15;};\"file-label\"=\"$APP_LABEL\";};\"tile-type\"=\"file-tile\";}"
