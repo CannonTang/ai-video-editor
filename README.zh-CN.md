@@ -183,6 +183,16 @@ npm run check
 npx netlify-cli deploy --prod --dir=dist
 ```
 
+### macOS 本地静态 App 与 Codex
+
+如需安装一个按需启动、使用 Safari、不会创建自启服务，并可让本机 Codex 快捷接入仓库 Skill/MCP 的本地静态 App，请阅读 [macOS 本地静态 App 与 Codex 工作流](docs/local-macos-codex-workflow.zh-CN.md)。
+
+```bash
+npm ci
+npm run local:app:install
+npm run codex:install
+```
+
 ## 支持与反馈
 
 如果这个项目对你有帮助，欢迎点亮 ⭐ Star；遇到问题请[提交 Issue](https://github.com/MartinDelophy/ai-video-editor/issues)。

@@ -198,6 +198,16 @@ The included [`netlify.toml`](netlify.toml) builds with `npm run build`, publish
 npx netlify-cli deploy --prod --dir=dist
 ```
 
+### Local macOS App and Codex
+
+For an on-demand local static App that opens in Safari, does not create an auto-start service, and exposes the repository Skill/MCP workflow to Codex, see [Local macOS and Codex workflow](docs/local-macos-codex-workflow.md).
+
+```bash
+npm ci
+npm run local:app:install
+npm run codex:install
+```
+
 ## Support and feedback
 
 If this project helps you, please consider giving it a ⭐ Star. If you encounter a problem, please [open an Issue](https://github.com/MartinDelophy/ai-video-editor/issues).
