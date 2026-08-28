@@ -195,20 +195,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSafari(port: Int) {
         guard let pageURL = URL(string: "http://127.0.0.1:\(port)/") else { return }
-        let safariURL = URL(fileURLWithPath: "/Applications/Safari.app")
-        guard FileManager.default.fileExists(atPath: safariURL.path) else {
-            failAndQuit("找不到 Safari.app。")
-            return
-        }
-
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.open([pageURL], withApplicationAt: safariURL, configuration: configuration) { [weak self] _, error in
-            if let error {
-                DispatchQueue.main.async {
-                    self?.failAndQuit("Safari 无法打开本地页面。\n\n\(error.localizedDescription)")
-                }
-            }
+        let openProcess = Process()
+        openProcess.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        openProcess.arguments = ["-a", "Safari", pageURL.absoluteString]
+        do {
+            try openProcess.run()
+        } catch {
+            failAndQuit("Safari 无法打开本地页面。\n\n\(error.localizedDescription)")
         }
     }
 
