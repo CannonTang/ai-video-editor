@@ -78,7 +78,7 @@ npm run local:app:install
 5. 使用 `ditto` 打包 zip，并在解压后再次验证签名。
 6. 如果已安装的启动器正在运行，先正常退出它，再安装到 `/Applications/Timeline Studio Local.app`。
 7. 注销构建包和被替换旧包的 LaunchServices 记录；旧包以可恢复的 `.app.retired` 后缀移入废纸篓，只登记正式安装包。
-8. 刷新 Dock 文件书签、重启 Dock 并启动 App，避免更新后出现同名问号项。
+8. 启动已安装 App，通过 Dock 原生的“选项 → 在程序坞中保留”生成完整文件书签，再重启 Dock，避免更新后出现同名问号项。安装器不会再人工拼接残缺的 `persistent-apps` 记录。
 
 只构建、不安装：
 
@@ -96,6 +96,8 @@ bash scripts/macos-local/install-app.sh --no-dock
 bash scripts/macos-local/install-app.sh --skip-build
 bash scripts/macos-local/install-app.sh --install-dir "$HOME/Applications"
 ```
+
+Dock 原生固定需要 App 处于运行状态。如果只想安装、不启动也不固定，请同时使用 `--no-launch --no-dock`。首次执行时，macOS 可能会询问是否允许运行安装命令的终端使用辅助功能，以便选择“在程序坞中保留”。如果没有该权限，安装器不会写入残缺 Dock 记录，而会给出一次手动右键操作提示。
 
 App 会记录构建时 Node 的绝对路径。如果以后删除或迁移该 Node 安装，需要重新构建 App。
 
@@ -226,11 +228,13 @@ sudo xattr -r -d com.apple.quarantine "/Applications/Timeline Studio Local.app"
 
 ### Dock 同时显示问号和正常图标
 
-问号表示 Dock 或 LaunchServices 仍引用已经被替换的旧 App。重新运行安装命令会注销构建包和旧包，将废纸篓备份保存为不会被重新发现的 `.app.retired`，只登记 `/Applications` 中的正式 App，并刷新 Dock 书签。只需修复 Dock、不重新构建时可执行：
+问号表示 Dock 或 LaunchServices 仍引用已经被替换的旧 App，或者脚本曾写入不完整的 Dock 记录。重新运行安装命令会注销构建包和旧包，将废纸篓备份保存为不会被重新发现的 `.app.retired`，只登记 `/Applications` 中的正式 App，移除残留项，并通过 Dock 原生菜单固定正在运行的正式 App。只需修复 Dock、不重新构建时可执行：
 
 ```bash
 bash scripts/macos-local/dock.sh add "/Applications/Timeline Studio Local.app"
 ```
+
+由于 Dock 只能固定正在运行的启动器，这条修复命令可能会打开本地 Safari 页面。如果没有辅助功能控制权限，请右键正在运行的 `Timeline Studio Local` 图标，选择“选项 → 在程序坞中保留”。不要通过向 `com.apple.dock persistent-apps` 写入最小字典来添加 App；这类记录缺少 Dock 原生书签元数据，本身就可能显示成问号。
 
 ### Safari 打开后页面不可用
 

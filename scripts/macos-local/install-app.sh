@@ -47,6 +47,10 @@ if [ -z "$INSTALL_DIR" ] || [ ! -d "$INSTALL_DIR" ]; then
   echo "Install directory does not exist: $INSTALL_DIR" >&2
   exit 1
 fi
+if [ "$ADD_TO_DOCK" -eq 1 ] && [ "$LAUNCH_AFTER_INSTALL" -eq 0 ]; then
+  echo "--no-launch requires --no-dock because native Dock pinning needs a running App." >&2
+  exit 2
+fi
 if [ ! -w "$INSTALL_DIR" ]; then
   echo "Install directory is not writable: $INSTALL_DIR" >&2
   exit 1
@@ -110,8 +114,7 @@ fi
 
 if [ "$ADD_TO_DOCK" -eq 1 ]; then
   "$SCRIPT_DIR/dock.sh" add "$TARGET_APP"
-fi
-if [ "$LAUNCH_AFTER_INSTALL" -eq 1 ]; then
+elif [ "$LAUNCH_AFTER_INSTALL" -eq 1 ]; then
   /usr/bin/open "$TARGET_APP"
 fi
 

@@ -78,7 +78,7 @@ The installer performs these steps:
 5. Creates a `ditto` zip and verifies the signature after extraction.
 6. Gracefully quits an installed launcher when it is running, then installs the App at `/Applications/Timeline Studio Local.app`.
 7. Unregisters the build and replaced copies from LaunchServices, moves the old App to Trash with a recoverable `.app.retired` suffix, and registers only the installed App.
-8. Refreshes the Dock file bookmark, restarts Dock, and launches the App so updates do not leave a duplicate question-mark tile.
+8. Launches the installed App, uses Dock's native **Options → Keep in Dock** command to create a complete file bookmark, and restarts Dock so updates do not leave a duplicate question-mark tile. The installer never synthesizes a partial `persistent-apps` record.
 
 Build without installing:
 
@@ -96,6 +96,8 @@ bash scripts/macos-local/install-app.sh --no-dock
 bash scripts/macos-local/install-app.sh --skip-build
 bash scripts/macos-local/install-app.sh --install-dir "$HOME/Applications"
 ```
+
+Native Dock pinning needs the App to be running. Use `--no-launch --no-dock` together when you want to install without starting or pinning it. On first use, macOS may ask the terminal running the installer for Accessibility permission so it can choose **Keep in Dock**. If that permission is unavailable, the installer leaves no partial Dock record and prints the one manual right-click action to perform.
 
 The App records the absolute Node executable used at build time. Rebuild the App after removing or relocating that Node installation.
 
@@ -226,11 +228,13 @@ Quit the existing `Timeline Studio Local` process. If another application owns t
 
 ### Dock shows both a question mark and the normal App icon
 
-The question mark means Dock or LaunchServices still references an App bundle that was replaced. Re-running the installer unregisters the build and retired copies, stores Trash backups with a non-discoverable `.app.retired` suffix, registers only the App in `/Applications`, and refreshes the Dock bookmark. To repair only Dock without rebuilding, run:
+The question mark means Dock or LaunchServices still references an App bundle that was replaced, or a script wrote an incomplete Dock record. Re-running the installer unregisters the build and retired copies, stores Trash backups with a non-discoverable `.app.retired` suffix, registers only the App in `/Applications`, removes the stale item, and pins the running installed App through Dock's native menu. To repair only Dock without rebuilding, run:
 
 ```bash
 bash scripts/macos-local/dock.sh add "/Applications/Timeline Studio Local.app"
 ```
+
+This repair may open the local Safari page because Dock can only pin the running launcher. If Accessibility control is unavailable, right-click the running `Timeline Studio Local` icon and choose **Options → Keep in Dock**. Do not add the App by writing a minimal dictionary to `com.apple.dock persistent-apps`; such a record lacks Dock's native bookmark metadata and can itself appear as a question mark.
 
 ### Safari opens but the page is unavailable
 
